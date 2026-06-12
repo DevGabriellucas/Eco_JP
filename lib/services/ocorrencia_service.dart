@@ -29,9 +29,36 @@ class OcorrenciaService {
     return _ocorrenciasRef
         .orderBy('dataCriacao', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => OcorrenciaModel.fromMap(doc.data(), doc.id, currentUserId: uid))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => OcorrenciaModel.fromMap(
+                  doc.data(),
+                  doc.id,
+                  currentUserId: uid,
+                ),
+              )
+              .toList(),
+        );
+  }
+
+  Stream<List<OcorrenciaModel>> listarOcorrenciasLimitadas(int limit) {
+    final uid = _currentUserId;
+    return _ocorrenciasRef
+        .orderBy('dataCriacao', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => OcorrenciaModel.fromMap(
+                  doc.data(),
+                  doc.id,
+                  currentUserId: uid,
+                ),
+              )
+              .toList(),
+        );
   }
 
   Stream<List<OcorrenciaModel>> listarPorUsuario(String usuarioId) {
@@ -39,9 +66,17 @@ class OcorrenciaService {
     return _ocorrenciasRef
         .where('usuarioId', isEqualTo: usuarioId)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => OcorrenciaModel.fromMap(doc.data(), doc.id, currentUserId: uid))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => OcorrenciaModel.fromMap(
+                  doc.data(),
+                  doc.id,
+                  currentUserId: uid,
+                ),
+              )
+              .toList(),
+        );
   }
 
   // ── READ — paginado (feed da home) ───────────────────────────────────────
@@ -61,7 +96,10 @@ class OcorrenciaService {
 
     final snapshot = await query.get();
     return snapshot.docs
-        .map((doc) => OcorrenciaModel.fromMap(doc.data(), doc.id, currentUserId: uid))
+        .map(
+          (doc) =>
+              OcorrenciaModel.fromMap(doc.data(), doc.id, currentUserId: uid),
+        )
         .toList();
   }
 
@@ -88,7 +126,9 @@ class OcorrenciaService {
     String nome,
     String? fotoUrl,
   ) async {
-    final snapshot = await _ocorrenciasRef.where('usuarioId', isEqualTo: uid).get();
+    final snapshot = await _ocorrenciasRef
+        .where('usuarioId', isEqualTo: uid)
+        .get();
     if (snapshot.docs.isEmpty) return;
     final batch = FirebaseFirestore.instance.batch();
     for (final doc in snapshot.docs) {
@@ -105,10 +145,10 @@ class OcorrenciaService {
       final batch = FirebaseFirestore.instance.batch();
       batch.update(_ocorrenciasRef.doc(id), {'status': novoStatus});
       // Registra o evento na linha do tempo (histórico de status).
-      batch.set(
-        _ocorrenciasRef.doc(id).collection('historico').doc(),
-        {'status': novoStatus, 'data': FieldValue.serverTimestamp()},
-      );
+      batch.set(_ocorrenciasRef.doc(id).collection('historico').doc(), {
+        'status': novoStatus,
+        'data': FieldValue.serverTimestamp(),
+      });
       await batch.commit();
     } catch (e) {
       debugPrint('Erro ao atualizar status: $e');
@@ -123,15 +163,17 @@ class OcorrenciaService {
         .collection('historico')
         .orderBy('data', descending: false)
         .snapshots()
-        .map((snap) => snap.docs.map((d) {
-              final data = d.data();
-              return (
-                status: (data['status'] ?? '') as String,
-                data: data['data'] != null
-                    ? (data['data'] as Timestamp).toDate()
-                    : null,
-              );
-            }).toList());
+        .map(
+          (snap) => snap.docs.map((d) {
+            final data = d.data();
+            return (
+              status: (data['status'] ?? '') as String,
+              data: data['data'] != null
+                  ? (data['data'] as Timestamp).toDate()
+                  : null,
+            );
+          }).toList(),
+        );
   }
 
   // ── DELETE ────────────────────────────────────────────────────────────────
@@ -252,9 +294,11 @@ class OcorrenciaService {
         .collection('comentarios')
         .orderBy('dataCriacao', descending: false)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => ComentarioModel.fromMap(doc.data(), doc.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((doc) => ComentarioModel.fromMap(doc.data(), doc.id))
+              .toList(),
+        );
   }
 
   Future<void> adicionarComentario(
@@ -271,10 +315,9 @@ class OcorrenciaService {
       batch.set(comentarioRef, comentario.toMap());
 
       // Incrementa contador de comentários na ocorrência
-      batch.update(
-        _ocorrenciasRef.doc(ocorrenciaId),
-        {'comments': FieldValue.increment(1)},
-      );
+      batch.update(_ocorrenciasRef.doc(ocorrenciaId), {
+        'comments': FieldValue.increment(1),
+      });
 
       await batch.commit();
     } catch (e) {
@@ -297,10 +340,9 @@ class OcorrenciaService {
             .doc(comentarioId),
       );
 
-      batch.update(
-        _ocorrenciasRef.doc(ocorrenciaId),
-        {'comments': FieldValue.increment(-1)},
-      );
+      batch.update(_ocorrenciasRef.doc(ocorrenciaId), {
+        'comments': FieldValue.increment(-1),
+      });
 
       await batch.commit();
     } catch (e) {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 // ─────────────────────────────────────────
 //  ESTADOS DO FEED
 //  Skeleton (carregando), vazio e erro.
@@ -29,9 +31,10 @@ class _FeedSkeletonState extends State<FeedSkeleton>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    _opacity = Tween<double>(begin: 0.45, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _opacity = Tween<double>(
+      begin: 0.45,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -75,7 +78,7 @@ class _SkeletonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
       ),
       padding: const EdgeInsets.all(14),
@@ -154,7 +157,7 @@ class FeedEmptyState extends StatelessWidget {
               child: Icon(
                 hasActiveFilters ? Icons.search_off : Icons.eco_outlined,
                 size: 40,
-                color: const Color(0xFF4CAF50),
+                color: AppColors.primary,
               ),
             ),
             const SizedBox(height: 16),
@@ -164,14 +167,14 @@ class FeedEmptyState extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A1A),
+                color: AppColors.ink,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF8A8A8A)),
+              style: const TextStyle(fontSize: 13, color: AppColors.hint),
             ),
             if (hasActiveFilters && onClearFilters != null) ...[
               const SizedBox(height: 16),
@@ -179,9 +182,7 @@ class FeedEmptyState extends StatelessWidget {
                 onPressed: onClearFilters,
                 icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
                 label: const Text('Limpar filtros'),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF4CAF50),
-                ),
+                style: TextButton.styleFrom(foregroundColor: AppColors.primary),
               ),
             ],
           ],
@@ -214,7 +215,7 @@ class FeedErrorState extends StatelessWidget {
               child: const Icon(
                 Icons.wifi_off_outlined,
                 size: 40,
-                color: Color(0xFFEF4444),
+                color: AppColors.danger,
               ),
             ),
             const SizedBox(height: 16),
@@ -224,14 +225,14 @@ class FeedErrorState extends StatelessWidget {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A1A),
+                color: AppColors.ink,
               ),
             ),
             const SizedBox(height: 6),
             const Text(
               'Verifique sua conexão com a internet e tente novamente.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Color(0xFF8A8A8A)),
+              style: TextStyle(fontSize: 13, color: AppColors.hint),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -239,7 +240,7 @@ class FeedErrorState extends StatelessWidget {
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Tentar novamente'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(

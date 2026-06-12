@@ -13,18 +13,19 @@ import '../services/auth_service.dart';
 import '../services/cloudinary_service.dart';
 import '../services/ocorrencia_service.dart';
 import '../services/usuario_service.dart';
+import '../theme/app_theme.dart';
 
 // ─── Paleta ────────────────────────────────────────────────────────────────
 
 class _C {
-  static const primary = Color(0xFF1A1A1A);
-  static const bg = Colors.white;
-  static const hint = Color(0xFF9E9E9E);
-  static const error = Color(0xFFB00020);
-  static const disabled = Color(0xFF9E9E9E);
+  static const primary = AppColors.ink;
+  static const bg = AppColors.surface;
+  static const hint = AppColors.hint;
+  static const error = AppColors.danger;
+  static const disabled = AppColors.hint;
   static const slotBg = Color(0xFFF8F8F8);
   static const slotBorder = Color(0xFFBBBBBB);
-  static const divider = Color(0xFFE0E0E0);
+  static const divider = AppColors.border;
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
@@ -59,6 +60,9 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   bool _loadingLoc = false;
   bool _enviando = false;
   bool _enviado = false;
+  String? _statusEnvio;
+  int _uploadAtual = 0;
+  int _uploadTotal = 0;
   int _fotoAtivaIdx = 0; // qual foto aparece na área principal
 
   // Autocomplete
@@ -187,7 +191,13 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   // ── Localização ──────────────────────────────────────────────────────────
 
   void _onEnderecoChanged(String v) {
-    if (_mostrarSug) setState(() => _mostrarSug = false);
+    if (_mostrarSug || _latitude != null || _longitude != null) {
+      setState(() {
+        _mostrarSug = false;
+        _latitude = null;
+        _longitude = null;
+      });
+    }
     _debounce?.cancel();
     final texto = v.trim();
     if (texto.length < 3) {
@@ -651,7 +661,12 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       return;
     }
 
-    setState(() => _enviando = true);
+    setState(() {
+      _enviando = true;
+      _statusEnvio = 'Validando localização...';
+      _uploadAtual = 0;
+      _uploadTotal = _totalFotos;
+    });
     try {
       // Se o usuário digitou o endereço sem escolher uma sugestão, ainda não
       // temos coordenadas — resolvemos agora para o pin aparecer no mapa.
@@ -678,15 +693,27 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
         final img = _imagens[i];
         final bytes = _imagensBytes[i];
         if (img != null && bytes != null) {
+          if (mounted) {
+            setState(() {
+              _statusEnvio =
+                  'Enviando foto ${urls.length + 1} de $_uploadTotal...';
+            });
+          }
           final url = await _cloudinaryService.uploadImage(
             bytes: bytes,
             fileName: img.name,
           );
           urls.add(url);
+          if (mounted) {
+            setState(() {
+              _uploadAtual = urls.length;
+            });
+          }
           if (!mounted) return;
         }
       }
 
+      setState(() => _statusEnvio = 'Salvando denúncia...');
       final perfil = await _usuarioService.carregarPerfil(uid);
       if (!mounted) return;
 
@@ -711,7 +738,10 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       await _ocorrenciaService.cadastrarOcorrencia(ocorrencia);
       if (!mounted) return;
 
-      setState(() => _enviado = true);
+      setState(() {
+        _enviado = true;
+        _statusEnvio = 'Denúncia enviada.';
+      });
       _snack('Ocorrência registrada com sucesso!');
       await Future.delayed(const Duration(seconds: 1));
       if (mounted) Navigator.pop(context);
@@ -728,7 +758,16 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       }
       _snack(msg, error: true);
     } finally {
-      if (mounted) setState(() => _enviando = false);
+      if (mounted) {
+        setState(() {
+          _enviando = false;
+          if (!_enviado) {
+            _statusEnvio = null;
+            _uploadAtual = 0;
+            _uploadTotal = 0;
+          }
+        });
+      }
     }
   }
 
@@ -788,6 +827,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
             _localizacaoSection(),
             const SizedBox(height: 12),
             _botaoLocalizacao(),
+            if (_enviando) ...[const SizedBox(height: 16), _envioStatus()],
             const SizedBox(height: 24),
             _botaoEnviar(),
             SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
@@ -1076,6 +1116,39 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                 (v?.trim() ?? '').isEmpty ? 'Informe a localização' : null,
           ),
           if (_mostrarSug && _sugestoes.isNotEmpty) _sugestoesDropdown(),
+          _localizacaoStatus(),
+        ],
+      ),
+    );
+  }
+
+  Widget _localizacaoStatus() {
+    final texto = _enderecoCtrl.text.trim();
+    if (texto.isEmpty) return const SizedBox.shrink();
+
+    final confirmada = _coordenadaValida(_latitude, _longitude);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(
+            confirmada ? Icons.check_circle : Icons.info_outline,
+            size: 16,
+            color: confirmada ? AppColors.primary : _C.hint,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              confirmada
+                  ? 'Localização confirmada para o mapa.'
+                  : 'As coordenadas serão validadas antes do envio.',
+              style: TextStyle(
+                fontSize: 12,
+                color: confirmada ? AppColors.primary : _C.hint,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1168,6 +1241,54 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
           _loadingLoc ? 'Obtendo localização...' : 'Usar localização atual',
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
+      ),
+    );
+  }
+
+  Widget _envioStatus() {
+    final progress = _uploadTotal == 0 ? null : _uploadAtual / _uploadTotal;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _statusEnvio ?? 'Enviando denúncia...',
+                  style: const TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                minHeight: 6,
+                value: progress.clamp(0, 1).toDouble(),
+                backgroundColor: AppColors.border,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
 import 'estatisticas_page.dart';
 import 'home_page.dart';
-import 'perfil/perfil_page.dart';
 import 'mapPage/map_page.dart';
+import 'perfil/perfil_page.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -15,18 +16,17 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  // Índices: 0=Feed, 1=Mapa, (2 é o botão +), 3=Stats, 4=Perfil
+  // Índices: 0=Feed, 1=Mapa, (2 é o botão +), 3=Dados, 4=Perfil
   final _paginas = const [
     HomePage(),
     MapPage(),
-    SizedBox.shrink(), // slot do botão central (nunca exibido)
+    SizedBox.shrink(),
     EstatisticasPage(),
     PerfilPage(),
   ];
 
   void _onTapItem(int i) {
     if (i == 2) {
-      // botão central: abre o formulário de nova denúncia
       Navigator.of(context).pushNamed('/form-ocorrencia');
       return;
     }
@@ -48,16 +48,12 @@ class _BottomNav extends StatelessWidget {
 
   const _BottomNav({required this.currentIndex, required this.onTap});
 
-  static const _text = Color(0xFF1A1A1A);
-  static const _hint = Color(0xFF9E9E9E);
-  static const _border = Color(0xFFE0E0E0);
-
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: _border)),
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
       ),
       child: SafeArea(
         top: false,
@@ -69,7 +65,7 @@ class _BottomNav extends StatelessWidget {
               _item(0, Icons.home_outlined, Icons.home, 'Feed'),
               _item(1, Icons.map_outlined, Icons.map, 'Mapa'),
               _botaoCentral(),
-              _item(3, Icons.bar_chart_outlined, Icons.bar_chart, 'Stats'),
+              _item(3, Icons.bar_chart_outlined, Icons.bar_chart, 'Dados'),
               _item(4, Icons.person_outline, Icons.person, 'Perfil'),
             ],
           ),
@@ -90,7 +86,7 @@ class _BottomNav extends StatelessWidget {
             Icon(
               ativo ? iconAtivo : icon,
               size: 24,
-              color: ativo ? _text : _hint,
+              color: ativo ? AppColors.ink : AppColors.hint,
             ),
             const SizedBox(height: 4),
             Text(
@@ -98,7 +94,7 @@ class _BottomNav extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: ativo ? FontWeight.w600 : FontWeight.w400,
-                color: ativo ? _text : _hint,
+                color: ativo ? AppColors.ink : AppColors.hint,
               ),
             ),
           ],
@@ -116,7 +112,7 @@ class _BottomNav extends StatelessWidget {
             width: 52,
             height: 52,
             decoration: const BoxDecoration(
-              color: _text,
+              color: AppColors.ink,
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.add, color: Colors.white, size: 28),
