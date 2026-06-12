@@ -4,6 +4,8 @@ import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/ocorrencia_service.dart';
 
+enum _OcorrenciaSheetAction { edit, delete }
+
 // ─────────────────────────────────────────
 //  AÇÕES DO DONO (alterar status / excluir)
 // ─────────────────────────────────────────
@@ -15,7 +17,7 @@ Future<void> showOcorrenciaActions({
   required OcorrenciaModel ocorrencia,
   required OcorrenciaService service,
 }) async {
-  await showModalBottomSheet(
+  final action = await showModalBottomSheet<Object>(
     context: context,
     backgroundColor: Colors.white,
     shape: const RoundedRectangleBorder(
@@ -31,22 +33,7 @@ Future<void> showOcorrenciaActions({
           trailing: atual
               ? const Icon(Icons.check, size: 18, color: Color(0xFF4CAF50))
               : null,
-          onTap: atual
-              ? null
-              : () async {
-                  Navigator.pop(ctx);
-                  try {
-                    await service.atualizarStatus(ocorrencia.id, valorBanco);
-                  } catch (_) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Não foi possível alterar o status.'),
-                        ),
-                      );
-                    }
-                  }
-                },
+          onTap: atual ? null : () => Navigator.pop(ctx, valorBanco),
         );
       }
 
@@ -82,15 +69,18 @@ Future<void> showOcorrenciaActions({
             opcaoStatus(OccurrenceStatus.unresolved, 'Nao resolvido'),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.edit_outlined, color: Color(0xFF1A1A1A)),
+              leading: const Icon(
+                Icons.edit_outlined,
+                color: Color(0xFF1A1A1A),
+              ),
               title: const Text('Editar título/descrição'),
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _editarOcorrencia(context, ocorrencia, service);
-              },
+              onTap: () => Navigator.pop(ctx, _OcorrenciaSheetAction.edit),
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
+              leading: const Icon(
+                Icons.delete_outline,
+                color: Color(0xFFEF4444),
+              ),
               title: const Text(
                 'Excluir denúncia',
                 style: TextStyle(
@@ -98,10 +88,7 @@ Future<void> showOcorrenciaActions({
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              onTap: () async {
-                Navigator.pop(ctx);
-                await _confirmarExcluirOcorrencia(context, ocorrencia, service);
-              },
+              onTap: () => Navigator.pop(ctx, _OcorrenciaSheetAction.delete),
             ),
             const SizedBox(height: 8),
           ],
@@ -109,6 +96,37 @@ Future<void> showOcorrenciaActions({
       );
     },
   );
+
+  if (!context.mounted || action == null) return;
+
+  // Aguarda o bottom sheet terminar de fechar antes de abrir o próximo
+  // diálogo. Empilhar showDialog/showModalBottomSheet no mesmo ciclo do
+  // Navigator dispara "Failed assertion: '_dependents.isEmpty'" (bug
+  // conhecido do Flutter: https://github.com/flutter/flutter/issues/39131).
+  await Future<void>.delayed(Duration.zero);
+  if (!context.mounted) return;
+
+  if (action is String) {
+    try {
+      await service.atualizarStatus(ocorrencia.id, action);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível alterar o status.')),
+        );
+      }
+    }
+    return;
+  }
+
+  switch (action) {
+    case _OcorrenciaSheetAction.edit:
+      await _editarOcorrencia(context, ocorrencia, service);
+      break;
+    case _OcorrenciaSheetAction.delete:
+      await _confirmarExcluirOcorrencia(context, ocorrencia, service);
+      break;
+  }
 }
 
 Future<void> _confirmarExcluirOcorrencia(
@@ -130,7 +148,10 @@ Future<void> _confirmarExcluirOcorrencia(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancelar', style: TextStyle(color: Color(0xFF8A8A8A))),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: Color(0xFF8A8A8A)),
+          ),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(ctx, true),
@@ -138,7 +159,9 @@ Future<void> _confirmarExcluirOcorrencia(
             backgroundColor: const Color(0xFFEF4444),
             foregroundColor: Colors.white,
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
           child: const Text('Excluir'),
         ),
@@ -149,9 +172,9 @@ Future<void> _confirmarExcluirOcorrencia(
     try {
       await service.deletarOcorrencia(ocorrencia.id);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Denúncia excluída.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Denúncia excluída.')));
       }
     } catch (_) {
       if (context.mounted) {
@@ -173,17 +196,17 @@ Future<void> _editarOcorrencia(
   bool salvando = false;
 
   InputDecoration dec(String hint) => InputDecoration(
-        hintText: hint,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF1A1A1A), width: 1.5),
-        ),
-      );
+    hintText: hint,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFF1A1A1A), width: 1.5),
+    ),
+  );
 
   await showDialog<void>(
     context: context,
@@ -192,8 +215,9 @@ Future<void> _editarOcorrencia(
         builder: (ctx, setDialogState) {
           return AlertDialog(
             backgroundColor: Colors.white,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: const Text(
               'Editar denúncia',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
@@ -203,9 +227,10 @@ Future<void> _editarOcorrencia(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Título',
-                      style:
-                          TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const Text(
+                    'Título',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: tituloCtrl,
@@ -213,9 +238,10 @@ Future<void> _editarOcorrencia(
                     decoration: dec('Título').copyWith(counterText: ''),
                   ),
                   const SizedBox(height: 12),
-                  const Text('Descrição',
-                      style:
-                          TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const Text(
+                    'Descrição',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: descCtrl,
@@ -228,8 +254,10 @@ Future<void> _editarOcorrencia(
             actions: [
               TextButton(
                 onPressed: salvando ? null : () => Navigator.of(ctx).pop(),
-                child: const Text('Cancelar',
-                    style: TextStyle(color: Color(0xFF8A8A8A))),
+                child: const Text(
+                  'Cancelar',
+                  style: TextStyle(color: Color(0xFF8A8A8A)),
+                ),
               ),
               ElevatedButton(
                 onPressed: salvando
@@ -243,14 +271,23 @@ Future<void> _editarOcorrencia(
                         setDialogState(() => salvando = true);
                         try {
                           await service.atualizarTextos(
-                              ocorrencia.id, titulo, desc);
+                            ocorrencia.id,
+                            titulo,
+                            desc,
+                          );
                           navigator.pop();
-                          messenger.showSnackBar(const SnackBar(
-                              content: Text('Denúncia atualizada.')));
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Denúncia atualizada.'),
+                            ),
+                          );
                         } catch (_) {
                           setDialogState(() => salvando = false);
-                          messenger.showSnackBar(const SnackBar(
-                              content: Text('Não foi possível editar.')));
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Não foi possível editar.'),
+                            ),
+                          );
                         }
                       },
                 style: ElevatedButton.styleFrom(
@@ -258,14 +295,18 @@ Future<void> _editarOcorrencia(
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 child: salvando
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text('Salvar'),
               ),
             ],
