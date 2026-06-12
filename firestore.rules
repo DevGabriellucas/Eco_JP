@@ -1,0 +1,167 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isValidStatus(status) {
+      return status in ['Pendente', 'Resolvido', 'Nao resolvido'];
+    }
+
+    function isValidOcorrencia(data) {
+      return data.keys().hasAll([
+          'titulo',
+          'descricao',
+          'localizacao',
+          'latitude',
+          'longitude',
+          'tipoLixo',
+          'status',
+          'dataCriacao',
+          'usuarioId',
+          'imagemUrl',
+          'imagensUrls',
+          'likes',
+          'dislikes',
+          'comments',
+          'likedBy',
+          'dislikedBy',
+        ])
+        && data.keys().hasOnly([
+          'titulo',
+          'descricao',
+          'localizacao',
+          'latitude',
+          'longitude',
+          'tipoLixo',
+          'status',
+          'dataCriacao',
+          'usuarioId',
+          'imagemUrl',
+          'imagensUrls',
+          'usuarioNome',
+          'usuarioFotoUrl',
+          'likes',
+          'dislikes',
+          'comments',
+          'likedBy',
+          'dislikedBy',
+        ])
+        && data.titulo is string
+        && data.descricao is string
+        && data.localizacao is string
+        && data.latitude is number
+        && data.longitude is number
+        && data.tipoLixo is string
+        && isValidStatus(data.status)
+        && data.dataCriacao is timestamp
+        && data.usuarioId == request.auth.uid
+        && (data.imagemUrl == null || data.imagemUrl is string)
+        && data.imagensUrls is list
+        && data.likes is int && data.likes == 0
+        && data.dislikes is int && data.dislikes == 0
+        && data.comments is int && data.comments == 0
+        && data.likedBy is list
+        && data.dislikedBy is list;
+    }
+
+    function isOwner() {
+      return signedIn() && resource.data.usuarioId == request.auth.uid;
+    }
+
+    match /ocorrencias/{ocorrenciaId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && isValidOcorrencia(request.resource.data);
+
+      allow update: if signedIn() && (
+        // Dono pode alterar o status
+        (isOwner()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && isValidStatus(request.resource.data.status))
+        ||
+        // Dono pode editar título e descrição
+        (isOwner()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['titulo', 'descricao'])
+          && request.resource.data.titulo is string
+          && request.resource.data.descricao is string)
+        ||
+        // Dono pode atualizar nome/foto exibidos (propagação ao editar perfil)
+        (isOwner()
+          && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['usuarioNome', 'usuarioFotoUrl']))
+        ||
+        // Qualquer usuário autenticado pode reagir (like / dislike), mas os
+        // contadores precisam bater com o tamanho das listas — isso impede
+        // setar curtidas/descurtidas para um número arbitrário.
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likes', 'likedBy', 'dislikes', 'dislikedBy'])
+          && request.resource.data.likes is int
+          && request.resource.data.dislikes is int
+          && request.resource.data.likedBy is list
+          && request.resource.data.dislikedBy is list
+          && request.resource.data.likes == request.resource.data.likedBy.size()
+          && request.resource.data.dislikes == request.resource.data.dislikedBy.size())
+        ||
+        // O contador de comentários só pode variar de 1 em 1.
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['comments'])
+          && request.resource.data.comments is int
+          && (request.resource.data.comments == resource.data.comments + 1
+            || request.resource.data.comments == resource.data.comments - 1))
+      );
+
+      allow delete: if isOwner();
+
+      match /comentarios/{comentarioId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['texto', 'userId', 'userName', 'userPhotoUrl', 'dataCriacao'])
+          && request.resource.data.texto is string
+          && request.resource.data.userId == request.auth.uid;
+        allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+        allow update: if false;
+      }
+
+      // Linha do tempo de status — só o dono da denúncia registra eventos.
+      match /historico/{eventoId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.usuarioId == request.auth.uid
+          && request.resource.data.keys().hasOnly(['status', 'data'])
+          && request.resource.data.status is string;
+        allow update, delete: if false;
+      }
+    }
+
+    match /usuarios/{userId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['nome', 'bio', 'bairro', 'fotoUrl'])
+        && request.resource.data.nome is string
+        && request.resource.data.bio is string
+        && request.resource.data.bairro is string;
+      allow delete: if false;
+    }
+
+    // Notificações in-app: cada usuário lê as suas; qualquer autenticado
+    // pode criar uma notificação para OUTRO usuário (ao comentar/curtir).
+    match /notificacoes/{donoId}/items/{notifId} {
+      allow read, update, delete: if signedIn() && request.auth.uid == donoId;
+      allow create: if signedIn()
+        && request.auth.uid != donoId
+        && request.resource.data.keys().hasOnly([
+          'tipo', 'deUsuarioNome', 'ocorrenciaId', 'ocorrenciaTitulo',
+          'dataCriacao', 'lida'
+        ])
+        && request.resource.data.tipo is string
+        && request.resource.data.lida == false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

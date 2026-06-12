@@ -1,0 +1,100 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+*.secrets
+secrets/
+secret/
+credentials/
+*.pem
+*.key
+*.p8
+*.p12
+*.cer
+*.der
+*.mobileprovision
+*.provisionprofile
+
+# Project API keys / generated service configuration
+# Keep real Firebase/Google configs local for a public repository.
+.firebaserc
+lib/firebase_options.dart
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+macos/Runner/GoogleService-Info.plist
+web/firebase-config.js
+web/firebase-messaging-sw.js
+
+# Local Flutter/Android configuration
+local.properties
+android/local.properties
+android/key.properties
+android/app/key.properties
+*.jks
+*.keystore
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Flutter/ephemeral/
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+**/build/
+/coverage/
+
+# Native dependency/build caches
+.gradle/
+android/.gradle/
+ios/.symlinks/
+ios/Pods/
+macos/.symlinks/
+macos/Pods/
+
+# Generated Flutter engine artifacts
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
