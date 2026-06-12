@@ -27,6 +27,82 @@ jobs:
       - name: Instalar dependências
         run: flutter pub get
 
+      - name: Gerar FirebaseOptions de CI
+        run: |
+          cat > lib/firebase_options.dart <<'DART'
+          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+          import 'package:flutter/foundation.dart'
+              show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+          class DefaultFirebaseOptions {
+            static FirebaseOptions get currentPlatform {
+              if (kIsWeb) return web;
+              switch (defaultTargetPlatform) {
+                case TargetPlatform.android:
+                  return android;
+                case TargetPlatform.iOS:
+                  return ios;
+                case TargetPlatform.macOS:
+                  return macos;
+                case TargetPlatform.windows:
+                  return windows;
+                case TargetPlatform.linux:
+                  throw UnsupportedError(
+                    'DefaultFirebaseOptions are not configured for linux.',
+                  );
+                case TargetPlatform.fuchsia:
+                  throw UnsupportedError(
+                    'DefaultFirebaseOptions are not configured for fuchsia.',
+                  );
+              }
+            }
+
+            static const FirebaseOptions web = FirebaseOptions(
+              apiKey: 'ci-placeholder',
+              appId: '1:000000000000:web:0000000000000000000000',
+              messagingSenderId: '000000000000',
+              projectId: 'ecojp-ci',
+              authDomain: 'ecojp-ci.firebaseapp.com',
+              storageBucket: 'ecojp-ci.appspot.com',
+            );
+
+            static const FirebaseOptions android = FirebaseOptions(
+              apiKey: 'ci-placeholder',
+              appId: '1:000000000000:android:0000000000000000000000',
+              messagingSenderId: '000000000000',
+              projectId: 'ecojp-ci',
+              storageBucket: 'ecojp-ci.appspot.com',
+            );
+
+            static const FirebaseOptions ios = FirebaseOptions(
+              apiKey: 'ci-placeholder',
+              appId: '1:000000000000:ios:0000000000000000000000',
+              messagingSenderId: '000000000000',
+              projectId: 'ecojp-ci',
+              storageBucket: 'ecojp-ci.appspot.com',
+              iosBundleId: 'com.example.ecoJp',
+            );
+
+            static const FirebaseOptions macos = FirebaseOptions(
+              apiKey: 'ci-placeholder',
+              appId: '1:000000000000:ios:0000000000000000000000',
+              messagingSenderId: '000000000000',
+              projectId: 'ecojp-ci',
+              storageBucket: 'ecojp-ci.appspot.com',
+              iosBundleId: 'com.example.ecoJp',
+            );
+
+            static const FirebaseOptions windows = FirebaseOptions(
+              apiKey: 'ci-placeholder',
+              appId: '1:000000000000:web:0000000000000000000000',
+              messagingSenderId: '000000000000',
+              projectId: 'ecojp-ci',
+              authDomain: 'ecojp-ci.firebaseapp.com',
+              storageBucket: 'ecojp-ci.appspot.com',
+            );
+          }
+          DART
+
       - name: Verificar formatação
         run: dart format --output=none --set-exit-if-changed lib test || echo "::warning::Arquivos fora do padrão de formatação (não bloqueante)"
 
