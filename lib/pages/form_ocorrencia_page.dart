@@ -37,13 +37,13 @@ class FormOcorrenciaPage extends StatefulWidget {
 }
 
 class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
-  final _formKey           = GlobalKey<FormState>();
-  final _tituloCtrl        = TextEditingController();
-  final _descricaoCtrl     = TextEditingController();
-  final _enderecoCtrl      = TextEditingController();
-  final _enderecoFocus     = FocusNode();
-  final _authService       = AuthService();
-  final _usuarioService    = UsuarioService();
+  final _formKey = GlobalKey<FormState>();
+  final _tituloCtrl = TextEditingController();
+  final _descricaoCtrl = TextEditingController();
+  final _enderecoCtrl = TextEditingController();
+  final _enderecoFocus = FocusNode();
+  final _authService = AuthService();
+  final _usuarioService = UsuarioService();
   final _cloudinaryService = CloudinaryService();
   final _ocorrenciaService = OcorrenciaService();
   final _picker = ImagePicker();
@@ -279,11 +279,13 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
         final item = raw as Map<String, dynamic>;
         final desc = _formatarEnderecoNominatim(item);
         if (desc.isEmpty || !seen.add(desc)) continue;
-        list.add(_EnderecoSugestao(
-          descricao: desc,
-          lat: double.tryParse(item['lat']?.toString() ?? ''),
-          lon: double.tryParse(item['lon']?.toString() ?? ''),
-        ));
+        list.add(
+          _EnderecoSugestao(
+            descricao: desc,
+            lat: double.tryParse(item['lat']?.toString() ?? ''),
+            lon: double.tryParse(item['lon']?.toString() ?? ''),
+          ),
+        );
         if (list.length >= 8) break;
       }
 
@@ -320,9 +322,11 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       final cidade = data['localidade']?.toString() ?? '';
       final uf = data['uf']?.toString() ?? '';
 
-      final desc = [logradouro, bairro, cidade]
-          .where((s) => s.isNotEmpty)
-          .join(', ');
+      final desc = [
+        logradouro,
+        bairro,
+        cidade,
+      ].where((s) => s.isNotEmpty).join(', ');
       final descricao = desc.isEmpty ? '$cidade - $uf' : desc;
 
       // Resolve lat/lon do endereço retornado pelo CEP.
@@ -331,7 +335,11 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
 
       setState(() {
         _sugestoes = [
-          _EnderecoSugestao(descricao: descricao, lat: coord?.$1, lon: coord?.$2),
+          _EnderecoSugestao(
+            descricao: descricao,
+            lat: coord?.$1,
+            lon: coord?.$2,
+          ),
         ];
         _mostrarSug = true;
       });
@@ -507,6 +515,12 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
 
   // ── Envio ────────────────────────────────────────────────────────────────
 
+  bool _coordenadaValida(double? lat, double? lon) {
+    if (lat == null || lon == null) return false;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return false;
+    return lat != 0 && lon != 0;
+  }
+
   Future<void> _confirmarEnvio() async {
     if (!_formKey.currentState!.validate()) return;
     if (_totalFotos == 0) {
@@ -650,6 +664,14 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
         lon = coord?.$2;
       }
 
+      if (!_coordenadaValida(lat, lon)) {
+        _snack(
+          'Não foi possível localizar esse endereço. Escolha uma sugestão ou use sua localização atual.',
+          error: true,
+        );
+        return;
+      }
+
       final urls = <String>[];
 
       for (int i = 0; i < 3; i++) {
@@ -669,21 +691,21 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       if (!mounted) return;
 
       final ocorrencia = OcorrenciaModel(
-        id:             '',
-        titulo:         _tituloCtrl.text.trim(),
-        descricao:      _descricaoCtrl.text.trim(),
-        localizacao:    _enderecoCtrl.text.trim(),
-        latitude:       lat ?? 0,
-        longitude:      lon ?? 0,
-        tipoLixo:       categoria,
-        usuarioId:      uid,
-        usuarioNome:    perfil?.nome.trim().isNotEmpty == true
+        id: '',
+        titulo: _tituloCtrl.text.trim(),
+        descricao: _descricaoCtrl.text.trim(),
+        localizacao: _enderecoCtrl.text.trim(),
+        latitude: lat!,
+        longitude: lon!,
+        tipoLixo: categoria,
+        usuarioId: uid,
+        usuarioNome: perfil?.nome.trim().isNotEmpty == true
             ? perfil!.nome
             : (_authService.currentUser?.displayName ??
-               _authService.currentUser?.email?.split('@').first),
+                  _authService.currentUser?.email?.split('@').first),
         usuarioFotoUrl: perfil?.fotoUrl ?? _authService.currentUser?.photoURL,
-        imagemUrl:      urls.isNotEmpty ? urls.first : null,
-        imagensUrls:    urls,
+        imagemUrl: urls.isNotEmpty ? urls.first : null,
+        imagensUrls: urls,
       );
 
       await _ocorrenciaService.cadastrarOcorrencia(ocorrencia);

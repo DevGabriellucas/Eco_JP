@@ -4,7 +4,7 @@
 
 **Aplicativo de zeladoria urbana ambiental para João Pessoa**
 
-[![CI](https://github.com/DevGabriellucas/EcoJP/actions/workflows/ci.yml/badge.svg)](https://github.com/DevGabriellucas/EcoJP/actions/workflows/ci.yml)
+[![CI](https://github.com/DevGabriellucas/Eco_JP/actions/workflows/ci.yml/badge.svg)](https://github.com/DevGabriellucas/Eco_JP/actions/workflows/ci.yml)
 ![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)
 ![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-Auth%20%2B%20Firestore-FFCA28?logo=firebase&logoColor=black)
@@ -92,8 +92,8 @@ lib/
 
 ```bash
 # 1. Clone o repositório
-git clone https://github.com/DevGabriellucas/EcoJP.git
-cd EcoJP
+git clone https://github.com/DevGabriellucas/Eco_JP.git
+cd Eco_JP
 
 # 2. Instale as dependências
 flutter pub get

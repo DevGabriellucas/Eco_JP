@@ -9,6 +9,7 @@ import 'pages/inicial_page.dart';
 import 'pages/form_ocorrencia_page.dart';
 import 'services/auth_service.dart';
 import 'pages/mapPage/map_page.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,7 +54,11 @@ class _AppErroInicializacao extends StatelessWidget {
                 Text(
                   'Verifique sua conexão com a internet e abra o aplicativo novamente.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white60, fontSize: 14, height: 1.4),
+                  style: TextStyle(
+                    color: Colors.white60,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
                 ),
               ],
             ),
@@ -71,10 +76,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'EcoJP',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
       home: const InicialPage(),
       routes: {
         '/inicial': (context) => const InicialPage(),

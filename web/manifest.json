@@ -1,11 +1,11 @@
 {
-    "name": "eco_jp",
-    "short_name": "eco_jp",
+    "name": "EcoJP",
+    "short_name": "EcoJP",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F4F6F3",
+    "theme_color": "#1F7A4D",
+    "description": "Aplicativo colaborativo para registrar e acompanhar ocorrências ambientais em João Pessoa.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
