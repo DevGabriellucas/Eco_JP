@@ -3,6 +3,7 @@ import 'package:eco_jp/pages/detalhe_ocorrencia_page.dart';
 import 'package:eco_jp/pages/mapPage/controller/map_controller.dart';
 import 'package:eco_jp/pages/mapPage/widgets/affectedzones.dart';
 import 'package:eco_jp/pages/mapPage/widgets/appbar.dart';
+import 'package:eco_jp/pages/mapPage/widgets/category_drawer.dart';
 import 'package:eco_jp/pages/mapPage/widgets/categoryitems.dart';
 import 'package:eco_jp/pages/mapPage/widgets/mapdisplay.dart';
 import 'package:eco_jp/pages/mapPage/widgets/ocorrencia_map_sheet.dart';
@@ -13,10 +14,7 @@ class MapPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: barraOcorrencias(context),
-      body: const MapPageConteudo(),
-    );
+    return const MapPageConteudo();
   }
 }
 
@@ -63,7 +61,7 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
+    final body = ListenableBuilder(
       listenable: controller,
       builder: (context, child) {
         final state = controller.state;
@@ -77,14 +75,42 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
           return MapEmError(controller, state);
         }
 
-        return Column(
-          children: [
-            Expanded(child: MapDisplay(controller: controller)),
-            SizedBox(height: 48, child: CategoryItems(controller: controller)),
-            SizedBox(height: 128, child: MostAffectedZones(controller)),
-          ],
+        // top/left/right ficam por conta do AppBar e do mapa (full-bleed);
+        // só protegemos a base para os painéis não ficarem sob a barra de
+        // navegação do sistema (gestos/home indicator).
+        return SafeArea(
+          top: false,
+          left: false,
+          right: false,
+          child: Column(
+            children: [
+              Expanded(child: MapDisplay(controller: controller)),
+              // Limita a escala de fonte nas faixas de altura fixa para que o
+              // ajuste de "fonte grande" do sistema não cause overflow.
+              SizedBox(
+                height: 48,
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.2,
+                  child: CategoryItems(controller: controller),
+                ),
+              ),
+              SizedBox(
+                height: 128,
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.2,
+                  child: MostAffectedZones(controller),
+                ),
+              ),
+            ],
+          ),
         );
       },
+    );
+
+    return Scaffold(
+      appBar: barraOcorrencias(context),
+      endDrawer: CategoryDrawer(controller: controller),
+      body: body,
     );
   }
 }
