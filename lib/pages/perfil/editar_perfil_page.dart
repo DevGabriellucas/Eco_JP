@@ -8,12 +8,12 @@ import '../../services/ocorrencia_service.dart';
 import '../../services/usuario_service.dart';
 
 class _C {
-  static const bg         = Colors.white;
-  static const text       = Color(0xFF1A1A1A);
-  static const hint       = Color(0xFF8A8A8A);
-  static const avatarBg   = Color(0xFF9E9E9E);
-  static const border     = Color(0xFF1A1A1A);
-  static const error      = Color(0xFFB00020);
+  static const bg = Colors.white;
+  static const text = Color(0xFF1A1A1A);
+  static const hint = Color(0xFF8A8A8A);
+  static const avatarBg = Color(0xFF9E9E9E);
+  static const border = Color(0xFF1A1A1A);
+  static const error = Color(0xFFB00020);
 }
 
 class EditarPerfilPage extends StatefulWidget {
@@ -26,24 +26,24 @@ class EditarPerfilPage extends StatefulWidget {
 }
 
 class _EditarPerfilPageState extends State<EditarPerfilPage> {
-  final _formKey           = GlobalKey<FormState>();
-  final _nomeCtrl          = TextEditingController();
-  final _bioCtrl           = TextEditingController();
-  final _bairroCtrl        = TextEditingController();
-  final _picker              = ImagePicker();
-  final _cloudinaryService   = CloudinaryService();
-  final _usuarioService      = UsuarioService();
-  final _ocorrenciaService   = OcorrenciaService();
+  final _formKey = GlobalKey<FormState>();
+  final _nomeCtrl = TextEditingController();
+  final _bioCtrl = TextEditingController();
+  final _bairroCtrl = TextEditingController();
+  final _picker = ImagePicker();
+  final _cloudinaryService = CloudinaryService();
+  final _usuarioService = UsuarioService();
+  final _ocorrenciaService = OcorrenciaService();
 
-  XFile?    _novaFoto;
+  XFile? _novaFoto;
   Uint8List? _novaFotoBytes;
   bool _salvando = false;
 
   @override
   void initState() {
     super.initState();
-    _nomeCtrl.text   = widget.perfilAtual.nome;
-    _bioCtrl.text    = widget.perfilAtual.bio;
+    _nomeCtrl.text = widget.perfilAtual.nome;
+    _bioCtrl.text = widget.perfilAtual.bio;
     _bairroCtrl.text = widget.perfilAtual.bairro;
   }
 
@@ -57,7 +57,9 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
 
   Future<void> _trocarFoto(ImageSource source) async {
     final img = await _picker.pickImage(
-      source: source, imageQuality: 80, maxWidth: 800,
+      source: source,
+      imageQuality: 80,
+      maxWidth: 800,
     );
     if (!mounted || img == null) return;
     final bytes = await img.readAsBytes();
@@ -83,12 +85,18 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
             ListTile(
               leading: const Icon(Icons.camera_alt_outlined, color: _C.text),
               title: const Text('Tirar foto'),
-              onTap: () { Navigator.pop(context); _trocarFoto(ImageSource.camera); },
+              onTap: () {
+                Navigator.pop(context);
+                _trocarFoto(ImageSource.camera);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined, color: _C.text),
               title: const Text('Escolher da galeria'),
-              onTap: () { Navigator.pop(context); _trocarFoto(ImageSource.gallery); },
+              onTap: () {
+                Navigator.pop(context);
+                _trocarFoto(ImageSource.gallery);
+              },
             ),
             const SizedBox(height: 8),
           ],
@@ -124,7 +132,9 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
               backgroundColor: _C.text,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: const Text('Salvar'),
           ),
@@ -164,9 +174,9 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
       );
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Perfil atualizado!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Perfil atualizado!')));
       Navigator.pop(context);
     } catch (e) {
       debugPrint('Erro ao salvar perfil: $e');
@@ -194,7 +204,11 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
         systemOverlayStyle: SystemUiOverlayStyle.dark,
         title: const Text(
           'Editar perfil',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: _C.text),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: _C.text,
+          ),
         ),
       ),
       body: Form(
@@ -232,11 +246,7 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
             const SizedBox(height: 16),
             _label('Bairro'),
             const SizedBox(height: 8),
-            _input(
-              controller: _bairroCtrl,
-              hint: 'Seu bairro',
-              maxLength: 40,
-            ),
+            _input(controller: _bairroCtrl, hint: 'Seu bairro', maxLength: 40),
             const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
@@ -246,17 +256,26 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
                   backgroundColor: _C.text,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   elevation: 0,
                 ),
                 child: _salvando
                     ? const SizedBox(
-                        width: 20, height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Text(
                         'Salvar',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
               ),
             ),
@@ -268,7 +287,8 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
 
   Widget _avatarEditavel() {
     final temFotoNova = _novaFotoBytes != null;
-    final temFotoAtual = widget.perfilAtual.fotoUrl != null &&
+    final temFotoAtual =
+        widget.perfilAtual.fotoUrl != null &&
         widget.perfilAtual.fotoUrl!.isNotEmpty;
 
     return GestureDetector(
@@ -281,8 +301,8 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
             backgroundImage: temFotoNova
                 ? MemoryImage(_novaFotoBytes!)
                 : temFotoAtual
-                    ? NetworkImage(widget.perfilAtual.fotoUrl!) as ImageProvider
-                    : null,
+                ? NetworkImage(widget.perfilAtual.fotoUrl!) as ImageProvider
+                : null,
             child: (!temFotoNova && !temFotoAtual)
                 ? Text(
                     widget.perfilAtual.iniciais,
@@ -303,7 +323,11 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
                 color: _C.text,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+              child: const Icon(
+                Icons.camera_alt,
+                size: 16,
+                color: Colors.white,
+              ),
             ),
           ),
         ],
@@ -312,13 +336,13 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
   }
 
   Widget _label(String text) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: _C.text,
-        ),
-      );
+    text,
+    style: const TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+      color: _C.text,
+    ),
+  );
 
   Widget _input({
     required TextEditingController controller,
@@ -338,7 +362,10 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
         hintText: hint,
         hintStyle: const TextStyle(color: _C.hint, fontSize: 14),
         counterText: '',
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFE0E0E0)),

@@ -178,7 +178,9 @@ class LocationService {
         );
       }
     } on TimeoutException catch (_) {
-      debugPrint('Erro: A requisição demorou demais e foi cancelada (Timeout).');
+      debugPrint(
+        'Erro: A requisição demorou demais e foi cancelada (Timeout).',
+      );
       return [];
     } catch (e) {
       debugPrint('Erro ao buscar sugestões: $e');

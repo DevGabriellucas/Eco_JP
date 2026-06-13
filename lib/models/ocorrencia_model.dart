@@ -49,8 +49,8 @@ class OcorrenciaModel {
     this.comments = 0,
     this.userLiked = false,
     this.userDisliked = false,
-  })  : likedBy = likedBy ?? [],
-        dislikedBy = dislikedBy ?? [];
+  }) : likedBy = likedBy ?? [],
+       dislikedBy = dislikedBy ?? [];
 
   Map<String, dynamic> toMap() {
     return {

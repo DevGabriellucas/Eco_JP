@@ -40,9 +40,11 @@ class NotificacaoService {
         .orderBy('dataCriacao', descending: true)
         .limit(50)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => NotificacaoModel.fromMap(d.data(), d.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => NotificacaoModel.fromMap(d.data(), d.id))
+              .toList(),
+        );
   }
 
   Stream<int> contarNaoLidas(String uid) {

@@ -107,8 +107,10 @@ class _LoginPageState extends State<LoginPage> {
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     autofocus: true,
-                    style:
-                        const TextStyle(fontSize: 14, color: Color(0xFF1A1A1A)),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF1A1A1A),
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Email',
                       hintStyle: const TextStyle(
@@ -148,7 +150,9 @@ class _LoginPageState extends State<LoginPage> {
                       : () async {
                           final email = emailCtrl.text.trim();
                           setDialogState(() => enviando = true);
-                          final result = await _authService.recuperarSenha(email);
+                          final result = await _authService.recuperarSenha(
+                            email,
+                          );
                           if (!ctx.mounted) return;
                           Navigator.of(ctx).pop();
                           if (mounted) {
@@ -245,8 +249,9 @@ class _LoginPageState extends State<LoginPage> {
                       const SizedBox(height: 24),
                       GestureDetector(
                         onTap: () {
-                          Navigator.of(context)
-                              .pushReplacementNamed('/inicial');
+                          Navigator.of(
+                            context,
+                          ).pushReplacementNamed('/inicial');
                         },
                         child: SvgPicture.asset(
                           'assets/icons/seta.svg',
@@ -325,9 +330,9 @@ class _LoginPageState extends State<LoginPage> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF2C2C2C),
                                   foregroundColor: Colors.white,
-                                  disabledBackgroundColor:
-                                      const Color(0xFF2C2C2C)
-                                          .withValues(alpha: 0.6),
+                                  disabledBackgroundColor: const Color(
+                                    0xFF2C2C2C,
+                                  ).withValues(alpha: 0.6),
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),

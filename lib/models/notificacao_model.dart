@@ -20,13 +20,13 @@ class NotificacaoModel {
   });
 
   Map<String, dynamic> toMap() => {
-        'tipo': tipo,
-        'deUsuarioNome': deUsuarioNome,
-        'ocorrenciaId': ocorrenciaId,
-        'ocorrenciaTitulo': ocorrenciaTitulo,
-        'dataCriacao': FieldValue.serverTimestamp(),
-        'lida': false,
-      };
+    'tipo': tipo,
+    'deUsuarioNome': deUsuarioNome,
+    'ocorrenciaId': ocorrenciaId,
+    'ocorrenciaTitulo': ocorrenciaTitulo,
+    'dataCriacao': FieldValue.serverTimestamp(),
+    'lida': false,
+  };
 
   factory NotificacaoModel.fromMap(Map<String, dynamic> map, String id) {
     return NotificacaoModel(

@@ -11,14 +11,14 @@ import '../../widgets/ocorrencia_actions.dart';
 import 'editar_perfil_page.dart';
 
 class _C {
-  static const bg         = Colors.white;
-  static const cardBg     = Color(0xFFEDEDED);
+  static const bg = Colors.white;
+  static const cardBg = Color(0xFFEDEDED);
   static const cardBorder = Color(0xFFD8D8D8);
-  static const avatarBg   = Color(0xFF9E9E9E);
-  static const text       = Color(0xFF1A1A1A);
-  static const hint       = Color(0xFF8A8A8A);
-  static const laranja    = Color(0xFFFF8A1F);
-  static const sair       = Color(0xFFC62828);
+  static const avatarBg = Color(0xFF9E9E9E);
+  static const text = Color(0xFF1A1A1A);
+  static const hint = Color(0xFF8A8A8A);
+  static const laranja = Color(0xFFFF8A1F);
+  static const sair = Color(0xFFC62828);
 }
 
 class PerfilPage extends StatefulWidget {
@@ -29,15 +29,25 @@ class PerfilPage extends StatefulWidget {
 }
 
 class _PerfilPageState extends State<PerfilPage> {
-  final _authService       = AuthService();
-  final _usuarioService    = UsuarioService();
+  final _authService = AuthService();
+  final _usuarioService = UsuarioService();
   final _ocorrenciaService = OcorrenciaService();
 
   int _aba = 0; // 0 = Estatísticas, 1 = Minhas denúncias
 
   static const _meses = [
-    'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
-    'jul', 'ago', 'set', 'out', 'nov', 'dez',
+    'jan',
+    'fev',
+    'mar',
+    'abr',
+    'mai',
+    'jun',
+    'jul',
+    'ago',
+    'set',
+    'out',
+    'nov',
+    'dez',
   ];
 
   String _membroDesde() {
@@ -71,7 +81,9 @@ class _PerfilPageState extends State<PerfilPage> {
               backgroundColor: _C.sair,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: const Text('Sair'),
           ),
@@ -136,8 +148,8 @@ class _PerfilPageState extends State<PerfilPage> {
       body: StreamBuilder<UsuarioModel?>(
         stream: _usuarioService.observarPerfil(uid),
         builder: (context, perfilSnap) {
-          final perfil = perfilSnap.data ??
-              UsuarioModel(uid: uid, nome: emailFallback);
+          final perfil =
+              perfilSnap.data ?? UsuarioModel(uid: uid, nome: emailFallback);
 
           return StreamBuilder<List<OcorrenciaModel>>(
             stream: _ocorrenciaService.listarPorUsuario(uid),
@@ -203,7 +215,9 @@ class _PerfilPageState extends State<PerfilPage> {
                   const Icon(Icons.location_on, size: 15, color: _C.hint),
                   const SizedBox(width: 4),
                   Text(
-                    perfil.bairro.trim().isEmpty ? 'Bairro não informado' : perfil.bairro,
+                    perfil.bairro.trim().isEmpty
+                        ? 'Bairro não informado'
+                        : perfil.bairro,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
@@ -217,7 +231,11 @@ class _PerfilPageState extends State<PerfilPage> {
                 Text(
                   perfil.bio,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: _C.hint, height: 1.4),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: _C.hint,
+                    height: 1.4,
+                  ),
                 ),
               ],
             ],
@@ -295,7 +313,11 @@ class _PerfilPageState extends State<PerfilPage> {
         children: [
           const Text(
             'Taxa de resolução',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _C.text),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: _C.text,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -324,7 +346,11 @@ class _PerfilPageState extends State<PerfilPage> {
         children: [
           const Text(
             'Categoria mais reportada',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _C.text),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: _C.text,
+            ),
           ),
           const SizedBox(height: 12),
           Container(
@@ -356,7 +382,9 @@ class _PerfilPageState extends State<PerfilPage> {
           foregroundColor: _C.sair,
           side: const BorderSide(color: _C.sair),
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
         icon: const Icon(Icons.logout, size: 18),
         label: const Text(
@@ -437,7 +465,8 @@ class _PerfilPageState extends State<PerfilPage> {
     if (ocorrencias.isEmpty) {
       return [_denunciasVazio()];
     }
-    final ordenadas = [...ocorrencias]..sort((a, b) {
+    final ordenadas = [...ocorrencias]
+      ..sort((a, b) {
         final da = a.dataCriacao;
         final db = b.dataCriacao;
         if (da == null && db == null) return 0;
@@ -508,7 +537,11 @@ class _PerfilPageState extends State<PerfilPage> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.location_on, size: 13, color: _C.hint),
+                          const Icon(
+                            Icons.location_on,
+                            size: 13,
+                            color: _C.hint,
+                          ),
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
@@ -517,7 +550,10 @@ class _PerfilPageState extends State<PerfilPage> {
                                   : o.localizacao,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12, color: _C.hint),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: _C.hint,
+                              ),
                             ),
                           ),
                         ],
@@ -529,7 +565,10 @@ class _PerfilPageState extends State<PerfilPage> {
                           const Spacer(),
                           Text(
                             _formatarData(o.dataCriacao),
-                            style: const TextStyle(fontSize: 11, color: _C.hint),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: _C.hint,
+                            ),
                           ),
                         ],
                       ),
@@ -616,11 +655,7 @@ class _PerfilPageState extends State<PerfilPage> {
       ),
       child: Text(
         s.label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: cor,
-        ),
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cor),
       ),
     );
   }
@@ -642,14 +677,18 @@ class _PerfilPageState extends State<PerfilPage> {
 
   _Stats _calcularStats(List<OcorrenciaModel> ocorrencias) {
     final resolvidas = ocorrencias
-        .where((o) =>
-            OccurrenceStatusParser.fromString(o.status) ==
-            OccurrenceStatus.resolved)
+        .where(
+          (o) =>
+              OccurrenceStatusParser.fromString(o.status) ==
+              OccurrenceStatus.resolved,
+        )
         .length;
     final andamento = ocorrencias
-        .where((o) =>
-            OccurrenceStatusParser.fromString(o.status) ==
-            OccurrenceStatus.inProgress)
+        .where(
+          (o) =>
+              OccurrenceStatusParser.fromString(o.status) ==
+              OccurrenceStatus.inProgress,
+        )
         .length;
     // Taxa de resolução = Resolvidas / total de denúncias
     final base = ocorrencias.length;

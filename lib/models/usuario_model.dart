@@ -14,12 +14,7 @@ class UsuarioModel {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'nome': nome,
-      'bio': bio,
-      'bairro': bairro,
-      'fotoUrl': fotoUrl,
-    };
+    return {'nome': nome, 'bio': bio, 'bairro': bairro, 'fotoUrl': fotoUrl};
   }
 
   factory UsuarioModel.fromMap(Map<String, dynamic> map, String uid) {
@@ -49,11 +44,16 @@ class UsuarioModel {
 
   // Iniciais para o avatar (ex: "Gabriel Lucas" -> "GL")
   String get iniciais {
-    final partes = nome.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final partes = nome
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (partes.isEmpty) return '?';
     if (partes.length == 1) {
       return partes.first.substring(0, 1).toUpperCase();
     }
-    return (partes.first.substring(0, 1) + partes.last.substring(0, 1)).toUpperCase();
+    return (partes.first.substring(0, 1) + partes.last.substring(0, 1))
+        .toUpperCase();
   }
 }

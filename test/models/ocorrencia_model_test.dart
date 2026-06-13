@@ -30,21 +30,21 @@ void main() {
 
   group('OcorrenciaModel.fromMap', () {
     Map<String, dynamic> baseMap() => {
-          'titulo': 'Esgoto aberto',
-          'descricao': 'Vazamento na calçada',
-          'localizacao': 'Manaíra',
-          'latitude': -7.1,
-          'longitude': -34.84,
-          'tipoLixo': 'Esgoto',
-          'status': 'Pendente',
-          'dataCriacao': Timestamp.fromDate(DateTime(2026, 6, 10, 14, 30)),
-          'usuarioId': 'user-1',
-          'likedBy': ['user-2', 'user-3'],
-          'dislikedBy': <String>[],
-          'likes': 2,
-          'dislikes': 0,
-          'comments': 5,
-        };
+      'titulo': 'Esgoto aberto',
+      'descricao': 'Vazamento na calçada',
+      'localizacao': 'Manaíra',
+      'latitude': -7.1,
+      'longitude': -34.84,
+      'tipoLixo': 'Esgoto',
+      'status': 'Pendente',
+      'dataCriacao': Timestamp.fromDate(DateTime(2026, 6, 10, 14, 30)),
+      'usuarioId': 'user-1',
+      'likedBy': ['user-2', 'user-3'],
+      'dislikedBy': <String>[],
+      'likes': 2,
+      'dislikes': 0,
+      'comments': 5,
+    };
 
     test('userLiked reflete presença do usuário atual em likedBy', () {
       final curtiu = OcorrenciaModel.fromMap(
@@ -73,10 +73,7 @@ void main() {
     });
 
     test('campos ausentes caem em valores padrão seguros', () {
-      final model = OcorrenciaModel.fromMap(
-        {'titulo': 'Só título'},
-        'doc-2',
-      );
+      final model = OcorrenciaModel.fromMap({'titulo': 'Só título'}, 'doc-2');
 
       expect(model.titulo, 'Só título');
       expect(model.descricao, '');

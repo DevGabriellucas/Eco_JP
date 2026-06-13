@@ -32,7 +32,15 @@ class EstatisticasPage extends StatefulWidget {
 class _EstatisticasPageState extends State<EstatisticasPage> {
   final _ocorrenciaService = OcorrenciaService();
 
-  static const _weekDayLabels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
+  static const _weekDayLabels = [
+    'Seg',
+    'Ter',
+    'Qua',
+    'Qui',
+    'Sex',
+    'Sab',
+    'Dom',
+  ];
 
   Map<OccurrenceStatus, int> _statusCounts(List<OcorrenciaModel> ocorrencias) {
     final counts = <OccurrenceStatus, int>{};
@@ -53,7 +61,9 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
     return counts;
   }
 
-  List<MapEntry<OccurrenceType, int>> _categoryCounts(List<OcorrenciaModel> ocorrencias) {
+  List<MapEntry<OccurrenceType, int>> _categoryCounts(
+    List<OcorrenciaModel> ocorrencias,
+  ) {
     final counts = <OccurrenceType, int>{};
     for (final o in ocorrencias) {
       final type = OccurrenceTypeParser.fromString(o.tipoLixo);
@@ -85,7 +95,10 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
               ),
             ),
             SizedBox(width: 12),
-            Text('Estatísticas', style: TextStyle(fontSize: 15, color: Color(0xFF8A8A8A))),
+            Text(
+              'Estatísticas',
+              style: TextStyle(fontSize: 15, color: Color(0xFF8A8A8A)),
+            ),
           ],
         ),
         bottom: const PreferredSize(
@@ -94,54 +107,54 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
         ),
       ),
       body: StreamBuilder<List<OcorrenciaModel>>(
-          stream: _ocorrenciaService.listarOcorrencias(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        stream: _ocorrenciaService.listarOcorrencias(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            if (snapshot.hasError) {
-              return Center(child: Text('Erro: ${snapshot.error}'));
-            }
+          if (snapshot.hasError) {
+            return Center(child: Text('Erro: ${snapshot.error}'));
+          }
 
-            final ocorrencias = snapshot.data ?? [];
+          final ocorrencias = snapshot.data ?? [];
 
-            if (ocorrencias.isEmpty) {
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                children: const [
-                  SizedBox(height: 16),
-                  Center(
-                    child: Text(
-                      'Ainda não há dados suficientes\npara gerar estatísticas.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            final statusCounts = _statusCounts(ocorrencias);
-            final weeklyCounts = _weeklyCounts(ocorrencias);
-            final categoryCounts = _categoryCounts(ocorrencias);
-
+          if (ocorrencias.isEmpty) {
             return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              children: [
-                _StatusPieCard(
-                  resolved: statusCounts[OccurrenceStatus.resolved] ?? 0,
-                  inProgress: statusCounts[OccurrenceStatus.inProgress] ?? 0,
-                  unresolved: statusCounts[OccurrenceStatus.unresolved] ?? 0,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              children: const [
+                SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    'Ainda não há dados suficientes\npara gerar estatísticas.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
-                const SizedBox(height: 16),
-                _WeeklyLineCard(data: weeklyCounts, labels: _weekDayLabels),
-                const SizedBox(height: 16),
-                _CategoryBarCard(data: categoryCounts),
               ],
             );
-          },
-        ),
+          }
+
+          final statusCounts = _statusCounts(ocorrencias);
+          final weeklyCounts = _weeklyCounts(ocorrencias);
+          final categoryCounts = _categoryCounts(ocorrencias);
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            children: [
+              _StatusPieCard(
+                resolved: statusCounts[OccurrenceStatus.resolved] ?? 0,
+                inProgress: statusCounts[OccurrenceStatus.inProgress] ?? 0,
+                unresolved: statusCounts[OccurrenceStatus.unresolved] ?? 0,
+              ),
+              const SizedBox(height: 16),
+              _WeeklyLineCard(data: weeklyCounts, labels: _weekDayLabels),
+              const SizedBox(height: 16),
+              _CategoryBarCard(data: categoryCounts),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -290,17 +303,28 @@ class _PieLegendLabel extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 5),
-            Text(label, style: const TextStyle(fontSize: 11, color: _legendTextColor)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: _legendTextColor),
+            ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
           '$value',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
         ),
         Text(
           '${percent.toStringAsFixed(0)}%',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
         ),
       ],
     );
@@ -359,7 +383,11 @@ class _WeeklyLineCard extends StatelessWidget {
             height: 200,
             child: CustomPaint(
               size: Size.infinite,
-              painter: _LineChartPainter(data: data, labels: labels, axisMax: axisMax),
+              painter: _LineChartPainter(
+                data: data,
+                labels: labels,
+                axisMax: axisMax,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -373,7 +401,11 @@ class _WeeklyLineCard extends StatelessWidget {
               const SizedBox(width: 6),
               const Text(
                 'Quantidade de Ocorrências',
-                style: TextStyle(fontSize: 12, color: _legendTextColor, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _legendTextColor,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -415,7 +447,11 @@ class _LineChartPainter extends CustomPainter {
   final List<String> labels;
   final int axisMax;
 
-  const _LineChartPainter({required this.data, required this.labels, required this.axisMax});
+  const _LineChartPainter({
+    required this.data,
+    required this.labels,
+    required this.axisMax,
+  });
 
   static const _ySteps = 5;
   static const _labelStyle = TextStyle(color: _axisLabelColor, fontSize: 10);
@@ -437,8 +473,14 @@ class _LineChartPainter extends CustomPainter {
     // Linhas de grade horizontais + rótulos do eixo Y
     for (var i = 0; i <= _ySteps; i++) {
       final value = (axisMax / _ySteps * i).round();
-      final y = chartHeight - (axisMax == 0 ? 0 : value / axisMax) * chartHeight;
-      _drawDashedLine(canvas, Offset(_leftPadding, y), Offset(size.width, y), gridPaint);
+      final y =
+          chartHeight - (axisMax == 0 ? 0 : value / axisMax) * chartHeight;
+      _drawDashedLine(
+        canvas,
+        Offset(_leftPadding, y),
+        Offset(size.width, y),
+        gridPaint,
+      );
 
       final tp = TextPainter(
         text: TextSpan(text: '$value', style: _labelStyle),
@@ -547,18 +589,32 @@ class _CategoryBarCard extends StatelessWidget {
 
     final maxValue = data.map((e) => e.value).reduce(math.max);
     final axisMax = _niceAxisMax(maxValue);
-    final axisValues = List.generate(_axisSteps + 1, (i) => (axisMax / _axisSteps * i).round());
+    final axisValues = List.generate(
+      _axisSteps + 1,
+      (i) => (axisMax / _axisSteps * i).round(),
+    );
 
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: _labelWidth + 8, right: _valueWidth + 8),
+            padding: const EdgeInsets.only(
+              left: _labelWidth + 8,
+              right: _valueWidth + 8,
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: axisValues
-                  .map((v) => Text('$v', style: const TextStyle(fontSize: 11, color: _axisLabelColor)))
+                  .map(
+                    (v) => Text(
+                      '$v',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: _axisLabelColor,
+                      ),
+                    ),
+                  )
                   .toList(),
             ),
           ),
@@ -589,7 +645,11 @@ class _CategoryBarCard extends StatelessWidget {
                 child: Text(
                   'Quantidade de ocorrências (mês) por categoria',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: _legendTextColor, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _legendTextColor,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
@@ -605,7 +665,11 @@ class _CategoryBarRow extends StatelessWidget {
   final int value;
   final int axisMax;
 
-  const _CategoryBarRow({required this.type, required this.value, required this.axisMax});
+  const _CategoryBarRow({
+    required this.type,
+    required this.value,
+    required this.axisMax,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -651,7 +715,11 @@ class _CategoryBarRow extends StatelessWidget {
             width: _CategoryBarCard._valueWidth,
             child: Text(
               '$value',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _chartPurple),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: _chartPurple,
+              ),
             ),
           ),
         ],
@@ -669,7 +737,9 @@ class _CategoryBarRow extends StatelessWidget {
 int _niceAxisMax(int maxValue) {
   if (maxValue <= 0) return 5;
 
-  final magnitude = math.pow(10, (math.log(maxValue) / math.ln10).floor()).toInt();
+  final magnitude = math
+      .pow(10, (math.log(maxValue) / math.ln10).floor())
+      .toInt();
   final residual = maxValue / magnitude;
 
   late final int niceResidual;

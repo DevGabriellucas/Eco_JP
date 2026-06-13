@@ -110,16 +110,23 @@ extension OccurrenceTypeLabel on OccurrenceType {
 extension OccurrenceTypeParser on OccurrenceType {
   static OccurrenceType fromString(String value) {
     final normalized = value.toLowerCase().trim();
-    if (normalized.contains('lixo') || normalized.contains('resíduo') || normalized.contains('residuo')) {
+    if (normalized.contains('lixo') ||
+        normalized.contains('resíduo') ||
+        normalized.contains('residuo')) {
       return OccurrenceType.lixo;
     }
-    if (normalized.contains('queimada') || normalized.contains('incêndio') || normalized.contains('incendio')) {
+    if (normalized.contains('queimada') ||
+        normalized.contains('incêndio') ||
+        normalized.contains('incendio')) {
       return OccurrenceType.queimada;
     }
     if (normalized.contains('buraco')) {
       return OccurrenceType.buraco;
     }
-    if (normalized.contains('árvore') || normalized.contains('arvore') || normalized.contains('caída') || normalized.contains('caida')) {
+    if (normalized.contains('árvore') ||
+        normalized.contains('arvore') ||
+        normalized.contains('caída') ||
+        normalized.contains('caida')) {
       return OccurrenceType.arvoresCaidas;
     }
     if (normalized.contains('enchente') || normalized.contains('alagamento')) {
@@ -128,7 +135,8 @@ extension OccurrenceTypeParser on OccurrenceType {
     if (normalized.contains('esgoto')) {
       return OccurrenceType.esgoto;
     }
-    if (normalized.contains('iluminação') || normalized.contains('iluminacao')) {
+    if (normalized.contains('iluminação') ||
+        normalized.contains('iluminacao')) {
       return OccurrenceType.faltaIluminacao;
     }
     return OccurrenceType.outros;

@@ -69,12 +69,14 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
   Future<void> _fetchAuthorData() async {
     final o = widget.occurrence;
 
-    final hasSavedName  = o.usuarioNome != null && o.usuarioNome!.trim().isNotEmpty;
-    final hasSavedPhoto = o.usuarioFotoUrl != null && o.usuarioFotoUrl!.isNotEmpty;
+    final hasSavedName =
+        o.usuarioNome != null && o.usuarioNome!.trim().isNotEmpty;
+    final hasSavedPhoto =
+        o.usuarioFotoUrl != null && o.usuarioFotoUrl!.isNotEmpty;
 
     if (hasSavedName && hasSavedPhoto) {
       setState(() {
-        _authorName  = o.usuarioNome;
+        _authorName = o.usuarioNome;
         _authorPhoto = o.usuarioFotoUrl;
       });
       return;
@@ -92,9 +94,9 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
 
     if (!mounted) return;
 
-    final data  = doc.data();
-    final nome  = (data?['nome'] as String?)?.trim();
-    final foto  = data?['fotoUrl'] as String?;
+    final data = doc.data();
+    final nome = (data?['nome'] as String?)?.trim();
+    final foto = data?['fotoUrl'] as String?;
 
     String? resolvedName;
     if (hasSavedName) {
@@ -109,7 +111,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
     }
 
     setState(() {
-      _authorName  = resolvedName;
+      _authorName = resolvedName;
       _authorPhoto = hasSavedPhoto
           ? o.usuarioFotoUrl
           : (foto?.isNotEmpty == true ? foto : null);
@@ -234,7 +236,9 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
               backgroundColor: _C.red,
               foregroundColor: _C.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: const Text('Excluir'),
           ),
@@ -284,10 +288,15 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           // Título
-                          _FieldCard(child: Text(
-                            o.titulo.isEmpty ? 'Sem título' : o.titulo,
-                            style: const TextStyle(fontSize: 14, color: _C.text),
-                          )),
+                          _FieldCard(
+                            child: Text(
+                              o.titulo.isEmpty ? 'Sem título' : o.titulo,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: _C.text,
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 10),
 
                           // Descrição
@@ -297,11 +306,17 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                               children: [
                                 const Text(
                                   'Descrição',
-                                  style: TextStyle(fontSize: 12, color: _C.hint, fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _C.hint,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  o.descricao.isEmpty ? 'Sem descrição' : o.descricao,
+                                  o.descricao.isEmpty
+                                      ? 'Sem descrição'
+                                      : o.descricao,
                                   style: const TextStyle(
                                     fontSize: 13,
                                     color: Color(0xFF374151),
@@ -317,7 +332,9 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                           Row(
                             children: [
                               _ReactionChip(
-                                icon: _userLiked ? Icons.thumb_up_alt : Icons.thumb_up_alt_outlined,
+                                icon: _userLiked
+                                    ? Icons.thumb_up_alt
+                                    : Icons.thumb_up_alt_outlined,
                                 count: _likes,
                                 active: _userLiked,
                                 activeColor: _C.green,
@@ -325,7 +342,9 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                               ),
                               const SizedBox(width: 8),
                               _ReactionChip(
-                                icon: _userDisliked ? Icons.thumb_down_alt : Icons.thumb_down_alt_outlined,
+                                icon: _userDisliked
+                                    ? Icons.thumb_down_alt
+                                    : Icons.thumb_down_alt_outlined,
                                 count: _dislikes,
                                 active: _userDisliked,
                                 activeColor: _C.red,
@@ -333,7 +352,9 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: _AddCommentButton(onTap: _openCommentSheet),
+                                child: _AddCommentButton(
+                                  onTap: _openCommentSheet,
+                                ),
                               ),
                             ],
                           ),
@@ -366,11 +387,14 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                           StreamBuilder<List<ComentarioModel>>(
                             stream: _service.listarComentarios(o.id),
                             builder: (context, snap) {
-                              if (snap.connectionState == ConnectionState.waiting) {
+                              if (snap.connectionState ==
+                                  ConnectionState.waiting) {
                                 return const Center(
                                   child: Padding(
                                     padding: EdgeInsets.symmetric(vertical: 24),
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   ),
                                 );
                               }
@@ -380,11 +404,13 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                               }
                               return Column(
                                 children: comentarios
-                                    .map((c) => _CommentItem(
-                                          comentario: c,
-                                          isOwn: c.userId == _uid,
-                                          onDelete: () => _deleteComment(c),
-                                        ))
+                                    .map(
+                                      (c) => _CommentItem(
+                                        comentario: c,
+                                        isOwn: c.userId == _uid,
+                                        onDelete: () => _deleteComment(c),
+                                      ),
+                                    )
                                     .toList(),
                               );
                             },
@@ -457,7 +483,9 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    o.localizacao.isEmpty ? 'Localização não informada' : o.localizacao,
+                    o.localizacao.isEmpty
+                        ? 'Localização não informada'
+                        : o.localizacao,
                     style: const TextStyle(
                       fontSize: 13,
                       color: _C.orange,
@@ -497,8 +525,12 @@ class _ImageAreaState extends State<_ImageArea> {
   int _current = 0;
 
   List<String> get _images {
-    if (widget.occurrence.imagensUrls.isNotEmpty) return widget.occurrence.imagensUrls;
-    if (widget.occurrence.imagemUrl != null) return [widget.occurrence.imagemUrl!];
+    if (widget.occurrence.imagensUrls.isNotEmpty) {
+      return widget.occurrence.imagensUrls;
+    }
+    if (widget.occurrence.imagemUrl != null) {
+      return [widget.occurrence.imagemUrl!];
+    }
     return [];
   }
 
@@ -552,7 +584,10 @@ class _ImageAreaState extends State<_ImageArea> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.35),
                       borderRadius: BorderRadius.circular(12),
@@ -614,7 +649,10 @@ class _Placeholder extends StatelessWidget {
         children: [
           Icon(type.icon, size: 48, color: Colors.white54),
           const SizedBox(height: 8),
-          const Text('Sem imagem', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          const Text(
+            'Sem imagem',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
         ],
       ),
     );
@@ -639,7 +677,11 @@ class _TypeBadge extends StatelessWidget {
       ),
       child: Text(
         type.label,
-        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -718,9 +760,7 @@ class _ReactionChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: active ? activeColor.withValues(alpha: 0.08) : _C.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active ? activeColor : _C.border,
-          ),
+          border: Border.all(color: active ? activeColor : _C.border),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -768,7 +808,11 @@ class _AddCommentButton extends StatelessWidget {
             SizedBox(width: 6),
             Text(
               'Adicionar comentário',
-              style: TextStyle(fontSize: 13, color: _C.hint, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 13,
+                color: _C.hint,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -794,7 +838,11 @@ class _EmptyComments extends StatelessWidget {
           SizedBox(height: 12),
           Text(
             'Sem comentários',
-            style: TextStyle(fontSize: 18, color: Color(0xFFD1D5DB), fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 18,
+              color: Color(0xFFD1D5DB),
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -841,7 +889,8 @@ class _CommentItem extends StatelessWidget {
           CircleAvatar(
             radius: 18,
             backgroundColor: const Color(0xFFE8F5E9),
-            backgroundImage: c.userPhotoUrl != null && c.userPhotoUrl!.isNotEmpty
+            backgroundImage:
+                c.userPhotoUrl != null && c.userPhotoUrl!.isNotEmpty
                 ? NetworkImage(c.userPhotoUrl!)
                 : null,
             child: c.userPhotoUrl == null || c.userPhotoUrl!.isEmpty
@@ -883,7 +932,11 @@ class _CommentItem extends StatelessWidget {
                       const SizedBox(width: 8),
                       GestureDetector(
                         onTap: onDelete,
-                        child: const Icon(Icons.delete_outline, size: 16, color: _C.red),
+                        child: const Icon(
+                          Icons.delete_outline,
+                          size: 16,
+                          color: _C.red,
+                        ),
                       ),
                     ],
                   ],
@@ -891,7 +944,11 @@ class _CommentItem extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   c.texto,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.4),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF374151),
+                    height: 1.4,
+                  ),
                 ),
               ],
             ),
@@ -922,18 +979,21 @@ class _StatusTimeline extends StatelessWidget {
         final eventos = snap.data ?? [];
         final linhas =
             <({IconData icone, Color cor, String label, DateTime? data})>[
-          (
-            icone: Icons.add_location_alt_outlined,
-            cor: const Color(0xFF6B7280),
-            label: 'Registrada',
-            data: occurrence.dataCriacao,
-          ),
-        ];
+              (
+                icone: Icons.add_location_alt_outlined,
+                cor: const Color(0xFF6B7280),
+                label: 'Registrada',
+                data: occurrence.dataCriacao,
+              ),
+            ];
         for (final e in eventos) {
           final s = OccurrenceStatusParser.fromString(e.status);
-          linhas.add(
-            (icone: s.icon, cor: s.color, label: s.label, data: e.data),
-          );
+          linhas.add((
+            icone: s.icon,
+            cor: s.color,
+            label: s.label,
+            data: e.data,
+          ));
         }
 
         return Column(
@@ -1071,7 +1131,11 @@ class _CommentInputSheetState extends State<_CommentInputSheet> {
             alignment: Alignment.centerLeft,
             child: Text(
               'Adicionar comentário',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _C.text),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: _C.text,
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -1113,7 +1177,10 @@ class _CommentInputSheetState extends State<_CommentInputSheet> {
                   child: _sending
                       ? const Padding(
                           padding: EdgeInsets.all(10),
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.send, color: Colors.white, size: 18),
                 ),

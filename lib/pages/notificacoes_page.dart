@@ -83,8 +83,9 @@ class _NotificacaoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isComentario = n.tipo == 'comentario';
     final icone = isComentario ? Icons.chat_bubble : Icons.thumb_up_alt;
-    final cor =
-        isComentario ? const Color(0xFF3B82F6) : const Color(0xFF4CAF50);
+    final cor = isComentario
+        ? const Color(0xFF3B82F6)
+        : const Color(0xFF4CAF50);
     final acao = isComentario ? 'comentou na' : 'curtiu a';
 
     return Container(
@@ -115,7 +116,10 @@ class _NotificacaoTile extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   DateFormat('dd/MM/yyyy HH:mm').format(n.dataCriacao!),
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF8A8A8A)),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8A8A8A),
+                  ),
                 ),
               )
             : null,

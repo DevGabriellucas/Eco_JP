@@ -44,8 +44,9 @@ class _CadastroPageState extends State<CadastroPage> {
     }
 
     if (!_aceitouTermos) {
-      setState(() =>
-          _errorMessage = 'Você precisa aceitar os termos para continuar');
+      setState(
+        () => _errorMessage = 'Você precisa aceitar os termos para continuar',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Aceite a Política de Privacidade e os Termos de Uso'),
@@ -216,8 +217,9 @@ class _CadastroPageState extends State<CadastroPage> {
                       const SizedBox(height: 24),
                       GestureDetector(
                         onTap: () {
-                          Navigator.of(context)
-                              .pushReplacementNamed('/inicial');
+                          Navigator.of(
+                            context,
+                          ).pushReplacementNamed('/inicial');
                         },
                         child: SvgPicture.asset(
                           'assets/icons/seta.svg',
@@ -326,9 +328,9 @@ class _CadastroPageState extends State<CadastroPage> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF2C2C2C),
                                   foregroundColor: Colors.white,
-                                  disabledBackgroundColor:
-                                      const Color(0xFF2C2C2C)
-                                          .withValues(alpha: 0.6),
+                                  disabledBackgroundColor: const Color(
+                                    0xFF2C2C2C,
+                                  ).withValues(alpha: 0.6),
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -354,8 +356,9 @@ class _CadastroPageState extends State<CadastroPage> {
                             const SizedBox(height: 16),
                             GestureDetector(
                               onTap: () {
-                                Navigator.of(context)
-                                    .pushReplacementNamed('/login');
+                                Navigator.of(
+                                  context,
+                                ).pushReplacementNamed('/login');
                               },
                               child: const Text(
                                 'Já tem conta? Faça login',

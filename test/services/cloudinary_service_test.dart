@@ -16,8 +16,10 @@ void main() {
     });
 
     test('true quando ambos estão preenchidos', () {
-      final service =
-          CloudinaryService(cloudName: 'demo', uploadPreset: 'preset');
+      final service = CloudinaryService(
+        cloudName: 'demo',
+        uploadPreset: 'preset',
+      );
       expect(service.isConfigured, isTrue);
     });
   });
@@ -39,10 +41,7 @@ void main() {
         final body = jsonEncode({
           'secure_url': 'https://res.cloudinary.com/demo/foto.jpg',
         });
-        return http.StreamedResponse(
-          Stream.value(utf8.encode(body)),
-          200,
-        );
+        return http.StreamedResponse(Stream.value(utf8.encode(body)), 200);
       });
 
       final service = CloudinaryService(
@@ -51,46 +50,46 @@ void main() {
         uploadPreset: 'preset',
       );
 
-      final url =
-          await service.uploadImage(bytes: bytes, fileName: 'foto.jpg');
+      final url = await service.uploadImage(bytes: bytes, fileName: 'foto.jpg');
 
       expect(url, 'https://res.cloudinary.com/demo/foto.jpg');
     });
 
-    test('lança CloudinaryUploadException com mensagem da API em erro',
-        () async {
-      final mock = MockClient.streaming((request, bodyStream) async {
-        final body = jsonEncode({
-          'error': {'message': 'Upload preset inválido'},
+    test(
+      'lança CloudinaryUploadException com mensagem da API em erro',
+      () async {
+        final mock = MockClient.streaming((request, bodyStream) async {
+          final body = jsonEncode({
+            'error': {'message': 'Upload preset inválido'},
+          });
+          return http.StreamedResponse(Stream.value(utf8.encode(body)), 400);
         });
-        return http.StreamedResponse(
-          Stream.value(utf8.encode(body)),
-          400,
+
+        final service = CloudinaryService(
+          client: mock,
+          cloudName: 'demo',
+          uploadPreset: 'preset',
         );
-      });
 
-      final service = CloudinaryService(
-        client: mock,
-        cloudName: 'demo',
-        uploadPreset: 'preset',
-      );
-
-      expect(
-        () => service.uploadImage(bytes: bytes, fileName: 'foto.jpg'),
-        throwsA(
-          isA<CloudinaryUploadException>().having(
-            (e) => e.message,
-            'message',
-            'Upload preset inválido',
+        expect(
+          () => service.uploadImage(bytes: bytes, fileName: 'foto.jpg'),
+          throwsA(
+            isA<CloudinaryUploadException>().having(
+              (e) => e.message,
+              'message',
+              'Upload preset inválido',
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 
   group('CloudinaryService.safeFileName', () {
-    final service =
-        CloudinaryService(cloudName: 'demo', uploadPreset: 'preset');
+    final service = CloudinaryService(
+      cloudName: 'demo',
+      uploadPreset: 'preset',
+    );
 
     test('remove caracteres especiais e espaços', () {
       expect(

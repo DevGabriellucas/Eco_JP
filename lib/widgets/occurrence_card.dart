@@ -31,7 +31,9 @@ class OccurrenceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final o = occurrence;
-    final dateStr = DateFormat('dd.MM.yyyy').format(o.dataCriacao ?? DateTime.now());
+    final dateStr = DateFormat(
+      'dd.MM.yyyy',
+    ).format(o.dataCriacao ?? DateTime.now());
     final timeStr = DateFormat('HH:mm').format(o.dataCriacao ?? DateTime.now());
     final statusEnum = OccurrenceStatusParser.fromString(o.status);
     final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
@@ -104,8 +106,11 @@ class OccurrenceCard extends StatelessWidget {
                       onTap: onManage,
                       child: const Padding(
                         padding: EdgeInsets.only(left: 2),
-                        child: Icon(Icons.more_vert,
-                            size: 20, color: Color(0xFF9CA3AF)),
+                        child: Icon(
+                          Icons.more_vert,
+                          size: 20,
+                          color: Color(0xFF9CA3AF),
+                        ),
                       ),
                     ),
                 ],
@@ -119,7 +124,11 @@ class OccurrenceCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Row(
                 children: [
-                  const Icon(Icons.location_on, size: 13, color: Color(0xFF4CAF50)),
+                  const Icon(
+                    Icons.location_on,
+                    size: 13,
+                    color: Color(0xFF4CAF50),
+                  ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -141,7 +150,11 @@ class OccurrenceCard extends StatelessWidget {
             const SizedBox(height: 10),
 
             // ── Images slideshow
-            _ImageSlider(urls: o.imagensUrls, fallbackUrl: o.imagemUrl, type: typeEnum),
+            _ImageSlider(
+              urls: o.imagensUrls,
+              fallbackUrl: o.imagemUrl,
+              type: typeEnum,
+            ),
 
             const SizedBox(height: 12),
 
@@ -287,8 +300,7 @@ class _ImageSliderState extends State<_ImageSlider> {
                     ),
                   );
                 },
-                errorBuilder: (_, _, _) =>
-                    _ImagePlaceholder(type: widget.type),
+                errorBuilder: (_, _, _) => _ImagePlaceholder(type: widget.type),
               ),
             ),
           ),
@@ -303,8 +315,10 @@ class _ImageSliderState extends State<_ImageSlider> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.35),
                       borderRadius: BorderRadius.circular(12),
@@ -338,8 +352,7 @@ class _ImageSliderState extends State<_ImageSlider> {
               top: 10,
               right: 10,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.45),
                   borderRadius: BorderRadius.circular(12),
@@ -503,4 +516,3 @@ class _ActionButton extends StatelessWidget {
     );
   }
 }
-
