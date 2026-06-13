@@ -24,7 +24,10 @@ class MostAffectedZones extends StatelessWidget {
           const SizedBox(height: 6),
           Expanded(
             child: Card(
-              elevation: 4,
+              color: AppColors.surface,
+              surfaceTintColor: AppColors.surface,
+              elevation: 1.5,
+              shadowColor: Colors.black.withValues(alpha: 0.08),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -43,12 +46,14 @@ class MostAffectedZones extends StatelessWidget {
                     : Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          for (var i = 0; i < zonas.length; i++)
+                          for (var i = 0; i < zonas.length; i++) ...[
+                            if (i > 0) const SizedBox(height: 5),
                             _LinhaZona(
                               posicao: i + 1,
                               bairro: zonas[i].bairro,
                               quantidade: zonas[i].quantidade,
                             ),
+                          ],
                         ],
                       ),
               ),
