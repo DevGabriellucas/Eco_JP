@@ -27,6 +27,9 @@ jobs:
       - name: Instalar dependências
         run: flutter pub get
 
+      - name: Injetar MAPS_API_KEY
+        run: echo "MAPS_API_KEY=${{ secrets.MAPS_API_KEY }}" >> android/local.properties
+
       - name: Gerar FirebaseOptions de CI
         run: |
           cat > lib/firebase_options.dart <<'DART'
