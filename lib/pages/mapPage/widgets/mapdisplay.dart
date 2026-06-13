@@ -104,12 +104,16 @@ class _MapDisplayState extends State<MapDisplay> {
           },
         ),
 
-        // Filtros de status sobre o mapa.
+        // Filtros de status sobre o mapa. Clamp de fonte evita overflow da
+        // faixa de altura fixa quando o sistema usa "fonte grande".
         Positioned(
           top: 12,
           left: 8,
           right: 8,
-          child: _FiltrosStatus(controller: widget.controller),
+          child: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.2,
+            child: _FiltrosStatus(controller: widget.controller),
+          ),
         ),
 
         // Botão para reenquadrar todas as ocorrências.
