@@ -3,6 +3,24 @@
 Por segurança, as chaves de API **não ficam no código versionado**. Cada
 desenvolvedor configura as chaves localmente antes de rodar o app.
 
+## 0. Setup rápido (Windows)
+
+Se você está no Windows, rode o script abaixo na raiz do projeto **antes** de
+seguir os passos manuais. Ele resolve os problemas mais comuns (política de
+execução do PowerShell, instalação do `firebase-tools` e do FlutterFire CLI, e
+o PATH do `flutterfire`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
+```
+
+> O `-ExecutionPolicy Bypass` afeta só essa execução do script, sem alterar
+> nenhuma configuração permanente — é só pra conseguir rodar o script na
+> primeira vez.
+
+Depois que o script terminar, **abra um novo terminal** e continue a partir do
+passo 3 (Firebase) abaixo: `firebase login` e `flutterfire configure`.
+
 ## 1. Google Maps (Android)
 
 Edite o arquivo `android/local.properties` (ele é ignorado pelo Git) e adicione:
@@ -87,8 +105,13 @@ ignorados no `.gitignore`:
 Cada desenvolvedor deve gerar esses arquivos localmente com o FlutterFire CLI:
 
 ```
+firebase login
 flutterfire configure
 ```
+
+> O `flutterfire configure` pede pra você escolher um projeto Firebase. Para
+> usar o projeto do EcoJP, peça para o Gabriel adicionar seu e-mail do Google
+> como membro do projeto Firebase (console.firebase.google.com).
 
 Se algum desses arquivos já tiver sido commitado antes, remova apenas do
 rastreamento do Git, mantendo o arquivo local:
@@ -98,3 +121,27 @@ git rm --cached lib/firebase_options.dart android/app/google-services.json
 ```
 
 Depois disso, faça um commit com a remoção.
+
+## 4. Problemas comuns (Windows)
+
+**"npm não pode ser carregado porque a execução de scripts foi desabilitada"**
+
+A política de execução do PowerShell está bloqueando scripts `.ps1` (inclui
+`npm`, `flutterfire`, etc). Resolva uma vez por usuário:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+**"flutterfire não é reconhecido como nome de cmdlet..."**
+
+O `dart pub global activate flutterfire_cli` instala o comando em
+`%LOCALAPPDATA%\Pub\Cache\bin`, mas essa pasta nem sempre está no `PATH`.
+Adicione (uma vez) e abra um novo terminal:
+
+```powershell
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:LOCALAPPDATA\Pub\Cache\bin", "User")
+```
+
+> O script `scripts/setup_windows.ps1` (seção 0 deste documento) já resolve
+> os dois problemas acima automaticamente.
