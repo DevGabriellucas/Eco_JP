@@ -10,6 +10,77 @@ service cloud.firestore {
       return status in ['Pendente', 'Resolvido', 'Nao resolvido'];
     }
 
+    function isValidTitle(title) {
+      return title is string
+        && title.size() >= 3
+        && title.size() <= 80;
+    }
+
+    function isValidDescription(description) {
+      return description is string
+        && description.size() >= 10
+        && description.size() <= 1000;
+    }
+
+    function isValidLocationName(location) {
+      return location is string
+        && location.size() >= 3
+        && location.size() <= 180;
+    }
+
+    function isValidCategory(category) {
+      return category in [
+        'Lixo',
+        'Queimada',
+        'Buraco',
+        'Árvores caídas',
+        'Enchentes',
+        'Esgoto',
+        'Falta iluminação',
+        'Outros',
+      ];
+    }
+
+    function isValidCoordinate(lat, lon) {
+      return lat is number
+        && lon is number
+        && lat >= -90
+        && lat <= 90
+        && lon >= -180
+        && lon <= 180
+        && !(lat == 0 && lon == 0);
+    }
+
+    // Cloud name is public in delivered image URLs; secrets remain out of code.
+    function isCloudinaryImageUrl(url) {
+      return url is string
+        && url.size() <= 2048
+        && url.matches('^https://res\\.cloudinary\\.com/dmdghbgac/image/upload/.+');
+    }
+
+    function isOptionalPublicName(name) {
+      return name == null || (name is string && name.size() <= 80);
+    }
+
+    function isOptionalPublicPhoto(url) {
+      return url == null || (url is string && url.size() <= 2048);
+    }
+
+    function isValidPublicUserFields(data) {
+      return (!('usuarioNome' in data) || isOptionalPublicName(data.usuarioNome))
+        && (!('usuarioFotoUrl' in data) || isOptionalPublicPhoto(data.usuarioFotoUrl));
+    }
+
+    function isValidOccurrenceImages(data) {
+      return data.imagensUrls is list
+        && data.imagensUrls.size() >= 1
+        && data.imagensUrls.size() <= 3
+        && isCloudinaryImageUrl(data.imagensUrls[0])
+        && (data.imagensUrls.size() < 2 || isCloudinaryImageUrl(data.imagensUrls[1]))
+        && (data.imagensUrls.size() < 3 || isCloudinaryImageUrl(data.imagensUrls[2]))
+        && data.imagemUrl == data.imagensUrls[0];
+    }
+
     function isValidOcorrencia(data) {
       return data.keys().hasAll([
           'titulo',
@@ -49,26 +120,140 @@ service cloud.firestore {
           'likedBy',
           'dislikedBy',
         ])
-        && data.titulo is string
-        && data.descricao is string
-        && data.localizacao is string
-        && data.latitude is number
-        && data.longitude is number
-        && data.tipoLixo is string
-        && isValidStatus(data.status)
-        && data.dataCriacao is timestamp
+        && isValidTitle(data.titulo)
+        && isValidDescription(data.descricao)
+        && isValidLocationName(data.localizacao)
+        && isValidCoordinate(data.latitude, data.longitude)
+        && isValidCategory(data.tipoLixo)
+        && data.status == 'Pendente'
+        && data.dataCriacao == request.time
         && data.usuarioId == request.auth.uid
-        && (data.imagemUrl == null || data.imagemUrl is string)
-        && data.imagensUrls is list
+        && isValidOccurrenceImages(data)
+        && isValidPublicUserFields(data)
         && data.likes is int && data.likes == 0
         && data.dislikes is int && data.dislikes == 0
         && data.comments is int && data.comments == 0
-        && data.likedBy is list
-        && data.dislikedBy is list;
+        && data.likedBy is list && data.likedBy.size() == 0
+        && data.dislikedBy is list && data.dislikedBy.size() == 0;
     }
 
     function isOwner() {
       return signedIn() && resource.data.usuarioId == request.auth.uid;
+    }
+
+    function addedCurrentUser(before, after) {
+      return !(request.auth.uid in before)
+        && request.auth.uid in after
+        && after.size() == before.size() + 1
+        && after.hasAll(before);
+    }
+
+    function removedCurrentUser(before, after) {
+      return request.auth.uid in before
+        && !(request.auth.uid in after)
+        && after.size() == before.size() - 1
+        && before.hasAll(after);
+    }
+
+    function validReactionFields(data) {
+      return data.likes is int
+        && data.dislikes is int
+        && data.likedBy is list
+        && data.dislikedBy is list
+        && data.likes == data.likedBy.size()
+        && data.dislikes == data.dislikedBy.size()
+        && !(request.auth.uid in data.likedBy && request.auth.uid in data.dislikedBy);
+    }
+
+    function isValidReactionUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likes', 'likedBy', 'dislikes', 'dislikedBy'])
+        && validReactionFields(request.resource.data)
+        && (
+          // Add like.
+          (addedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && request.resource.data.dislikedBy == resource.data.dislikedBy
+            && request.resource.data.likes == resource.data.likes + 1
+            && request.resource.data.dislikes == resource.data.dislikes)
+          ||
+          // Remove like.
+          (removedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && request.resource.data.dislikedBy == resource.data.dislikedBy
+            && request.resource.data.likes == resource.data.likes - 1
+            && request.resource.data.dislikes == resource.data.dislikes)
+          ||
+          // Add dislike.
+          (request.resource.data.likedBy == resource.data.likedBy
+            && addedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes
+            && request.resource.data.dislikes == resource.data.dislikes + 1)
+          ||
+          // Remove dislike.
+          (request.resource.data.likedBy == resource.data.likedBy
+            && removedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes
+            && request.resource.data.dislikes == resource.data.dislikes - 1)
+          ||
+          // Switch dislike to like.
+          (addedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && removedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes + 1
+            && request.resource.data.dislikes == resource.data.dislikes - 1)
+          ||
+          // Switch like to dislike.
+          (removedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && addedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes - 1
+            && request.resource.data.dislikes == resource.data.dislikes + 1)
+        );
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasOnly(['texto', 'userId', 'userName', 'userPhotoUrl', 'dataCriacao'])
+        && data.texto is string
+        && data.texto.size() >= 1
+        && data.texto.size() <= 500
+        && data.userId == request.auth.uid
+        && data.userName is string
+        && data.userName.size() >= 1
+        && data.userName.size() <= 80
+        && isOptionalPublicPhoto(data.userPhotoUrl)
+        && data.dataCriacao == request.time;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasOnly(['nome', 'bio', 'bairro', 'fotoUrl'])
+        && data.nome is string
+        && data.nome.size() >= 1
+        && data.nome.size() <= 40
+        && data.bio is string
+        && data.bio.size() <= 150
+        && data.bairro is string
+        && data.bairro.size() <= 40
+        && (!('fotoUrl' in data) || isOptionalPublicPhoto(data.fotoUrl));
+    }
+
+    function isValidNotification(data, donoId) {
+      return data.keys().hasOnly([
+          'tipo',
+          'deUsuarioNome',
+          'ocorrenciaId',
+          'ocorrenciaTitulo',
+          'dataCriacao',
+          'lida',
+        ])
+        && data.tipo in ['comentario', 'curtida']
+        && data.deUsuarioNome is string
+        && data.deUsuarioNome.size() >= 1
+        && data.deUsuarioNome.size() <= 80
+        && data.ocorrenciaId is string
+        && data.ocorrenciaId.size() > 0
+        && data.ocorrenciaTitulo is string
+        && data.ocorrenciaTitulo.size() <= 80
+        && data.dataCriacao == request.time
+        && data.lida == false
+        && exists(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId))
+        && get(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId)).data.usuarioId == donoId;
     }
 
     match /ocorrencias/{ocorrenciaId} {
@@ -76,61 +261,43 @@ service cloud.firestore {
       allow create: if signedIn() && isValidOcorrencia(request.resource.data);
 
       allow update: if signedIn() && (
-        // Dono pode alterar o status
+        // Owner can update status.
         (isOwner()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
           && isValidStatus(request.resource.data.status))
         ||
-        // Dono pode editar título e descrição
+        // Owner can edit title and description.
         (isOwner()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['titulo', 'descricao'])
-          && request.resource.data.titulo is string
-          && request.resource.data.descricao is string)
+          && isValidTitle(request.resource.data.titulo)
+          && isValidDescription(request.resource.data.descricao))
         ||
-        // Dono pode atualizar nome/foto exibidos (propagação ao editar perfil)
+        // Owner can propagate public display data after editing profile.
         (isOwner()
           && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['usuarioNome', 'usuarioFotoUrl']))
+             .hasOnly(['usuarioNome', 'usuarioFotoUrl'])
+          && isValidPublicUserFields(request.resource.data))
         ||
-        // Qualquer usuário autenticado pode reagir (like / dislike), mas os
-        // contadores precisam bater com o tamanho das listas — isso impede
-        // setar curtidas/descurtidas para um número arbitrário.
-        (request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['likes', 'likedBy', 'dislikes', 'dislikedBy'])
-          && request.resource.data.likes is int
-          && request.resource.data.dislikes is int
-          && request.resource.data.likedBy is list
-          && request.resource.data.dislikedBy is list
-          && request.resource.data.likes == request.resource.data.likedBy.size()
-          && request.resource.data.dislikes == request.resource.data.dislikedBy.size())
-        ||
-        // O contador de comentários só pode variar de 1 em 1.
-        (request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['comments'])
-          && request.resource.data.comments is int
-          && (request.resource.data.comments == resource.data.comments + 1
-            || request.resource.data.comments == resource.data.comments - 1))
+        // Reactions: authenticated user can only add/remove their own UID.
+        isValidReactionUpdate()
       );
 
       allow delete: if isOwner();
 
       match /comentarios/{comentarioId} {
         allow read: if signedIn();
-        allow create: if signedIn()
-          && request.resource.data.keys().hasOnly(['texto', 'userId', 'userName', 'userPhotoUrl', 'dataCriacao'])
-          && request.resource.data.texto is string
-          && request.resource.data.userId == request.auth.uid;
+        allow create: if signedIn() && isValidComment(request.resource.data);
         allow delete: if signedIn() && resource.data.userId == request.auth.uid;
         allow update: if false;
       }
 
-      // Linha do tempo de status — só o dono da denúncia registra eventos.
       match /historico/{eventoId} {
         allow read: if signedIn();
         allow create: if signedIn()
           && get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.usuarioId == request.auth.uid
           && request.resource.data.keys().hasOnly(['status', 'data'])
-          && request.resource.data.status is string;
+          && isValidStatus(request.resource.data.status)
+          && request.resource.data.data == request.time;
         allow update, delete: if false;
       }
     }
@@ -139,25 +306,15 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update: if signedIn()
         && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['nome', 'bio', 'bairro', 'fotoUrl'])
-        && request.resource.data.nome is string
-        && request.resource.data.bio is string
-        && request.resource.data.bairro is string;
+        && isValidUserProfile(request.resource.data);
       allow delete: if false;
     }
 
-    // Notificações in-app: cada usuário lê as suas; qualquer autenticado
-    // pode criar uma notificação para OUTRO usuário (ao comentar/curtir).
     match /notificacoes/{donoId}/items/{notifId} {
       allow read, update, delete: if signedIn() && request.auth.uid == donoId;
       allow create: if signedIn()
         && request.auth.uid != donoId
-        && request.resource.data.keys().hasOnly([
-          'tipo', 'deUsuarioNome', 'ocorrenciaId', 'ocorrenciaTitulo',
-          'dataCriacao', 'lida'
-        ])
-        && request.resource.data.tipo is string
-        && request.resource.data.lida == false;
+        && isValidNotification(request.resource.data, donoId);
     }
 
     match /{document=**} {

@@ -1,9 +1,12 @@
+import 'package:eco_jp/models/ocorrencia_model.dart';
+import 'package:eco_jp/pages/detalhe_ocorrencia_page.dart';
+import 'package:eco_jp/pages/mapPage/controller/map_controller.dart';
+import 'package:eco_jp/pages/mapPage/widgets/affectedzones.dart';
+import 'package:eco_jp/pages/mapPage/widgets/appbar.dart';
+import 'package:eco_jp/pages/mapPage/widgets/categoryitems.dart';
+import 'package:eco_jp/pages/mapPage/widgets/mapdisplay.dart';
+import 'package:eco_jp/pages/mapPage/widgets/ocorrencia_map_sheet.dart';
 import 'package:flutter/material.dart';
-import 'controller/map_controller.dart';
-import 'widgets/mapdisplay.dart';
-import 'widgets/appbar.dart';
-import 'widgets/affectedzones.dart';
-import 'widgets/categoryitems.dart';
 
 class MapPage extends StatelessWidget {
   const MapPage({super.key});
@@ -31,7 +34,7 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
   void initState() {
     super.initState();
 
-    controller = MapController();
+    controller = MapController(aoTocarMarcador: _aoTocarMarcador);
 
     controller.loadOcorrencias();
   }
@@ -40,6 +43,22 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
   void dispose() {
     controller.dispose();
     super.dispose();
+  }
+
+  /// Mostra o resumo da ocorrência e, se solicitado, abre os detalhes.
+  Future<void> _aoTocarMarcador(OcorrenciaModel ocorrencia) async {
+    final verDetalhes = await mostrarOcorrenciaSheet(context, ocorrencia);
+    if (verDetalhes != true || !mounted) return;
+
+    // Aguarda o bottom sheet terminar de fechar antes de empurrar a rota.
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DetalheOcorrenciaPage(occurrence: ocorrencia),
+      ),
+    );
   }
 
   @override
@@ -60,9 +79,9 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
 
         return Column(
           children: [
-            Expanded(flex: 9, child: MapDisplay(controller: controller)),
-            const Expanded(flex: 3, child: CategoryItems()),
-            Expanded(flex: 2, child: MostAffectedZones(controller)),
+            Expanded(child: MapDisplay(controller: controller)),
+            SizedBox(height: 48, child: CategoryItems(controller: controller)),
+            SizedBox(height: 128, child: MostAffectedZones(controller)),
           ],
         );
       },

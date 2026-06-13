@@ -41,6 +41,35 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script src="maps_config.js"></script>
+  <script>
+    (function () {
+      function startFlutter() {
+        const flutterScript = document.createElement('script');
+        flutterScript.src = 'flutter_bootstrap.js';
+        flutterScript.async = true;
+        document.body.appendChild(flutterScript);
+      }
+
+      const mapsKey = window.ECOJP_GOOGLE_MAPS_API_KEY;
+      if (!mapsKey || mapsKey === 'YOUR_WEB_GOOGLE_MAPS_API_KEY') {
+        startFlutter();
+        return;
+      }
+
+      const mapsScript = document.createElement('script');
+      mapsScript.src =
+        'https://maps.googleapis.com/maps/api/js?key=' +
+        encodeURIComponent(mapsKey);
+      mapsScript.async = true;
+      mapsScript.defer = true;
+      mapsScript.onload = function () {
+        window.ECOJP_MAPS_READY = true;
+        startFlutter();
+      };
+      mapsScript.onerror = startFlutter;
+      document.head.appendChild(mapsScript);
+    })();
+  </script>
 </body>
 </html>

@@ -22,27 +22,32 @@ class CloudinaryUploadException implements Exception {
 }
 
 class CloudinaryService {
-  // Configure ao rodar/compilar (não versionar a chave no código):
+  // Cloud name e unsigned upload preset sao configuracoes publicas do app.
+  // Nunca coloque API Secret aqui. Para outro ambiente, sobrescreva com:
   //   --dart-define=CLOUDINARY_CLOUD_NAME=...
   //   --dart-define=CLOUDINARY_UPLOAD_PRESET=...
-  static const String _envCloudName =
-      String.fromEnvironment('CLOUDINARY_CLOUD_NAME');
-  static const String _envUploadPreset =
-      String.fromEnvironment('CLOUDINARY_UPLOAD_PRESET');
+  static const String _envCloudName = String.fromEnvironment(
+    'CLOUDINARY_CLOUD_NAME',
+    defaultValue: 'dmdghbgac',
+  );
+  static const String _envUploadPreset = String.fromEnvironment(
+    'CLOUDINARY_UPLOAD_PRESET',
+    defaultValue: 'Eco_JP',
+  );
 
   final String _cloudName;
   final String _uploadPreset;
   final http.Client _client;
 
-  /// [cloudName] e [uploadPreset] são injetáveis para testes;
-  /// em produção caem nos valores passados via --dart-define.
+  /// [cloudName] e [uploadPreset] sao injetaveis para testes.
+  /// Em runtime, usam o padrao do EcoJP ou valores passados via --dart-define.
   CloudinaryService({
     http.Client? client,
     String? cloudName,
     String? uploadPreset,
-  })  : _client = client ?? http.Client(),
-        _cloudName = cloudName ?? _envCloudName,
-        _uploadPreset = uploadPreset ?? _envUploadPreset;
+  }) : _client = client ?? http.Client(),
+       _cloudName = cloudName ?? _envCloudName,
+       _uploadPreset = uploadPreset ?? _envUploadPreset;
 
   bool get isConfigured =>
       _cloudName.trim().isNotEmpty && _uploadPreset.trim().isNotEmpty;

@@ -1,51 +1,68 @@
 import 'package:eco_jp/models/occurrence_types.dart';
+import 'package:eco_jp/pages/mapPage/controller/map_controller.dart';
+import 'package:eco_jp/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
-/// Legenda das categorias no mapa. Usa as MESMAS cores e rótulos do feed
-/// (OccurrenceType), garantindo consistência visual em todo o app.
+/// Legenda interativa das categorias. Usa as MESMAS cores e rótulos do feed
+/// (OccurrenceType) e permite mostrar/ocultar cada tipo no mapa ao tocar.
 class CategoryItems extends StatelessWidget {
-  const CategoryItems({super.key});
+  final MapController controller;
+
+  const CategoryItems({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final t in OccurrenceType.values) _chip(t.label, t.color),
-        ],
-      ),
+    return ListView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      children: [
+        for (final t in OccurrenceType.values)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Center(child: _chip(t, controller.categoriaVisivel(t))),
+          ),
+      ],
     );
   }
 
-  Widget _chip(String texto, Color cor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: cor.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cor.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: cor, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            texto,
-            style: TextStyle(
-              color: cor,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+  Widget _chip(OccurrenceType tipo, bool visivel) {
+    final cor = tipo.color;
+    return GestureDetector(
+      onTap: () => controller.alternarCategoria(tipo),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 150),
+        opacity: visivel ? 1 : 0.45,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: visivel
+                ? cor.withValues(alpha: 0.12)
+                : const Color(0xFFEDEDED),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: visivel ? cor.withValues(alpha: 0.4) : AppColors.border,
             ),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                visivel ? tipo.icon : Icons.visibility_off_outlined,
+                size: 14,
+                color: visivel ? cor : AppColors.hint,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                tipo.label,
+                style: TextStyle(
+                  color: visivel ? cor : AppColors.hint,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

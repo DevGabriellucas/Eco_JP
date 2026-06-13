@@ -306,20 +306,10 @@ class OcorrenciaService {
     ComentarioModel comentario,
   ) async {
     try {
-      final batch = FirebaseFirestore.instance.batch();
-
-      final comentarioRef = _ocorrenciasRef
+      await _ocorrenciasRef
           .doc(ocorrenciaId)
           .collection('comentarios')
-          .doc();
-      batch.set(comentarioRef, comentario.toMap());
-
-      // Incrementa contador de comentários na ocorrência
-      batch.update(_ocorrenciasRef.doc(ocorrenciaId), {
-        'comments': FieldValue.increment(1),
-      });
-
-      await batch.commit();
+          .add(comentario.toMap());
     } catch (e) {
       debugPrint('Erro ao adicionar comentário: $e');
       rethrow;
@@ -331,20 +321,11 @@ class OcorrenciaService {
     String comentarioId,
   ) async {
     try {
-      final batch = FirebaseFirestore.instance.batch();
-
-      batch.delete(
-        _ocorrenciasRef
-            .doc(ocorrenciaId)
-            .collection('comentarios')
-            .doc(comentarioId),
-      );
-
-      batch.update(_ocorrenciasRef.doc(ocorrenciaId), {
-        'comments': FieldValue.increment(-1),
-      });
-
-      await batch.commit();
+      await _ocorrenciasRef
+          .doc(ocorrenciaId)
+          .collection('comentarios')
+          .doc(comentarioId)
+          .delete();
     } catch (e) {
       debugPrint('Erro ao deletar comentário: $e');
       rethrow;

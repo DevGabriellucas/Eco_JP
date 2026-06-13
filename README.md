@@ -98,16 +98,14 @@ cd Eco_JP
 # 2. Instale as dependências
 flutter pub get
 
-# 3. Configure as chaves de API (Google Maps e Cloudinary)
+# 3. Configure as chaves de API locais
 #    Siga o passo a passo em CONFIGURACAO.md
 
 # 4. Rode o app
-flutter run \
-  --dart-define=CLOUDINARY_CLOUD_NAME=seu_cloud_name \
-  --dart-define=CLOUDINARY_UPLOAD_PRESET=seu_upload_preset
+flutter run
 ```
 
-> 🔑 As chaves de API **não são versionadas**. Veja [`CONFIGURACAO.md`](CONFIGURACAO.md) para o setup completo (Google Maps, Cloudinary e Firebase).
+> 🔑 As chaves de API **não são versionadas**. Veja [`CONFIGURACAO.md`](CONFIGURACAO.md) para o setup completo (Google Maps, Cloudinary e Firebase). O Cloudinary do EcoJP já tem `cloud name` e preset unsigned padrão no app; use `--dart-define` apenas para trocar de ambiente.
 
 ## ✅ Qualidade
 
