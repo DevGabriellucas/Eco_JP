@@ -131,7 +131,7 @@ class AuthService {
             'Enviamos um link de recuperação para o seu email. Verifique a caixa de entrada (e o spam).',
       );
     } on FirebaseAuthException catch (e) {
-      return AuthResult(success: false, message: _mensagemLogin(e));
+      return AuthResult(success: false, message: _mensagemRecuperacao(e));
     } catch (e) {
       return AuthResult(
         success: false,
@@ -163,6 +163,24 @@ class AuthService {
         return 'Muitas tentativas. Aguarde um pouco e tente novamente.';
       default:
         return 'Erro no cadastro (${e.code}): ${e.message ?? 'sem detalhes'}';
+    }
+  }
+
+  String _mensagemRecuperacao(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-email':
+        return 'Email inválido. Confira se digitou corretamente.';
+      case 'missing-email':
+        return 'Informe o email para recuperar a senha.';
+      case 'user-not-found':
+        return 'Não encontramos uma conta com esse email.';
+      case 'network-request-failed':
+        return 'Falha de internet. Verifique a conexão do celular.';
+      case 'too-many-requests':
+        return 'Muitas tentativas. Aguarde um pouco e tente novamente.';
+      default:
+        return 'Não foi possível enviar o email de recuperação '
+            '(${e.code}): ${e.message ?? 'sem detalhes'}';
     }
   }
 

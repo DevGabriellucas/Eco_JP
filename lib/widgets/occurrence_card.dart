@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
+import '../utils/tempo_relativo.dart';
 
 // ─────────────────────────────────────────
 //  OCCURRENCE CARD
@@ -17,6 +17,9 @@ class OccurrenceCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onManage;
 
+  // Contador de comentários em tempo real. Quando nulo, usa occurrence.comments.
+  final Stream<int>? commentCountStream;
+
   const OccurrenceCard({
     super.key,
     required this.occurrence,
@@ -26,15 +29,13 @@ class OccurrenceCard extends StatelessWidget {
     required this.onDislike,
     required this.onTap,
     this.onManage,
+    this.commentCountStream,
   });
 
   @override
   Widget build(BuildContext context) {
     final o = occurrence;
-    final dateStr = DateFormat(
-      'dd.MM.yyyy',
-    ).format(o.dataCriacao ?? DateTime.now());
-    final timeStr = DateFormat('HH:mm').format(o.dataCriacao ?? DateTime.now());
+    final tempoStr = tempoRelativo(o.dataCriacao);
     final statusEnum = OccurrenceStatusParser.fromString(o.status);
     final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
 
@@ -91,7 +92,7 @@ class OccurrenceCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '$dateStr  $timeStr',
+                          tempoStr,
                           style: const TextStyle(
                             fontSize: 11,
                             color: Color(0xFFAAAAAA),
@@ -210,13 +211,17 @@ class OccurrenceCard extends StatelessWidget {
                     onTap: onDislike,
                   ),
                   const SizedBox(width: 16),
-                  _ActionButton(
-                    icon: Icons.chat_bubble_outline,
-                    iconFilled: Icons.chat_bubble,
-                    count: o.comments,
-                    active: false,
-                    activeColor: const Color(0xFF3B82F6),
-                    onTap: onTap,
+                  StreamBuilder<int>(
+                    stream: commentCountStream,
+                    initialData: o.comments,
+                    builder: (context, snap) => _ActionButton(
+                      icon: Icons.chat_bubble_outline,
+                      iconFilled: Icons.chat_bubble,
+                      count: snap.data ?? o.comments,
+                      active: false,
+                      activeColor: const Color(0xFF3B82F6),
+                      onTap: onTap,
+                    ),
                   ),
                 ],
               ),

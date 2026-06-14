@@ -76,6 +76,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'EcoJP',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       home: const InicialPage(),
       routes: {

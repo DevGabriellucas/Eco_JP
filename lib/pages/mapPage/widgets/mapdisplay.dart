@@ -63,6 +63,28 @@ class _MapDisplayState extends State<MapDisplay> {
     await mapController.animateCamera(CameraUpdate.newLatLngBounds(bounds, 64));
   }
 
+  /// Centraliza o mapa na localização atual do usuário (botão próprio, no
+  /// canto inferior esquerdo — substitui o botão nativo do Google Maps, que
+  /// ficava sobre os filtros de status).
+  Future<void> _irParaMinhaLocalizacao() async {
+    final mapController = _mapController;
+    if (mapController == null) return;
+
+    final result = await locationService.getCurrentLatLng();
+    switch (result) {
+      case LatLngSucess(:final latLng):
+        await mapController.animateCamera(
+          CameraUpdate.newLatLngZoom(latLng, 16),
+        );
+      case LatLngFailure(:final error):
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error)));
+        }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!isGoogleMapsWebReady) {
@@ -88,7 +110,9 @@ class _MapDisplayState extends State<MapDisplay> {
         GoogleMap(
           initialCameraPosition: cameraPosition!,
           myLocationEnabled: true,
-          myLocationButtonEnabled: true,
+          // Botão nativo desativado: ficava atrás dos filtros de status no
+          // topo. Usamos um botão próprio no canto inferior esquerdo.
+          myLocationButtonEnabled: false,
           markers: widget.controller.listaMarcadores,
           clusterManagers: {
             ClusterManager(clusterManagerId: MapController.clusterManagerId),
@@ -118,7 +142,7 @@ class _MapDisplayState extends State<MapDisplay> {
 
         // Botão para reenquadrar todas as ocorrências.
         Positioned(
-          left: 12,
+          right: 12,
           bottom: 12,
           child: FloatingActionButton.small(
             heroTag: 'enquadrar-ocorrencias',
@@ -127,6 +151,20 @@ class _MapDisplayState extends State<MapDisplay> {
             elevation: 3,
             onPressed: temMarcadores ? _enquadrarMarcadores : null,
             child: const Icon(Icons.fit_screen),
+          ),
+        ),
+
+        // Botão para centralizar o mapa na localização atual.
+        Positioned(
+          left: 12,
+          bottom: 12,
+          child: FloatingActionButton.small(
+            heroTag: 'minha-localizacao',
+            backgroundColor: Colors.white,
+            foregroundColor: AppColors.ink,
+            elevation: 3,
+            onPressed: _irParaMinhaLocalizacao,
+            child: const Icon(Icons.my_location),
           ),
         ),
       ],

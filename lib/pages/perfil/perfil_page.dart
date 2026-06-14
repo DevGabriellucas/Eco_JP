@@ -105,6 +105,13 @@ class _PerfilPageState extends State<PerfilPage> {
     );
   }
 
+  // Pull-to-refresh: os dados vêm de streams (atualizam sozinhos), então só
+  // reconstruímos a tela e damos um pequeno tempo para o gesto completar.
+  Future<void> _recarregar() async {
+    setState(() {});
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = _authService.currentUser?.uid;
@@ -157,20 +164,25 @@ class _PerfilPageState extends State<PerfilPage> {
               final ocorrencias = ocSnap.data ?? [];
               final stats = _calcularStats(ocorrencias);
 
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-                children: [
-                  _cardPerfil(perfil),
-                  const SizedBox(height: 24),
-                  _abas(),
-                  const SizedBox(height: 16),
-                  if (_aba == 0)
-                    ..._secaoEstatisticas(stats)
-                  else
-                    ..._secaoMinhasDenuncias(ocorrencias),
-                  const SizedBox(height: 20),
-                  _botaoSair(),
-                ],
+              return RefreshIndicator(
+                onRefresh: _recarregar,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                  children: [
+                    _cardPerfil(perfil),
+                    const SizedBox(height: 24),
+                    _abas(),
+                    const SizedBox(height: 16),
+                    // "Sair da conta" aparece só na aba Estatísticas.
+                    if (_aba == 0) ...[
+                      ..._secaoEstatisticas(stats),
+                      const SizedBox(height: 20),
+                      _botaoSair(),
+                    ] else
+                      ..._secaoMinhasDenuncias(ocorrencias),
+                  ],
+                ),
               );
             },
           );
@@ -447,6 +459,14 @@ class _PerfilPageState extends State<PerfilPage> {
     return [
       Row(
         children: [
+          Expanded(child: _cardStat('Denúncias', '${stats.total}')),
+          const SizedBox(width: 14),
+          Expanded(child: _cardStat('Curtidas recebidas', '${stats.curtidas}')),
+        ],
+      ),
+      const SizedBox(height: 14),
+      Row(
+        children: [
           Expanded(child: _cardStat('Resolvidas', '${stats.resolvidas}')),
           const SizedBox(width: 14),
           Expanded(child: _cardStat('Andamento', '${stats.andamento}')),
@@ -709,7 +729,12 @@ class _PerfilPageState extends State<PerfilPage> {
       }
     }
 
+    // Total de curtidas recebidas somando os likes de todas as denúncias.
+    final curtidas = ocorrencias.fold<int>(0, (soma, o) => soma + o.likes);
+
     return _Stats(
+      total: base,
+      curtidas: curtidas,
       resolvidas: resolvidas,
       andamento: andamento,
       taxa: taxa,
@@ -719,12 +744,16 @@ class _PerfilPageState extends State<PerfilPage> {
 }
 
 class _Stats {
+  final int total;
+  final int curtidas;
   final int resolvidas;
   final int andamento;
   final int taxa;
   final String? categoriaTop;
 
   _Stats({
+    required this.total,
+    required this.curtidas,
     required this.resolvidas,
     required this.andamento,
     required this.taxa,

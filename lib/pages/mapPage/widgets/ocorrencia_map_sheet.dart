@@ -62,25 +62,27 @@ class _OcorrenciaMapSheet extends StatelessWidget {
             if (imagem != null) ...[
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  imagem,
+                child: Container(
                   height: 150,
                   width: double.infinity,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      height: 150,
-                      color: const Color(0xFFF3F4F6),
-                      alignment: Alignment.center,
-                      child: const SizedBox(
+                  color: const Color(0xFFF3F4F6),
+                  alignment: Alignment.center,
+                  // BoxFit.contain (igual ao feed) para não cortar fotos
+                  // verticais — BoxFit.cover preenchia a caixa cortando as
+                  // bordas da imagem.
+                  child: Image.network(
+                    imagem,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const SizedBox(
                         width: 22,
                         height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    );
-                  },
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      );
+                    },
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
                 ),
               ),
               const SizedBox(height: 14),

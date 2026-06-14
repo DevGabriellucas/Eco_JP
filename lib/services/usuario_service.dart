@@ -34,4 +34,19 @@ class UsuarioService {
       rethrow;
     }
   }
+
+  // Verifica se já existe outro usuário com o mesmo nome (ignora maiúsculas/
+  // minúsculas e espaços nas pontas). [ignorarUid] permite que o próprio
+  // usuário mantenha o nome ao editar o perfil.
+  Future<bool> nomeEmUso(String nome, {String? ignorarUid}) async {
+    final alvo = nome.trim().toLowerCase();
+    if (alvo.isEmpty) return false;
+    final snapshot = await _ref.get();
+    for (final doc in snapshot.docs) {
+      if (doc.id == ignorarUid) continue;
+      final outro = (doc.data()['nome'] as String?)?.trim().toLowerCase();
+      if (outro == alvo) return true;
+    }
+    return false;
+  }
 }

@@ -9,6 +9,7 @@ import '../services/notificacao_service.dart';
 import '../services/ocorrencia_service.dart';
 import '../services/usuario_service.dart';
 import '../models/occurrence_types.dart';
+import '../utils/tempo_relativo.dart';
 
 // ─────────────────────────────────────────
 //  PALETA
@@ -120,9 +121,33 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
 
   String get _uid => _authService.currentUser?.uid ?? '';
 
-  void _handleLike() {
+  // Reaplica o estado anterior de reação se a gravação falhar.
+  void _restaurarReacao(
+    bool userLiked,
+    bool userDisliked,
+    int likes,
+    int dislikes,
+    List<String> likedBy,
+    List<String> dislikedBy,
+  ) {
+    _userLiked = userLiked;
+    _userDisliked = userDisliked;
+    _likes = likes;
+    _dislikes = dislikes;
+    _likedBy = likedBy;
+    _dislikedBy = dislikedBy;
+  }
+
+  Future<void> _handleLike() async {
     if (_uid.isEmpty) return;
     final vaiCurtir = !_userLiked;
+    final pLiked = _userLiked,
+        pDisliked = _userDisliked,
+        pLikes = _likes,
+        pDislikes = _dislikes;
+    final pLikedBy = List<String>.from(_likedBy);
+    final pDislikedBy = List<String>.from(_dislikedBy);
+
     setState(() {
       if (_userLiked) {
         _userLiked = false;
@@ -139,7 +164,29 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
         _likedBy.add(_uid);
       }
     });
-    _service.toggleLike(widget.occurrence.id, _uid);
+
+    try {
+      await _service.toggleLike(widget.occurrence.id, _uid);
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _restaurarReacao(
+          pLiked,
+          pDisliked,
+          pLikes,
+          pDislikes,
+          pLikedBy,
+          pDislikedBy,
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível curtir agora. Tente novamente.'),
+        ),
+      );
+      return;
+    }
+
     if (vaiCurtir) _notificarCurtida();
   }
 
@@ -157,8 +204,15 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
     );
   }
 
-  void _handleDislike() {
+  Future<void> _handleDislike() async {
     if (_uid.isEmpty) return;
+    final pLiked = _userLiked,
+        pDisliked = _userDisliked,
+        pLikes = _likes,
+        pDislikes = _dislikes;
+    final pLikedBy = List<String>.from(_likedBy);
+    final pDislikedBy = List<String>.from(_dislikedBy);
+
     setState(() {
       if (_userDisliked) {
         _userDisliked = false;
@@ -175,7 +229,27 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
         _dislikedBy.add(_uid);
       }
     });
-    _service.toggleDislike(widget.occurrence.id, _uid);
+
+    try {
+      await _service.toggleDislike(widget.occurrence.id, _uid);
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _restaurarReacao(
+          pLiked,
+          pDisliked,
+          pLikes,
+          pDislikes,
+          pLikedBy,
+          pDislikedBy,
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível reagir agora. Tente novamente.'),
+        ),
+      );
+    }
   }
 
   void _openCommentSheet() {
@@ -373,14 +447,49 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                           _StatusTimeline(occurrence: o, service: _service),
                           const SizedBox(height: 28),
 
-                          // Seção de comentários
-                          const Text(
-                            'Comentários',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: _C.text,
-                            ),
+                          // Seção de comentários (com contador em tempo real)
+                          StreamBuilder<int>(
+                            stream: _service.contarComentarios(o.id),
+                            initialData: o.comments,
+                            builder: (context, snap) {
+                              final total = snap.data ?? 0;
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    'Comentários',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700,
+                                      color: _C.text,
+                                    ),
+                                  ),
+                                  if (total > 0) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFF3B82F6,
+                                        ).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        '$total',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF3B82F6),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(height: 16),
 
@@ -865,10 +974,7 @@ class _CommentItem extends StatelessWidget {
     required this.onDelete,
   });
 
-  String _formatDate(DateTime? dt) {
-    if (dt == null) return '';
-    return DateFormat('dd/MM/yyyy HH:mm').format(dt);
-  }
+  String _formatDate(DateTime? dt) => tempoRelativo(dt);
 
   String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));

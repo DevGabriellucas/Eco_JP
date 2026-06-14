@@ -26,7 +26,30 @@ class _CadastroPageState extends State<CadastroPage> {
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+    // Atualiza o medidor de força conforme o usuário digita a senha.
+    _passwordController.addListener(_onSenhaChanged);
+  }
+
+  void _onSenhaChanged() => setState(() {});
+
+  // Pontuação simples de 0 a 4 para a força da senha. Cada critério atendido
+  // (tamanho, variação de caixa, números e símbolos) soma um ponto.
+  int _forcaSenha(String s) {
+    if (s.isEmpty) return 0;
+    var score = 0;
+    if (s.length >= 6) score++;
+    if (s.length >= 10) score++;
+    if (RegExp(r'[A-Z]').hasMatch(s) && RegExp(r'[a-z]').hasMatch(s)) score++;
+    if (RegExp(r'[0-9]').hasMatch(s)) score++;
+    if (RegExp(r'[^A-Za-z0-9]').hasMatch(s)) score++;
+    return score.clamp(0, 4);
+  }
+
+  @override
   void dispose() {
+    _passwordController.removeListener(_onSenhaChanged);
     _nomeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -75,26 +98,47 @@ class _CadastroPageState extends State<CadastroPage> {
 
     if (!mounted) return;
 
-    setState(() => _isLoading = false);
-
-    if (result.success) {
-      // Cria o perfil já com o nome informado no cadastro.
-      final uid = result.user?.uid;
-      if (uid != null) {
-        await _usuarioService.salvarPerfil(
-          UsuarioModel(uid: uid, nome: _nomeController.text.trim()),
-        );
-        // Guarda o nome também no Auth (útil para exibir em notificações).
-        await result.user?.updateDisplayName(_nomeController.text.trim());
-      }
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
-    } else {
-      setState(() => _errorMessage = result.message);
+    if (!result.success) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = result.message;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result.message ?? 'Erro ao cadastrar')),
       );
+      return;
     }
+
+    final uid = result.user?.uid;
+    final nome = _nomeController.text.trim();
+
+    // Garante que o nome ainda não está sendo usado por outra conta. A conta de
+    // login (email/senha) já foi criada acima; se o nome estiver em uso,
+    // desfazemos esse cadastro para não deixar uma conta "órfã".
+    if (uid != null && await _usuarioService.nomeEmUso(nome, ignorarUid: uid)) {
+      await result.user?.delete();
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Esse nome já está em uso. Escolha outro.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Esse nome já está em uso. Escolha outro.'),
+        ),
+      );
+      return;
+    }
+
+    // Cria o perfil já com o nome informado no cadastro.
+    if (uid != null) {
+      await _usuarioService.salvarPerfil(UsuarioModel(uid: uid, nome: nome));
+      // Guarda o nome também no Auth (útil para exibir em notificações).
+      await result.user?.updateDisplayName(nome);
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
   }
 
   void _abrirDocumento(String titulo, String conteudo) {
@@ -285,6 +329,12 @@ class _CadastroPageState extends State<CadastroPage> {
                                 ),
                               ),
                             ),
+                            if (_passwordController.text.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              _MedidorForcaSenha(
+                                forca: _forcaSenha(_passwordController.text),
+                              ),
+                            ],
                             const SizedBox(height: 16),
                             _buildLabel('Repetir Senha'),
                             const SizedBox(height: 8),
@@ -448,6 +498,63 @@ class _CadastroPageState extends State<CadastroPage> {
         fillColor: Colors.white,
         isDense: true,
       ),
+    );
+  }
+}
+
+// Barra de força da senha: 3 segmentos coloridos + rótulo. Recebe uma
+// pontuação de 0 a 4 calculada em _forcaSenha.
+class _MedidorForcaSenha extends StatelessWidget {
+  final int forca;
+
+  const _MedidorForcaSenha({required this.forca});
+
+  @override
+  Widget build(BuildContext context) {
+    // 0-2 = fraca (1 segmento), 3 = média (2 segmentos), 4 = forte (3).
+    final int nivel = forca <= 2 ? 1 : (forca == 3 ? 2 : 3);
+    final Color cor = switch (nivel) {
+      1 => const Color(0xFFEF4444),
+      2 => const Color(0xFFF59E0B),
+      _ => const Color(0xFF22C55E),
+    };
+    final String label = switch (nivel) {
+      1 => 'Senha fraca',
+      2 => 'Senha média',
+      _ => 'Senha forte',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: List.generate(3, (i) {
+            final aceso = i < nivel;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: i < 2 ? 6 : 0),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: aceso ? cor : const Color(0xFFE0E0E0),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: cor,
+          ),
+        ),
+      ],
     );
   }
 }

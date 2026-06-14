@@ -163,10 +163,30 @@ class _HomePageState extends State<HomePage> {
     }).toList();
   }
 
-  void _toggleLike(OcorrenciaModel o) {
+  // Guarda o estado de reação para reverter caso a gravação falhe.
+  void _restaurarReacao(OcorrenciaModel o, _ReacaoSnapshot s) {
+    o.userLiked = s.userLiked;
+    o.userDisliked = s.userDisliked;
+    o.likes = s.likes;
+    o.dislikes = s.dislikes;
+    o.likedBy = s.likedBy;
+    o.dislikedBy = s.dislikedBy;
+  }
+
+  _ReacaoSnapshot _snapshotReacao(OcorrenciaModel o) => _ReacaoSnapshot(
+    userLiked: o.userLiked,
+    userDisliked: o.userDisliked,
+    likes: o.likes,
+    dislikes: o.dislikes,
+    likedBy: List<String>.from(o.likedBy),
+    dislikedBy: List<String>.from(o.dislikedBy),
+  );
+
+  Future<void> _toggleLike(OcorrenciaModel o) async {
     final uid = _authService.currentUser?.uid;
     if (uid == null) return;
     final vaiCurtir = !o.userLiked;
+    final anterior = _snapshotReacao(o);
 
     setState(() {
       if (o.userLiked) {
@@ -185,7 +205,19 @@ class _HomePageState extends State<HomePage> {
       }
     });
 
-    _ocorrenciaService.toggleLike(o.id, uid);
+    try {
+      await _ocorrenciaService.toggleLike(o.id, uid);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _restaurarReacao(o, anterior));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível curtir agora. Tente novamente.'),
+        ),
+      );
+      return;
+    }
+
     if (vaiCurtir && o.usuarioId != null && o.usuarioId != uid) {
       final eu = _authService.currentUser;
       final nome = eu?.displayName ?? eu?.email?.split('@').first ?? 'Alguém';
@@ -199,9 +231,10 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _toggleDislike(OcorrenciaModel o) {
+  Future<void> _toggleDislike(OcorrenciaModel o) async {
     final uid = _authService.currentUser?.uid;
     if (uid == null) return;
+    final anterior = _snapshotReacao(o);
 
     setState(() {
       if (o.userDisliked) {
@@ -220,7 +253,17 @@ class _HomePageState extends State<HomePage> {
       }
     });
 
-    _ocorrenciaService.toggleDislike(o.id, uid);
+    try {
+      await _ocorrenciaService.toggleDislike(o.id, uid);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _restaurarReacao(o, anterior));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível reagir agora. Tente novamente.'),
+        ),
+      );
+    }
   }
 
   void _openDetail(OcorrenciaModel o) {
@@ -438,6 +481,9 @@ class _HomePageState extends State<HomePage> {
                       occurrence: o,
                       nomeAutor: nomeAutor,
                       fotoAutor: fotoAutor,
+                      commentCountStream: _ocorrenciaService.contarComentarios(
+                        o.id,
+                      ),
                       onLike: () => _toggleLike(o),
                       onDislike: () => _toggleDislike(o),
                       onTap: () => _openDetail(o),
@@ -449,6 +495,26 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
+}
+
+// Estado de reação preservado para reverter uma curtida/descurtida otimista
+// quando a gravação no Firestore falha.
+class _ReacaoSnapshot {
+  final bool userLiked;
+  final bool userDisliked;
+  final int likes;
+  final int dislikes;
+  final List<String> likedBy;
+  final List<String> dislikedBy;
+
+  _ReacaoSnapshot({
+    required this.userLiked,
+    required this.userDisliked,
+    required this.likes,
+    required this.dislikes,
+    required this.likedBy,
+    required this.dislikedBy,
+  });
 }
 
 class _OccurrenceList extends StatelessWidget {

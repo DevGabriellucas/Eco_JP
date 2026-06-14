@@ -154,6 +154,11 @@ class _LoginPageState extends State<LoginPage> {
                             email,
                           );
                           if (!ctx.mounted) return;
+                          // Fecha o teclado antes de fechar o diálogo: do
+                          // contrário o fechamento do teclado (que redimensiona
+                          // a tela) corre com o pop do Navigator e o app
+                          // quebra com 'Failed assertion: _dependents.isEmpty'.
+                          FocusScope.of(ctx).unfocus();
                           Navigator.of(ctx).pop();
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -187,7 +192,9 @@ class _LoginPageState extends State<LoginPage> {
       },
     );
 
-    emailCtrl.dispose();
+    // Descarta o controller só depois do fechamento do diálogo terminar,
+    // pelo mesmo motivo do unfocus acima.
+    WidgetsBinding.instance.addPostFrameCallback((_) => emailCtrl.dispose());
   }
 
   @override

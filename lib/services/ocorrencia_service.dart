@@ -79,6 +79,17 @@ class OcorrenciaService {
         );
   }
 
+  // Busca uma única ocorrência pelo id (usado ao tocar numa notificação).
+  Future<OcorrenciaModel?> buscarPorId(String id) async {
+    final doc = await _ocorrenciasRef.doc(id).get();
+    if (!doc.exists || doc.data() == null) return null;
+    return OcorrenciaModel.fromMap(
+      doc.data()!,
+      doc.id,
+      currentUserId: _currentUserId,
+    );
+  }
+
   // ── READ — paginado (feed da home) ───────────────────────────────────────
 
   Future<List<OcorrenciaModel>> listarOcorrenciasPaginadas({
@@ -221,31 +232,25 @@ class OcorrenciaService {
 
         final likedBy = List<String>.from(doc.data()!['likedBy'] ?? []);
         final dislikedBy = List<String>.from(doc.data()!['dislikedBy'] ?? []);
-        final updates = <String, dynamic>{};
 
         if (likedBy.contains(userId)) {
-          // desfaz like
-          likedBy.remove(userId);
-          updates['likedBy'] = likedBy;
-          updates['likes'] = FieldValue.increment(-1);
+          likedBy.remove(userId); // desfaz like
         } else {
-          // adiciona like
-          likedBy.add(userId);
-          updates['likedBy'] = likedBy;
-          updates['likes'] = FieldValue.increment(1);
-
-          // remove dislike se existia
-          if (dislikedBy.contains(userId)) {
-            dislikedBy.remove(userId);
-            updates['dislikedBy'] = dislikedBy;
-            updates['dislikes'] = FieldValue.increment(-1);
-          }
+          likedBy.add(userId); // adiciona like
+          dislikedBy.remove(userId); // remove dislike se existia
         }
 
-        txn.update(ref, updates);
+        // Contadores sempre derivados das listas (mantém likes == likedBy.length).
+        txn.update(ref, {
+          'likedBy': likedBy,
+          'dislikedBy': dislikedBy,
+          'likes': likedBy.length,
+          'dislikes': dislikedBy.length,
+        });
       });
     } catch (e) {
       debugPrint('Erro ao dar like: $e');
+      rethrow;
     }
   }
 
@@ -258,35 +263,37 @@ class OcorrenciaService {
 
         final likedBy = List<String>.from(doc.data()!['likedBy'] ?? []);
         final dislikedBy = List<String>.from(doc.data()!['dislikedBy'] ?? []);
-        final updates = <String, dynamic>{};
 
         if (dislikedBy.contains(userId)) {
-          // desfaz dislike
-          dislikedBy.remove(userId);
-          updates['dislikedBy'] = dislikedBy;
-          updates['dislikes'] = FieldValue.increment(-1);
+          dislikedBy.remove(userId); // desfaz dislike
         } else {
-          // adiciona dislike
-          dislikedBy.add(userId);
-          updates['dislikedBy'] = dislikedBy;
-          updates['dislikes'] = FieldValue.increment(1);
-
-          // remove like se existia
-          if (likedBy.contains(userId)) {
-            likedBy.remove(userId);
-            updates['likedBy'] = likedBy;
-            updates['likes'] = FieldValue.increment(-1);
-          }
+          dislikedBy.add(userId); // adiciona dislike
+          likedBy.remove(userId); // remove like se existia
         }
 
-        txn.update(ref, updates);
+        txn.update(ref, {
+          'likedBy': likedBy,
+          'dislikedBy': dislikedBy,
+          'likes': likedBy.length,
+          'dislikes': dislikedBy.length,
+        });
       });
     } catch (e) {
       debugPrint('Erro ao dar dislike: $e');
+      rethrow;
     }
   }
 
   // ── COMENTÁRIOS ───────────────────────────────────────────────────────────
+
+  // Quantidade de comentários em tempo real (usado no contador do feed).
+  Stream<int> contarComentarios(String ocorrenciaId) {
+    return _ocorrenciasRef
+        .doc(ocorrenciaId)
+        .collection('comentarios')
+        .snapshots()
+        .map((snap) => snap.size);
+  }
 
   Stream<List<ComentarioModel>> listarComentarios(String ocorrenciaId) {
     return _ocorrenciasRef
