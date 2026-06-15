@@ -200,7 +200,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
-    final double logoSize = (screenWidth * 0.52).clamp(170.0, 240.0);
+    final double logoSize = (screenWidth * 0.32).clamp(110.0, 150.0);
     const double baseWidth = 430.0;
     final double paddingLateral = (38.0 / baseWidth) * screenWidth;
 
@@ -245,232 +245,263 @@ class _LoginPageState extends State<LoginPage> {
           // 3. Conteúdo
           Positioned.fill(
             child: SafeArea(
-              child: SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: paddingLateral),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 24),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(
-                            context,
-                          ).pushReplacementNamed('/inicial');
-                        },
-                        child: SvgPicture.asset(
-                          'assets/icons/seta.svg',
-                          width: 44,
-                          height: 44,
-                        ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                        maxWidth: constraints.maxWidth,
                       ),
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 32),
-                          child: SizedBox(
-                            width: logoSize,
-                            height: logoSize,
-                            child: Image.asset(
-                              'assets/images/logo_ecojp.png',
-                              fit: BoxFit.contain,
-                            ),
-                          ),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: paddingLateral,
                         ),
-                      ),
-                      Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        padding: const EdgeInsets.all(24.0),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildLabel('Email'),
-                            const SizedBox(height: 8),
-                            _buildInput(
-                              controller: _emailController,
-                              hint: 'Email',
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-                            const SizedBox(height: 16),
-                            _buildLabel('Senha'),
-                            const SizedBox(height: 8),
-                            _buildInput(
-                              controller: _passwordController,
-                              hint: 'Senha',
-                              obscure: !_senhaVisivel,
-                              suffix: IconButton(
-                                icon: Icon(
-                                  _senhaVisivel
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  size: 18,
-                                  color: const Color(0xFFBDBDBD),
-                                ),
-                                onPressed: () => setState(
-                                  () => _senhaVisivel = !_senhaVisivel,
-                                ),
-                              ),
-                            ),
-                            if (_errorMessage != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(height: 20),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 48,
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _handleLogin,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2C2C2C),
-                                  foregroundColor: Colors.white,
-                                  disabledBackgroundColor: const Color(
-                                    0xFF2C2C2C,
-                                  ).withValues(alpha: 0.6),
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  textStyle: const TextStyle(
-                                    fontFamily: 'Roboto',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Text('Logar'),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
                             GestureDetector(
-                              onTap: _handleEsqueceuSenha,
-                              child: const Text(
-                                'Esqueceu a senha?',
-                                style: TextStyle(
-                                  fontFamily: 'Roboto',
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w400,
-                                  color: Color(0xFF1A1A1A),
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: Color(0xFF1A1A1A),
+                              onTap: () {
+                                Navigator.of(
+                                  context,
+                                ).pushReplacementNamed('/inicial');
+                              },
+                              child: SvgPicture.asset(
+                                'assets/icons/seta.svg',
+                                width: 44,
+                                height: 44,
+                              ),
+                            ),
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                child: SizedBox(
+                                  width: logoSize,
+                                  height: logoSize,
+                                  child: Image.asset(
+                                    'assets/images/logo_ecojp.png',
+                                    fit: BoxFit.contain,
+                                  ),
                                 ),
                               ),
                             ),
-                            if (kIsWeb ||
-                                defaultTargetPlatform ==
-                                    TargetPlatform.android ||
-                                defaultTargetPlatform ==
-                                    TargetPlatform.iOS) ...[
-                              const SizedBox(height: 24),
-                              Center(
-                                child: OutlinedButton(
-                                  onPressed: (_isLoading || _isLoadingGoogle)
-                                      ? null
-                                      : _handleLoginGoogle,
-                                  style: OutlinedButton.styleFrom(
-                                    backgroundColor: Colors.white,
-                                    side: const BorderSide(
-                                      color: Color(0xFFE0E0E0),
-                                      width: 1,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(28),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 12,
-                                    ),
-                                    elevation: 0,
+                            Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                              padding: const EdgeInsets.all(24.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildLabel('Email'),
+                                  const SizedBox(height: 8),
+                                  _buildInput(
+                                    controller: _emailController,
+                                    hint: 'Email',
+                                    keyboardType: TextInputType.emailAddress,
                                   ),
-                                  child: _isLoadingGoogle
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Color(0xFF1A1A1A),
+                                  const SizedBox(height: 16),
+                                  _buildLabel('Senha'),
+                                  const SizedBox(height: 8),
+                                  _buildInput(
+                                    controller: _passwordController,
+                                    hint: 'Senha',
+                                    obscure: !_senhaVisivel,
+                                    suffix: IconButton(
+                                      icon: Icon(
+                                        _senhaVisivel
+                                            ? Icons.visibility_off_outlined
+                                            : Icons.visibility_outlined,
+                                        size: 18,
+                                        color: const Color(0xFFBDBDBD),
+                                      ),
+                                      onPressed: () => setState(
+                                        () => _senhaVisivel = !_senhaVisivel,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_errorMessage != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        _errorMessage!,
+                                        style: const TextStyle(
+                                          color: Colors.red,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(height: 20),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 48,
+                                    child: ElevatedButton(
+                                      onPressed: _isLoading
+                                          ? null
+                                          : _handleLogin,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF2C2C2C,
+                                        ),
+                                        foregroundColor: Colors.white,
+                                        disabledBackgroundColor: const Color(
+                                          0xFF2C2C2C,
+                                        ).withValues(alpha: 0.6),
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
                                           ),
-                                        )
-                                      : Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            SvgPicture.asset(
-                                              'assets/icons/google_icon.svg',
+                                        ),
+                                        textStyle: const TextStyle(
+                                          fontFamily: 'Roboto',
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      child: _isLoading
+                                          ? const SizedBox(
                                               width: 20,
                                               height: 20,
+                                              child: CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Text('Logar'),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  GestureDetector(
+                                    onTap: _handleEsqueceuSenha,
+                                    child: const Text(
+                                      'Esqueceu a senha?',
+                                      style: TextStyle(
+                                        fontFamily: 'Roboto',
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w400,
+                                        color: Color(0xFF1A1A1A),
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: Color(0xFF1A1A1A),
+                                      ),
+                                    ),
+                                  ),
+                                  if (kIsWeb ||
+                                      defaultTargetPlatform ==
+                                          TargetPlatform.android ||
+                                      defaultTargetPlatform ==
+                                          TargetPlatform.iOS) ...[
+                                    const SizedBox(height: 24),
+                                    Center(
+                                      child: OutlinedButton(
+                                        onPressed:
+                                            (_isLoading || _isLoadingGoogle)
+                                            ? null
+                                            : _handleLoginGoogle,
+                                        style: OutlinedButton.styleFrom(
+                                          backgroundColor: Colors.white,
+                                          side: const BorderSide(
+                                            color: Color(0xFFE0E0E0),
+                                            width: 1,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              28,
                                             ),
-                                            const SizedBox(width: 12),
-                                            const Text(
-                                              'Logar com Google',
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 24,
+                                            vertical: 12,
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: _isLoadingGoogle
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: Color(0xFF1A1A1A),
+                                                    ),
+                                              )
+                                            : Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  SvgPicture.asset(
+                                                    'assets/icons/google_icon.svg',
+                                                    width: 20,
+                                                    height: 20,
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  const Text(
+                                                    'Logar com Google',
+                                                    style: TextStyle(
+                                                      fontFamily: 'Roboto',
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: Color(0xFF1A1A1A),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 20),
+                                  Center(
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        Navigator.of(
+                                          context,
+                                        ).pushNamed('/cadastro');
+                                      },
+                                      child: RichText(
+                                        text: const TextSpan(
+                                          style: TextStyle(
+                                            fontFamily: 'Roboto',
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w400,
+                                            color: Color(0xFF1A1A1A),
+                                          ),
+                                          children: [
+                                            TextSpan(text: 'Não tem conta? '),
+                                            TextSpan(
+                                              text: 'Cadastre-se',
                                               style: TextStyle(
-                                                fontFamily: 'Roboto',
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w500,
-                                                color: Color(0xFF1A1A1A),
+                                                fontWeight: FontWeight.w600,
+                                                decoration:
+                                                    TextDecoration.underline,
+                                                decorationColor: Color(
+                                                  0xFF1A1A1A,
+                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 20),
-                            Center(
-                              child: GestureDetector(
-                                onTap: () {
-                                  Navigator.of(context).pushNamed('/cadastro');
-                                },
-                                child: RichText(
-                                  text: const TextSpan(
-                                    style: TextStyle(
-                                      fontFamily: 'Roboto',
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w400,
-                                      color: Color(0xFF1A1A1A),
-                                    ),
-                                    children: [
-                                      TextSpan(text: 'Não tem conta? '),
-                                      TextSpan(
-                                        text: 'Cadastre-se',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: Color(0xFF1A1A1A),
-                                        ),
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
                             ),
+                            const SizedBox(height: 16),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 48),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
             ),
           ),

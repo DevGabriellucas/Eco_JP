@@ -1,5 +1,4 @@
 import 'package:eco_jp/models/ocorrencia_model.dart';
-import 'package:eco_jp/models/rota_coleta_model.dart';
 import 'package:eco_jp/pages/detalhe_ocorrencia_page.dart';
 import 'package:eco_jp/pages/mapPage/controller/map_controller.dart';
 import 'package:eco_jp/pages/mapPage/widgets/affectedzones.dart';
@@ -35,10 +34,7 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
   void initState() {
     super.initState();
 
-    controller = MapController(
-      aoTocarMarcador: _aoTocarMarcador,
-      aoTocarRotaColeta: _aoTocarRotaColeta,
-    );
+    controller = MapController(aoTocarMarcador: _aoTocarMarcador);
 
     controller.loadOcorrencias();
   }
@@ -47,15 +43,6 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
   void dispose() {
     controller.dispose();
     super.dispose();
-  }
-
-  /// Mostra a agenda do bairro da rota tocada no mapa (dias, turno, horário).
-  void _aoTocarRotaColeta(RotaColetaModel rota) {
-    mostrarAgendaBairroSheet(
-      context,
-      rota.bairro,
-      controller.agendasDoBairro(rota.bairro),
-    );
   }
 
   /// Abre a busca por bairro; ao escolher, localiza no mapa e mostra a agenda.
@@ -138,12 +125,7 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
         }
 
         return Scaffold(
-          appBar: barraOcorrencias(
-            context,
-            rotasColetaAtivas: controller.mostrarRotasColeta,
-            onToggleRotasColeta: controller.toggleRotasColeta,
-            onBuscarBairro: _aoBuscarBairro,
-          ),
+          appBar: barraOcorrencias(context, onBuscarBairro: _aoBuscarBairro),
           endDrawer: CategoryDrawer(controller: controller),
           body: body,
         );

@@ -32,13 +32,10 @@ class MapControllerStateError extends MapControllerState {
 }
 
 class MapController extends ChangeNotifier {
-  MapController({this.aoTocarMarcador, this.aoTocarRotaColeta});
+  MapController({this.aoTocarMarcador});
 
   /// Disparado quando o usuário toca em um marcador individual no mapa.
   void Function(OcorrenciaModel ocorrencia)? aoTocarMarcador;
-
-  /// Disparado quando o usuário toca em uma rota de coleta no mapa.
-  void Function(RotaColetaModel rota)? aoTocarRotaColeta;
 
   final OcorrenciaService service = OcorrenciaService();
   final RotaColetaService _rotaColetaService = RotaColetaService();
@@ -65,11 +62,9 @@ class MapController extends ChangeNotifier {
 
   StreamSubscription<List<OcorrenciaModel>>? _subscription;
 
-  // ── Rotas de coleta de lixo (camada opcional, dados estáticos) ───────────
+  // ── Rotas de coleta de lixo (cronograma por bairro, dados estáticos) ─────
 
-  bool mostrarRotasColeta = false;
   List<RotaColetaModel> _rotasColeta = [];
-  Set<Polyline> _polylinesColeta = {};
 
   // Bairro localizado pela busca: círculo de área aproximada + alvo de câmera
   // (consumido pela view, que detém o GoogleMapController).
@@ -77,9 +72,6 @@ class MapController extends ChangeNotifier {
   LatLng? _alvoCamera;
   int _alvoCameraToken = 0;
   String? bairroSelecionado;
-
-  Set<Polyline> get polylinesColeta =>
-      mostrarRotasColeta ? _polylinesColeta : {};
 
   Set<Circle> get circuloBairro => _circuloBairro;
 
@@ -145,31 +137,11 @@ class MapController extends ChangeNotifier {
     }
   }
 
-  /// Carrega o cronograma (uma única vez) e monta as polylines dos bairros
-  /// que têm área desenhável. Usado tanto pela camada do mapa quanto pela
-  /// busca por bairro.
+  /// Carrega o cronograma (uma única vez). Usado pela busca por bairro.
   Future<void> carregarRotasSeNecessario() async {
     if (_rotasColeta.isNotEmpty) return;
 
     _rotasColeta = await _rotaColetaService.carregarRotas();
-    _polylinesColeta = {
-      for (final rota in _rotasColeta.where((r) => r.temArea))
-        Polyline(
-          polylineId: PolylineId(rota.id),
-          points: rota.pontos,
-          color: rota.turno.color,
-          width: 4,
-          consumeTapEvents: true,
-          onTap: () => aoTocarRotaColeta?.call(rota),
-        ),
-    };
-  }
-
-  /// Mostra/oculta a camada de rotas de coleta no mapa.
-  Future<void> toggleRotasColeta() async {
-    await carregarRotasSeNecessario();
-    mostrarRotasColeta = !mostrarRotasColeta;
-    notifyListeners();
   }
 
   /// Localiza um bairro no mapa: usa o centro de uma área conhecida quando há,

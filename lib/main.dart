@@ -77,7 +77,7 @@ class MyApp extends StatelessWidget {
       title: 'EcoJP',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      home: const InicialPage(),
+      home: const AuthCheck(),
       routes: {
         '/inicial': (context) => const InicialPage(),
         '/login': (context) => const LoginPage(),
@@ -109,7 +109,7 @@ class AuthCheck extends StatelessWidget {
           return const HomeShell();
         }
 
-        return const LoginPage();
+        return const InicialPage();
       },
     );
   }

@@ -1,5 +1,4 @@
 import 'package:eco_jp/models/occurrence_types.dart';
-import 'package:eco_jp/models/rota_coleta_model.dart';
 import 'package:eco_jp/pages/mapPage/controller/map_controller.dart';
 import 'package:eco_jp/services/geolocation/geolocation_service.dart';
 import 'package:eco_jp/services/geolocation/geovalidations.dart';
@@ -133,7 +132,6 @@ class _MapDisplayState extends State<MapDisplay> {
           // topo. Usamos um botão próprio no canto inferior esquerdo.
           myLocationButtonEnabled: false,
           markers: widget.controller.listaMarcadores,
-          polylines: widget.controller.polylinesColeta,
           circles: widget.controller.circuloBairro,
           clusterManagers: {
             ClusterManager(clusterManagerId: MapController.clusterManagerId),
@@ -157,16 +155,7 @@ class _MapDisplayState extends State<MapDisplay> {
           right: 8,
           child: MediaQuery.withClampedTextScaling(
             maxScaleFactor: 1.2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _FiltrosStatus(controller: widget.controller),
-                if (widget.controller.mostrarRotasColeta) ...[
-                  const SizedBox(height: 8),
-                  const _LegendaRotasColeta(),
-                ],
-              ],
-            ),
+            child: _FiltrosStatus(controller: widget.controller),
           ),
         ),
 
@@ -233,59 +222,6 @@ class _MapWebConfigMissing extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Legenda das rotas de coleta de lixo, exibida quando a camada está ativa.
-class _LegendaRotasColeta extends StatelessWidget {
-  const _LegendaRotasColeta();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 4,
-        children: [for (final turno in TurnoColeta.values) _item(turno)],
-      ),
-    );
-  }
-
-  Widget _item(TurnoColeta turno) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 14,
-          height: 4,
-          decoration: BoxDecoration(
-            color: turno.color,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          turno.label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: AppColors.muted,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }
