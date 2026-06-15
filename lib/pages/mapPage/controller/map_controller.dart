@@ -2,7 +2,12 @@ import 'dart:async';
 
 import 'package:eco_jp/models/ocorrencia_model.dart';
 import 'package:eco_jp/models/occurrence_types.dart';
+import 'package:eco_jp/models/rota_coleta_model.dart';
+import 'package:eco_jp/services/geolocation/geolocation_service.dart';
 import 'package:eco_jp/services/ocorrencia_service.dart';
+import 'package:eco_jp/services/rota_coleta_service.dart';
+import 'package:eco_jp/theme/app_theme.dart';
+import 'package:eco_jp/utils/texto.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:eco_jp/pages/mapPage/controller/calc_mostaffectedzones.dart';
@@ -27,12 +32,17 @@ class MapControllerStateError extends MapControllerState {
 }
 
 class MapController extends ChangeNotifier {
-  MapController({this.aoTocarMarcador});
+  MapController({this.aoTocarMarcador, this.aoTocarRotaColeta});
 
   /// Disparado quando o usuário toca em um marcador individual no mapa.
   void Function(OcorrenciaModel ocorrencia)? aoTocarMarcador;
 
+  /// Disparado quando o usuário toca em uma rota de coleta no mapa.
+  void Function(RotaColetaModel rota)? aoTocarRotaColeta;
+
   final OcorrenciaService service = OcorrenciaService();
+  final RotaColetaService _rotaColetaService = RotaColetaService();
+  final LocationService _locationService = LocationService();
 
   /// Identificador do agrupador (clustering nativo do Google Maps).
   static const ClusterManagerId clusterManagerId = ClusterManagerId(
@@ -54,6 +64,44 @@ class MapController extends ChangeNotifier {
   List<({String bairro, int quantidade})> zonasMaisAfetadas = [];
 
   StreamSubscription<List<OcorrenciaModel>>? _subscription;
+
+  // ── Rotas de coleta de lixo (camada opcional, dados estáticos) ───────────
+
+  bool mostrarRotasColeta = false;
+  List<RotaColetaModel> _rotasColeta = [];
+  Set<Polyline> _polylinesColeta = {};
+
+  // Bairro localizado pela busca: círculo de área aproximada + alvo de câmera
+  // (consumido pela view, que detém o GoogleMapController).
+  Set<Circle> _circuloBairro = {};
+  LatLng? _alvoCamera;
+  int _alvoCameraToken = 0;
+  String? bairroSelecionado;
+
+  Set<Polyline> get polylinesColeta =>
+      mostrarRotasColeta ? _polylinesColeta : {};
+
+  Set<Circle> get circuloBairro => _circuloBairro;
+
+  /// Ponto para o qual a câmera deve animar; muda de identidade a cada nova
+  /// seleção. A view observa [alvoCameraToken] para saber quando reagir.
+  LatLng? get alvoCamera => _alvoCamera;
+  int get alvoCameraToken => _alvoCameraToken;
+
+  /// Agendas (uma por grupo do cronograma) cadastradas para um bairro.
+  List<RotaColetaModel> agendasDoBairro(String bairro) =>
+      _rotasColeta.where((r) => r.bairro == bairro).toList();
+
+  /// Nomes de bairro distintos, ordenados ignorando acentos.
+  List<String> get bairrosOrdenados {
+    final nomes = _rotasColeta.map((r) => r.bairro).toSet().toList();
+    nomes.sort(
+      (a, b) => removerAcentos(
+        a,
+      ).toLowerCase().compareTo(removerAcentos(b).toLowerCase()),
+    );
+    return nomes;
+  }
 
   // ── Estado dos filtros (consultado pela UI) ──────────────────────────────
 
@@ -95,6 +143,66 @@ class MapController extends ChangeNotifier {
 
       notifyListeners();
     }
+  }
+
+  /// Carrega o cronograma (uma única vez) e monta as polylines dos bairros
+  /// que têm área desenhável. Usado tanto pela camada do mapa quanto pela
+  /// busca por bairro.
+  Future<void> carregarRotasSeNecessario() async {
+    if (_rotasColeta.isNotEmpty) return;
+
+    _rotasColeta = await _rotaColetaService.carregarRotas();
+    _polylinesColeta = {
+      for (final rota in _rotasColeta.where((r) => r.temArea))
+        Polyline(
+          polylineId: PolylineId(rota.id),
+          points: rota.pontos,
+          color: rota.turno.color,
+          width: 4,
+          consumeTapEvents: true,
+          onTap: () => aoTocarRotaColeta?.call(rota),
+        ),
+    };
+  }
+
+  /// Mostra/oculta a camada de rotas de coleta no mapa.
+  Future<void> toggleRotasColeta() async {
+    await carregarRotasSeNecessario();
+    mostrarRotasColeta = !mostrarRotasColeta;
+    notifyListeners();
+  }
+
+  /// Localiza um bairro no mapa: usa o centro de uma área conhecida quando há,
+  /// senão geocodifica o nome no aparelho. Desenha um círculo de área
+  /// aproximada e pede à view para centralizar a câmera.
+  Future<void> selecionarBairro(String bairro) async {
+    bairroSelecionado = bairro;
+
+    LatLng? alvo;
+    for (final agenda in agendasDoBairro(bairro)) {
+      if (agenda.temArea) {
+        alvo = agenda.centro;
+        break;
+      }
+    }
+    alvo ??= await _locationService.geocodeBairro(bairro);
+
+    if (alvo != null) {
+      _alvoCamera = alvo;
+      _alvoCameraToken++;
+      _circuloBairro = {
+        Circle(
+          circleId: const CircleId('bairro-selecionado'),
+          center: alvo,
+          radius: 450,
+          strokeWidth: 2,
+          strokeColor: AppColors.primary,
+          fillColor: AppColors.primary.withValues(alpha: 0.12),
+        ),
+      };
+    }
+
+    notifyListeners();
   }
 
   // ── Filtros ──────────────────────────────────────────────────────────────

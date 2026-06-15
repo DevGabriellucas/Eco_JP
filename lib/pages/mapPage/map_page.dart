@@ -1,12 +1,15 @@
 import 'package:eco_jp/models/ocorrencia_model.dart';
+import 'package:eco_jp/models/rota_coleta_model.dart';
 import 'package:eco_jp/pages/detalhe_ocorrencia_page.dart';
 import 'package:eco_jp/pages/mapPage/controller/map_controller.dart';
 import 'package:eco_jp/pages/mapPage/widgets/affectedzones.dart';
 import 'package:eco_jp/pages/mapPage/widgets/appbar.dart';
 import 'package:eco_jp/pages/mapPage/widgets/category_drawer.dart';
 import 'package:eco_jp/pages/mapPage/widgets/categoryitems.dart';
+import 'package:eco_jp/pages/mapPage/widgets/busca_bairro_sheet.dart';
 import 'package:eco_jp/pages/mapPage/widgets/mapdisplay.dart';
 import 'package:eco_jp/pages/mapPage/widgets/ocorrencia_map_sheet.dart';
+import 'package:eco_jp/pages/mapPage/widgets/rota_coleta_sheet.dart';
 import 'package:flutter/material.dart';
 
 class MapPage extends StatelessWidget {
@@ -32,7 +35,10 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
   void initState() {
     super.initState();
 
-    controller = MapController(aoTocarMarcador: _aoTocarMarcador);
+    controller = MapController(
+      aoTocarMarcador: _aoTocarMarcador,
+      aoTocarRotaColeta: _aoTocarRotaColeta,
+    );
 
     controller.loadOcorrencias();
   }
@@ -41,6 +47,33 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
   void dispose() {
     controller.dispose();
     super.dispose();
+  }
+
+  /// Mostra a agenda do bairro da rota tocada no mapa (dias, turno, horário).
+  void _aoTocarRotaColeta(RotaColetaModel rota) {
+    mostrarAgendaBairroSheet(
+      context,
+      rota.bairro,
+      controller.agendasDoBairro(rota.bairro),
+    );
+  }
+
+  /// Abre a busca por bairro; ao escolher, localiza no mapa e mostra a agenda.
+  Future<void> _aoBuscarBairro() async {
+    await controller.carregarRotasSeNecessario();
+    if (!mounted) return;
+
+    final bairro = await mostrarBuscaBairroSheet(context, controller);
+    if (bairro == null || !mounted) return;
+
+    await controller.selecionarBairro(bairro);
+    if (!mounted) return;
+
+    await mostrarAgendaBairroSheet(
+      context,
+      bairro,
+      controller.agendasDoBairro(bairro),
+    );
   }
 
   /// Mostra o resumo da ocorrência e, se solicitado, abre os detalhes.
@@ -61,56 +94,60 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
 
   @override
   Widget build(BuildContext context) {
-    final body = ListenableBuilder(
+    return ListenableBuilder(
       listenable: controller,
       builder: (context, child) {
         final state = controller.state;
 
+        Widget body;
         if (state is MapControllerStateLoading ||
             state is MapControllerStateInit) {
-          return const Center(child: CircularProgressIndicator());
+          body = const Center(child: CircularProgressIndicator());
+        } else if (state is MapControllerStateError) {
+          body = MapEmError(controller, state);
+        } else {
+          // top/left/right ficam por conta do AppBar e do mapa (full-bleed);
+          // só protegemos a base para os painéis não ficarem sob a barra de
+          // navegação do sistema (gestos/home indicator).
+          body = SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: Column(
+              children: [
+                Expanded(child: MapDisplay(controller: controller)),
+                // Limita a escala de fonte nas faixas de altura fixa para que
+                // o ajuste de "fonte grande" do sistema não cause overflow.
+                SizedBox(
+                  height: 48,
+                  child: MediaQuery.withClampedTextScaling(
+                    maxScaleFactor: 1.2,
+                    child: CategoryItems(controller: controller),
+                  ),
+                ),
+                SizedBox(
+                  height: 128,
+                  child: MediaQuery.withClampedTextScaling(
+                    maxScaleFactor: 1.2,
+                    child: MostAffectedZones(controller),
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
-        if (state is MapControllerStateError) {
-          return MapEmError(controller, state);
-        }
-
-        // top/left/right ficam por conta do AppBar e do mapa (full-bleed);
-        // só protegemos a base para os painéis não ficarem sob a barra de
-        // navegação do sistema (gestos/home indicator).
-        return SafeArea(
-          top: false,
-          left: false,
-          right: false,
-          child: Column(
-            children: [
-              Expanded(child: MapDisplay(controller: controller)),
-              // Limita a escala de fonte nas faixas de altura fixa para que o
-              // ajuste de "fonte grande" do sistema não cause overflow.
-              SizedBox(
-                height: 48,
-                child: MediaQuery.withClampedTextScaling(
-                  maxScaleFactor: 1.2,
-                  child: CategoryItems(controller: controller),
-                ),
-              ),
-              SizedBox(
-                height: 128,
-                child: MediaQuery.withClampedTextScaling(
-                  maxScaleFactor: 1.2,
-                  child: MostAffectedZones(controller),
-                ),
-              ),
-            ],
+        return Scaffold(
+          appBar: barraOcorrencias(
+            context,
+            rotasColetaAtivas: controller.mostrarRotasColeta,
+            onToggleRotasColeta: controller.toggleRotasColeta,
+            onBuscarBairro: _aoBuscarBairro,
           ),
+          endDrawer: CategoryDrawer(controller: controller),
+          body: body,
         );
       },
-    );
-
-    return Scaffold(
-      appBar: barraOcorrencias(context),
-      endDrawer: CategoryDrawer(controller: controller),
-      body: body,
     );
   }
 }
