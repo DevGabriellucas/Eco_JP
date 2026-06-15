@@ -16,27 +16,49 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
+  // Abas já abertas. Só elas são instanciadas (lazy): assim Mapa,
+  // Estatísticas e Perfil — e os listeners do Firestore deles — só ligam
+  // quando o usuário toca pela primeira vez. O IndexedStack mantém vivas as
+  // já visitadas para preservar o estado ao alternar entre elas.
+  final Set<int> _visitadas = {0};
+
   // Índices: 0=Feed, 1=Mapa, (2 é o botão +), 3=Dados, 4=Perfil
-  final _paginas = const [
-    HomePage(),
-    MapPage(),
-    SizedBox.shrink(),
-    EstatisticasPage(),
-    PerfilPage(),
-  ];
+  Widget _pagina(int i) {
+    switch (i) {
+      case 0:
+        return const HomePage();
+      case 1:
+        return const MapPage();
+      case 3:
+        return const EstatisticasPage();
+      case 4:
+        return const PerfilPage();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 
   void _onTapItem(int i) {
     if (i == 2) {
       Navigator.of(context).pushNamed('/form-ocorrencia');
       return;
     }
-    setState(() => _index = i);
+    setState(() {
+      _index = i;
+      _visitadas.add(i);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _paginas),
+      body: IndexedStack(
+        index: _index,
+        children: List.generate(
+          5,
+          (i) => _visitadas.contains(i) ? _pagina(i) : const SizedBox.shrink(),
+        ),
+      ),
       bottomNavigationBar: _BottomNav(currentIndex: _index, onTap: _onTapItem),
     );
   }

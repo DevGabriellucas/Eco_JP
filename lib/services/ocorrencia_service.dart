@@ -90,46 +90,6 @@ class OcorrenciaService {
     );
   }
 
-  // ── READ — paginado (feed da home) ───────────────────────────────────────
-
-  Future<List<OcorrenciaModel>> listarOcorrenciasPaginadas({
-    DocumentSnapshot<Map<String, dynamic>>? lastDocument,
-    int limit = 10,
-  }) async {
-    final uid = _currentUserId;
-    var query = _ocorrenciasRef
-        .orderBy('dataCriacao', descending: true)
-        .limit(limit);
-
-    if (lastDocument != null) {
-      query = query.startAfterDocument(lastDocument);
-    }
-
-    final snapshot = await query.get();
-    return snapshot.docs
-        .map(
-          (doc) =>
-              OcorrenciaModel.fromMap(doc.data(), doc.id, currentUserId: uid),
-        )
-        .toList();
-  }
-
-  // Retorna o DocumentSnapshot cursor para a próxima página.
-  Future<QuerySnapshot<Map<String, dynamic>>> listarOcorrenciasRaw({
-    DocumentSnapshot<Map<String, dynamic>>? lastDocument,
-    int limit = 10,
-  }) async {
-    var query = _ocorrenciasRef
-        .orderBy('dataCriacao', descending: true)
-        .limit(limit);
-
-    if (lastDocument != null) {
-      query = query.startAfterDocument(lastDocument);
-    }
-
-    return query.get();
-  }
-
   // ── UPDATE — status ───────────────────────────────────────────────────────
 
   Future<void> atualizarPerfilNasOcorrencias(

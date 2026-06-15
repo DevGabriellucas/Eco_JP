@@ -43,6 +43,14 @@ class _HomePageState extends State<HomePage> {
   final Map<String, String> _nomeCache = {};
   final Map<String, String?> _fotoCache = {};
 
+  // Cache dos streams de contagem de comentários por ocorrência. Sem isso, um
+  // novo listener do Firestore seria criado a cada rebuild do feed (a cada
+  // like, filtro ou scroll), desperdiçando leituras e bateria.
+  final Map<String, Stream<int>> _commentCountCache = {};
+
+  Stream<int> _commentCountStream(String id) =>
+      _commentCountCache[id] ??= _ocorrenciaService.contarComentarios(id);
+
   @override
   void initState() {
     super.initState();
@@ -481,9 +489,7 @@ class _HomePageState extends State<HomePage> {
                       occurrence: o,
                       nomeAutor: nomeAutor,
                       fotoAutor: fotoAutor,
-                      commentCountStream: _ocorrenciaService.contarComentarios(
-                        o.id,
-                      ),
+                      commentCountStream: _commentCountStream(o.id),
                       onLike: () => _toggleLike(o),
                       onDislike: () => _toggleDislike(o),
                       onTap: () => _openDetail(o),

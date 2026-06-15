@@ -643,7 +643,7 @@ class _CategoryBarCard extends StatelessWidget {
               const SizedBox(width: 6),
               const Flexible(
                 child: Text(
-                  'Quantidade de ocorrências (mês) por categoria',
+                  'Total de ocorrências por categoria',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,

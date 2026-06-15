@@ -1,4 +1,3 @@
-import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -26,30 +25,4 @@ class LatLngSucess extends LatLngResult {
 class LatLngFailure extends LatLngResult {
   final String error;
   LatLngFailure(this.error);
-}
-
-// getActualPositionPlacemark
-sealed class PlacemarkResult {}
-
-class PlacemarkSucess extends PlacemarkResult {
-  final Placemark placemark;
-  PlacemarkSucess(this.placemark);
-}
-
-class PlacemarkFailure extends PlacemarkResult {
-  final String error;
-  PlacemarkFailure(this.error);
-}
-
-// getActualPositionString
-sealed class StringResult {}
-
-class StringSucess extends StringResult {
-  final String content;
-  StringSucess(this.content);
-}
-
-class StringFailure extends StringResult {
-  final String error;
-  StringFailure(this.error);
 }

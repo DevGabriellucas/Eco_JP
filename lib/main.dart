@@ -8,7 +8,6 @@ import 'pages/home_shell.dart';
 import 'pages/inicial_page.dart';
 import 'pages/form_ocorrencia_page.dart';
 import 'services/auth_service.dart';
-import 'pages/mapPage/map_page.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -85,7 +84,6 @@ class MyApp extends StatelessWidget {
         '/cadastro': (context) => const CadastroPage(),
         '/home': (context) => const AuthCheck(),
         '/form-ocorrencia': (context) => const FormOcorrenciaPage(),
-        '/map-page': (context) => const MapPage(),
       },
     );
   }
