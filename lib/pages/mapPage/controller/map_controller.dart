@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:eco_jp/models/ocorrencia_model.dart';
 import 'package:eco_jp/models/occurrence_types.dart';
 import 'package:eco_jp/models/rota_coleta_model.dart';
+import 'package:eco_jp/services/geolocation/bairros_jp.dart';
 import 'package:eco_jp/services/geolocation/geolocation_service.dart';
 import 'package:eco_jp/services/ocorrencia_service.dart';
 import 'package:eco_jp/services/rota_coleta_service.dart';
@@ -144,17 +145,29 @@ class MapController extends ChangeNotifier {
     _rotasColeta = await _rotaColetaService.carregarRotas();
   }
 
-  /// Localiza um bairro no mapa: usa o centro de uma área conhecida quando há,
-  /// senão geocodifica o nome no aparelho. Desenha um círculo de área
-  /// aproximada e pede à view para centralizar a câmera.
+  /// Localiza um bairro no mapa. Prioridade (do mais confiável ao menos):
+  /// 1. `coord` conferida no JSON (geocodificação oficial — tools/geocode_bairros);
+  /// 2. tabela curada de João Pessoa;
+  /// 3. centro de uma área desenhada do cronograma;
+  /// 4. geocodificação sob demanda no aparelho.
+  /// Desenha um círculo de área aproximada e pede à view para centralizar.
   Future<void> selecionarBairro(String bairro) async {
     bairroSelecionado = bairro;
 
     LatLng? alvo;
     for (final agenda in agendasDoBairro(bairro)) {
-      if (agenda.temArea) {
-        alvo = agenda.centro;
+      if (agenda.coord != null) {
+        alvo = agenda.coord;
         break;
+      }
+    }
+    alvo ??= coordenadaBairroJP(bairro);
+    if (alvo == null) {
+      for (final agenda in agendasDoBairro(bairro)) {
+        if (agenda.temArea) {
+          alvo = agenda.centro;
+          break;
+        }
       }
     }
     alvo ??= await _locationService.geocodeBairro(bairro);

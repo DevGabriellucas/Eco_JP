@@ -76,13 +76,23 @@ class CategoryItems extends StatelessWidget {
   }
 
   /// Largura estimada de um chip (conteúdo, sem o espaço entre chips).
+  ///
+  /// Inclui os 2px da borda (1px de cada lado) e arredonda a largura do texto
+  /// para cima: subestimar fazia a fileira estourar ~18px na horizontal em
+  /// paisagem (overflow), quando todos os chips eram renderizados.
+  static const double _bordaChip = 2;
+
   double _larguraChip(OccurrenceType tipo, TextScaler textScaler) {
     final painter = TextPainter(
       text: TextSpan(text: tipo.label, style: _labelStyle),
       textDirection: TextDirection.ltr,
       textScaler: textScaler,
     )..layout();
-    return _hPadding * 2 + _iconSize + _iconGap + painter.width;
+    return _hPadding * 2 +
+        _iconSize +
+        _iconGap +
+        painter.width.ceilToDouble() +
+        _bordaChip;
   }
 
   Widget _botaoMais(BuildContext context) {

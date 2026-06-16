@@ -80,6 +80,11 @@ class RotaColetaModel {
   final String horario;
   final List<LatLng> pontos;
 
+  /// Coordenada central conferida do bairro (campo `coord` do JSON, gerado por
+  /// geocodificação oficial via `tools/geocode_bairros.mjs`). É a fonte mais
+  /// confiável para centralizar o mapa; `null` quando ainda não foi gerada.
+  final LatLng? coord;
+
   const RotaColetaModel({
     required this.id,
     required this.bairro,
@@ -87,16 +92,18 @@ class RotaColetaModel {
     required this.diasSemana,
     required this.horario,
     this.pontos = const [],
+    this.coord,
   });
 
   /// Constrói a agenda de um bairro a partir de um grupo do JSON (que carrega
-  /// turno/dias/horário) e do item do bairro (nome e pontos opcionais).
+  /// turno/dias/horário) e do item do bairro (nome, coord e pontos opcionais).
   factory RotaColetaModel.fromGrupoBairro(
     Map<String, dynamic> grupo,
     Map<String, dynamic> bairro,
   ) {
     final nome = bairro['nome'] as String;
     final pontosRaw = bairro['pontos'] as List?;
+    final coordRaw = bairro['coord'] as Map<String, dynamic>?;
 
     return RotaColetaModel(
       id: '${grupo['id']}-${slugify(nome)}',
@@ -104,6 +111,12 @@ class RotaColetaModel {
       turno: TurnoColetaParser.fromString(grupo['turno'] as String),
       diasSemana: (grupo['diasSemana'] as List).map((e) => e as int).toList(),
       horario: grupo['horario'] as String,
+      coord: coordRaw == null
+          ? null
+          : LatLng(
+              (coordRaw['lat'] as num).toDouble(),
+              (coordRaw['lng'] as num).toDouble(),
+            ),
       pontos: pontosRaw == null
           ? const []
           : pontosRaw
