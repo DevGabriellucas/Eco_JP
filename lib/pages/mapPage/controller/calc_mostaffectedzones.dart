@@ -17,16 +17,24 @@ class CalcMostAffectedZones {
   /// Heurística: quando há rua + bairro + cidade (3+ partes), o bairro é a
   /// segunda parte; com 2 partes assume-se "Bairro, Cidade" e com 1 parte
   /// usa-se o que houver. Retorna `null` quando não há texto aproveitável.
+  ///
+  /// Partes formadas apenas por números (número da casa ou CEP, ex.: "Av X,
+  /// 1200, Manaíra") são descartadas antes da heurística — senão o "bairro"
+  /// acabaria sendo o número.
   static String? extrairBairro(String localizacao) {
     final partes = localizacao
         .split(',')
         .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
+        .where((p) => p.isNotEmpty && !_apenasNumero.hasMatch(p))
         .toList();
     if (partes.isEmpty) return null;
     final indice = partes.length >= 3 ? 1 : 0;
     return partes[indice];
   }
+
+  /// Casa partes que são só dígitos/pontuação de número (ex.: "1200",
+  /// "58000-000", "nº 12").
+  static final RegExp _apenasNumero = RegExp(r'^(nº|n°|n\.?)?\s*[\d.\s-]+$');
 
   Map<String, int> _contarPorBairro() {
     final contagem = <String, int>{};

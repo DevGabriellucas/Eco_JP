@@ -1067,13 +1067,10 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   Widget _localizacaoSection() {
     return TapRegion(
       onTapOutside: (_) {
-        _enderecoFocus.unfocus();
-        if (_mostrarSug) {
-          setState(() {
-            _sugestoes = [];
-            _mostrarSug = false;
-          });
-        }
+        // Só fecha o teclado ao tocar fora. As sugestões continuam visíveis
+        // para o usuário poder lê-las e tocá-las depois de tirar o foco — elas
+        // são limpas ao escolher uma sugestão ou ao reeditar o endereço.
+        if (_enderecoFocus.hasFocus) _enderecoFocus.unfocus();
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

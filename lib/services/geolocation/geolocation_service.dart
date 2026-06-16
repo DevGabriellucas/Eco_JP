@@ -16,9 +16,20 @@ class LocationService {
   /// então evitamos repetir a chamada de geocodificação.
   static final Map<String, LatLng> _cacheBairro = {};
 
+  /// Bounding box aproximado de João Pessoa (PB). O geocodificador do aparelho
+  /// às vezes devolve uma cidade homônima em outro estado; descartamos esses
+  /// resultados para o mapa não "pular" para o lugar errado.
+  static bool _dentroDeJoaoPessoa(LatLng p) {
+    return p.latitude >= -7.30 &&
+        p.latitude <= -6.95 &&
+        p.longitude >= -35.00 &&
+        p.longitude <= -34.75;
+  }
+
   /// Resolve a posição aproximada de um bairro de João Pessoa pelo nome,
   /// usando o geocodificador do aparelho. Retorna `null` quando não há
-  /// resultado, não há suporte (web) ou ocorre erro de rede.
+  /// resultado, o resultado cai fora de João Pessoa, não há suporte (web) ou
+  /// ocorre erro de rede.
   Future<LatLng?> geocodeBairro(String bairro) async {
     final chave = bairro.toLowerCase().trim();
 
@@ -31,10 +42,15 @@ class LocationService {
       );
       if (locais.isEmpty) return null;
 
-      final local = locais.first;
-      final latLng = LatLng(local.latitude, local.longitude);
-      _cacheBairro[chave] = latLng;
-      return latLng;
+      // Usa o primeiro resultado que de fato cai dentro de João Pessoa.
+      for (final local in locais) {
+        final latLng = LatLng(local.latitude, local.longitude);
+        if (_dentroDeJoaoPessoa(latLng)) {
+          _cacheBairro[chave] = latLng;
+          return latLng;
+        }
+      }
+      return null;
     } catch (_) {
       // Sem implementação no navegador, sem rede ou endereço não encontrado.
       return null;

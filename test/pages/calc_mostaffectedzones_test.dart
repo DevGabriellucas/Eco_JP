@@ -36,6 +36,25 @@ void main() {
       expect(CalcMostAffectedZones.extrairBairro('  , Tambaú ,  '), 'Tambaú');
     });
 
+    test('número da casa entre rua e bairro é ignorado', () {
+      // Regressão: "Av X, 1200, Manaíra, JP" pegava "1200" como bairro.
+      expect(
+        CalcMostAffectedZones.extrairBairro(
+          'Av Epitácio Pessoa, 1200, Manaíra, João Pessoa',
+        ),
+        'Manaíra',
+      );
+    });
+
+    test('CEP entre as partes é ignorado', () {
+      expect(
+        CalcMostAffectedZones.extrairBairro(
+          'Rua A, 58000-000, Bessa, João Pessoa',
+        ),
+        'Bessa',
+      );
+    });
+
     test('string vazia retorna null', () {
       expect(CalcMostAffectedZones.extrairBairro('   '), isNull);
     });

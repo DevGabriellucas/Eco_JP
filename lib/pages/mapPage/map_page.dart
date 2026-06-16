@@ -93,6 +93,12 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
         } else if (state is MapControllerStateError) {
           body = MapEmError(controller, state);
         } else {
+          // Em paisagem a altura é curta; as faixas fixas (chips + zonas) não
+          // cabem junto com o mapa e causavam overflow. Mantemos só os chips e
+          // escondemos o painel de zonas, que é informação secundária.
+          final isLandscape =
+              MediaQuery.orientationOf(context) == Orientation.landscape;
+
           // top/left/right ficam por conta do AppBar e do mapa (full-bleed);
           // só protegemos a base para os painéis não ficarem sob a barra de
           // navegação do sistema (gestos/home indicator).
@@ -112,13 +118,14 @@ class _MapPageConteudoState extends State<MapPageConteudo> {
                     child: CategoryItems(controller: controller),
                   ),
                 ),
-                SizedBox(
-                  height: 128,
-                  child: MediaQuery.withClampedTextScaling(
-                    maxScaleFactor: 1.2,
-                    child: MostAffectedZones(controller),
+                if (!isLandscape)
+                  SizedBox(
+                    height: 128,
+                    child: MediaQuery.withClampedTextScaling(
+                      maxScaleFactor: 1.2,
+                      child: MostAffectedZones(controller),
+                    ),
                   ),
-                ),
               ],
             ),
           );
