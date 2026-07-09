@@ -4,46 +4,64 @@ import 'package:flutter/material.dart';
 // (Lei 13.709/2018). Antes de publicar de verdade, devem ser revisados
 // por um profissional jurídico e ter o e-mail/contato do responsável preenchido.
 
+/// Versão dos documentos legais. Ao alterar o conteúdo da política ou dos
+/// termos de forma relevante, incremente esta versão (formato data ISO) para
+/// que o app peça um novo consentimento aos usuários já cadastrados.
+const String kVersaoDocumentosLegais = '2026-06-17';
+
 const String kPoliticaPrivacidade = '''
 POLÍTICA DE PRIVACIDADE — EcoJP
+Versão 2026-06-17
 
 O EcoJP valoriza a sua privacidade. Esta política explica quais dados coletamos, como os usamos e quais são os seus direitos, em conformidade com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).
 
 1. DADOS QUE COLETAMOS
 • Dados de cadastro: nome e e-mail.
 • Foto de perfil (opcional).
-• Conteúdo das denúncias: fotos, descrição, categoria e localização (endereço e coordenadas geográficas).
+• Conteúdo das denúncias: fotos, vídeo (opcional), descrição, categoria e localização (endereço e coordenadas geográficas).
 • Interações: curtidas e comentários.
 
 2. COMO USAMOS OS DADOS
 • Para autenticar o seu acesso ao aplicativo.
 • Para exibir as denúncias no feed, no mapa e nas estatísticas.
-• Para identificar o autor de cada denúncia e comentário.
+• Para identificar o autor de cada denúncia e comentário, exceto quando a denúncia é feita de forma anônima.
+• Para sugerir automaticamente a categoria da denúncia (ver item 4).
 • Para melhorar a experiência no aplicativo.
 
-3. COMPARTILHAMENTO
-As denúncias registradas — incluindo foto, localização e nome do autor — ficam visíveis para os demais usuários autenticados do aplicativo, pois esse é o propósito colaborativo da plataforma. Não vendemos os seus dados a terceiros.
+3. DENÚNCIA ANÔNIMA
+Ao registrar uma denúncia, você pode marcá-la como anônima. Nesse caso, o seu nome e a sua foto NÃO são gravados na denúncia e não aparecem para nenhum outro usuário, nem para os órgãos públicos. Mantemos internamente apenas o vínculo técnico necessário para que você possa gerenciar e excluir a sua própria denúncia.
 
-4. ARMAZENAMENTO
-Os dados são armazenados em serviços de nuvem: as imagens no Cloudinary e os demais dados no Google Cloud Firestore (Firebase).
+4. INTELIGÊNCIA ARTIFICIAL
+Para sugerir a categoria de uma denúncia, o título e a descrição (e, quando aplicável, a foto) podem ser enviados ao serviço de IA do Google (Gemini) por meio do Firebase AI Logic. A sugestão é apenas um auxílio — você sempre decide a categoria final antes de enviar.
 
-5. SEUS DIREITOS (LGPD)
+5. COMPARTILHAMENTO
+As denúncias registradas ficam visíveis para os demais usuários autenticados do aplicativo e para órgãos públicos cadastrados como autoridade, que realizam a triagem e o acompanhamento oficial (verificação, encaminhamento e resolução). Denúncias anônimas são compartilhadas sem o nome e a foto do autor. Não vendemos os seus dados a terceiros.
+
+6. ARMAZENAMENTO E SEGURANÇA
+As imagens e vídeos são armazenados no Cloudinary; os demais dados, no Google Cloud Firestore (Firebase). O acesso ao back-end é protegido pelo Firebase App Check, que impede o uso fora do aplicativo oficial.
+
+7. RETENÇÃO
+Mantemos os seus dados enquanto a sua conta existir. Ao excluir a sua conta, apagamos o seu perfil, as suas denúncias e as suas notificações. Comentários feitos em denúncias de outras pessoas podem permanecer sem vínculo visível com a sua conta.
+
+8. SEUS DIREITOS (LGPD)
 A qualquer momento, você pode:
 • Acessar e corrigir os dados do seu perfil.
 • Excluir as suas denúncias.
-• Solicitar a exclusão da sua conta e dos seus dados.
+• Registrar denúncias de forma anônima.
+• Solicitar a exclusão da sua conta e de todos os seus dados.
 
-6. CONTATO
-Para exercer seus direitos ou esclarecer dúvidas, entre em contato pelo e-mail de suporte do EcoJP.
+9. CONTATO
+Para exercer seus direitos ou esclarecer dúvidas, entre em contato com o Encarregado de Proteção de Dados (DPO) pelo e-mail de suporte do EcoJP.
 ''';
 
 const String kTermosDeUso = '''
 TERMOS DE USO — EcoJP
+Versão 2026-06-17
 
 Ao criar uma conta e usar o EcoJP, você concorda com os termos abaixo.
 
 1. OBJETIVO
-O EcoJP é uma plataforma para registro e acompanhamento de ocorrências ambientais e urbanas na cidade de João Pessoa. As denúncias têm caráter informativo e colaborativo.
+O EcoJP é uma plataforma para registro e acompanhamento de ocorrências ambientais e urbanas na cidade de João Pessoa. As denúncias têm caráter informativo e colaborativo e podem ser triadas por órgãos públicos cadastrados (verificação, encaminhamento e resolução).
 
 2. RESPONSABILIDADES DO USUÁRIO
 • Fornecer informações verdadeiras.

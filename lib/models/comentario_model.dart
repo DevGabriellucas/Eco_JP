@@ -8,6 +8,14 @@ class ComentarioModel {
   final String texto;
   final DateTime? dataCriacao;
 
+  // Resposta a outro comentário (null = comentário raiz).
+  final String? parentId;
+
+  // Curtidas no comentário.
+  final List<String> likedBy;
+  final int likes;
+  final bool userLiked; // derivado de likedBy + usuário atual
+
   ComentarioModel({
     required this.id,
     required this.userId,
@@ -15,7 +23,11 @@ class ComentarioModel {
     this.userPhotoUrl,
     required this.texto,
     this.dataCriacao,
-  });
+    this.parentId,
+    List<String>? likedBy,
+    this.likes = 0,
+    this.userLiked = false,
+  }) : likedBy = likedBy ?? [];
 
   Map<String, dynamic> toMap() => {
     'userId': userId,
@@ -23,9 +35,17 @@ class ComentarioModel {
     'userPhotoUrl': userPhotoUrl,
     'texto': texto,
     'dataCriacao': FieldValue.serverTimestamp(),
+    'parentId': parentId,
+    'likedBy': <String>[],
+    'likes': 0,
   };
 
-  factory ComentarioModel.fromMap(Map<String, dynamic> map, String id) {
+  factory ComentarioModel.fromMap(
+    Map<String, dynamic> map,
+    String id, {
+    String? currentUserId,
+  }) {
+    final likedBy = List<String>.from(map['likedBy'] ?? []);
     return ComentarioModel(
       id: id,
       userId: map['userId'] ?? '',
@@ -35,6 +55,10 @@ class ComentarioModel {
       dataCriacao: map['dataCriacao'] != null
           ? (map['dataCriacao'] as Timestamp).toDate()
           : null,
+      parentId: map['parentId'] as String?,
+      likedBy: likedBy,
+      likes: map['likes'] ?? likedBy.length,
+      userLiked: currentUserId != null && likedBy.contains(currentUserId),
     );
   }
 }

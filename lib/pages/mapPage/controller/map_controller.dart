@@ -56,6 +56,12 @@ class MapController extends ChangeNotifier {
   final Set<OccurrenceType> _categoriasOcultas = {};
   OccurrenceStatus? _statusSelecionado;
 
+  // Camada de calor (hotspots) e filtro de denúncias pendentes de verificação.
+  bool heatmapAtivo = false;
+  bool soPendentes = false;
+
+  Set<Heatmap> listaHeatmap = {};
+
   // Ícones customizados por categoria (vazio = usa marcador padrão).
   Map<OccurrenceType, BitmapDescriptor> _icones = {};
 
@@ -207,6 +213,25 @@ class MapController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Liga/desliga a camada de calor (hotspots). Não altera os marcadores —
+  /// a view decide se mostra marcadores ou a camada de calor.
+  void alternarHeatmap() {
+    heatmapAtivo = !heatmapAtivo;
+    _recomputar();
+    notifyListeners();
+  }
+
+  /// Mostra apenas denúncias pendentes de verificação (úteis para a
+  /// autoridade planejar visitas): não verificadas e não descartadas.
+  void alternarSoPendentes() {
+    soPendentes = !soPendentes;
+    _recomputar();
+    notifyListeners();
+  }
+
+  bool _ehPendente(OcorrenciaModel o) =>
+      !o.verificada && o.statusOficial != 'nao_confirmada';
+
   List<OcorrenciaModel> get _ocorrenciasFiltradas {
     return _todasOcorrencias.where((o) {
       if (!_temCoordenadaValida(o)) return false;
@@ -216,14 +241,32 @@ class MapController extends ChangeNotifier {
           OccurrenceStatusParser.fromString(o.status) != _statusSelecionado) {
         return false;
       }
+      if (soPendentes && !_ehPendente(o)) return false;
       return true;
     }).toList();
   }
 
   void _recomputar() {
+    final filtradas = _ocorrenciasFiltradas;
+
     listaMarcadores = {
-      for (final ocorrencia in _ocorrenciasFiltradas) criarMarcador(ocorrencia),
+      for (final ocorrencia in filtradas) criarMarcador(ocorrencia),
     };
+
+    // Camada de calor: um ponto por ocorrência filtrada (peso uniforme).
+    listaHeatmap = heatmapAtivo && filtradas.isNotEmpty
+        ? {
+            Heatmap(
+              heatmapId: const HeatmapId('ocorrencias-heat'),
+              data: [
+                for (final o in filtradas)
+                  WeightedLatLng(LatLng(o.latitude, o.longitude)),
+              ],
+              radius: HeatmapRadius.fromPixels(45),
+              opacity: 0.7,
+            ),
+          }
+        : {};
 
     // O ranking de bairros considera todas as ocorrências com coordenada
     // válida, independentemente dos filtros visuais aplicados no mapa.

@@ -1,6 +1,7 @@
 import 'package:eco_jp/models/ocorrencia_model.dart';
 import 'package:eco_jp/models/occurrence_types.dart';
 import 'package:eco_jp/theme/app_theme.dart';
+import 'package:eco_jp/utils/navegacao_externa.dart';
 import 'package:flutter/material.dart';
 
 /// Mostra um resumo da ocorrência (foto, categoria, status, título e local)
@@ -25,6 +26,19 @@ class _OcorrenciaMapSheet extends StatelessWidget {
   final OcorrenciaModel ocorrencia;
 
   const _OcorrenciaMapSheet({required this.ocorrencia});
+
+  Future<void> _comoChegar(BuildContext context, OcorrenciaModel o) async {
+    final ok = await abrirRotaNoMapa(
+      latitude: o.latitude,
+      longitude: o.longitude,
+      rotulo: o.titulo,
+    );
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível abrir o app de mapas.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,9 +81,7 @@ class _OcorrenciaMapSheet extends StatelessWidget {
                   width: double.infinity,
                   color: const Color(0xFFF3F4F6),
                   alignment: Alignment.center,
-                  // BoxFit.contain (igual ao feed) para não cortar fotos
-                  // verticais — BoxFit.cover preenchia a caixa cortando as
-                  // bordas da imagem.
+                  // Mantem a foto inteira no preview pequeno do mapa.
                   child: Image.network(
                     imagem,
                     fit: BoxFit.contain,
@@ -120,13 +132,24 @@ class _OcorrenciaMapSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.pop(context, true),
-                icon: const Icon(Icons.open_in_new, size: 18),
-                label: const Text('Ver detalhes'),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _comoChegar(context, o),
+                    icon: const Icon(Icons.directions_outlined, size: 18),
+                    label: const Text('Como chegar'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context, true),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('Ver detalhes'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

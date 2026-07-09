@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../models/usuario_model.dart';
 import '../services/auth_service.dart';
+import '../services/consent_service.dart';
 import '../services/usuario_service.dart';
 import 'legal/documentos_legais.dart';
 
@@ -19,6 +20,7 @@ class _CadastroPageState extends State<CadastroPage> {
   final _confirmPasswordController = TextEditingController();
   final _authService = AuthService();
   final _usuarioService = UsuarioService();
+  final _consentService = ConsentService();
   bool _isLoading = false;
   bool _senhaVisivel = false;
   bool _confirmarSenhaVisivel = false;
@@ -135,6 +137,9 @@ class _CadastroPageState extends State<CadastroPage> {
       await _usuarioService.salvarPerfil(UsuarioModel(uid: uid, nome: nome));
       // Guarda o nome também no Auth (útil para exibir em notificações).
       await result.user?.updateDisplayName(nome);
+      // Registra o consentimento aceito no checkbox (LGPD art. 8 §1),
+      // para o usuário não ser barrado de novo pela trava de consentimento.
+      await _consentService.registrar(uid);
     }
 
     if (!mounted) return;

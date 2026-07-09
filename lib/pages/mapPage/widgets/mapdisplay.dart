@@ -131,7 +131,11 @@ class _MapDisplayState extends State<MapDisplay> {
           // Botão nativo desativado: ficava atrás dos filtros de status no
           // topo. Usamos um botão próprio no canto inferior esquerdo.
           myLocationButtonEnabled: false,
-          markers: widget.controller.listaMarcadores,
+          // No modo calor, escondemos os marcadores para destacar os hotspots.
+          markers: widget.controller.heatmapAtivo
+              ? const {}
+              : widget.controller.listaMarcadores,
+          heatmaps: widget.controller.listaHeatmap,
           circles: widget.controller.circuloBairro,
           clusterManagers: {
             ClusterManager(clusterManagerId: MapController.clusterManagerId),
@@ -159,17 +163,54 @@ class _MapDisplayState extends State<MapDisplay> {
           ),
         ),
 
-        // Botão para reenquadrar todas as ocorrências.
+        // Coluna de ações no canto inferior direito: filtro de pendentes,
+        // camada de calor e reenquadrar.
         Positioned(
           right: 12,
           bottom: 12,
-          child: FloatingActionButton.small(
-            heroTag: 'enquadrar-ocorrencias',
-            backgroundColor: Colors.white,
-            foregroundColor: AppColors.ink,
-            elevation: 3,
-            onPressed: temMarcadores ? _enquadrarMarcadores : null,
-            child: const Icon(Icons.fit_screen),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FloatingActionButton.small(
+                heroTag: 'filtro-pendentes',
+                backgroundColor: widget.controller.soPendentes
+                    ? AppColors.primary
+                    : Colors.white,
+                foregroundColor: widget.controller.soPendentes
+                    ? Colors.white
+                    : AppColors.ink,
+                elevation: 3,
+                tooltip: 'Só pendentes de verificação',
+                onPressed: () => setState(
+                  () => widget.controller.alternarSoPendentes(),
+                ),
+                child: const Icon(Icons.pending_actions),
+              ),
+              const SizedBox(height: 10),
+              FloatingActionButton.small(
+                heroTag: 'mapa-calor',
+                backgroundColor: widget.controller.heatmapAtivo
+                    ? const Color(0xFFEF4444)
+                    : Colors.white,
+                foregroundColor: widget.controller.heatmapAtivo
+                    ? Colors.white
+                    : AppColors.ink,
+                elevation: 3,
+                tooltip: 'Mapa de calor (regiões mais afetadas)',
+                onPressed: () =>
+                    setState(() => widget.controller.alternarHeatmap()),
+                child: const Icon(Icons.local_fire_department),
+              ),
+              const SizedBox(height: 10),
+              FloatingActionButton.small(
+                heroTag: 'enquadrar-ocorrencias',
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.ink,
+                elevation: 3,
+                onPressed: temMarcadores ? _enquadrarMarcadores : null,
+                child: const Icon(Icons.fit_screen),
+              ),
+            ],
           ),
         ),
 

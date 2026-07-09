@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/ocorrencia_model.dart';
 import '../services/auth_service.dart';
+import '../services/classificacao_ia_service.dart';
 import '../services/cloudinary_service.dart';
 import '../services/ocorrencia_service.dart';
 import '../services/usuario_service.dart';
@@ -53,7 +54,14 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   final List<XFile?> _imagens = List.filled(3, null, growable: false);
   final List<Uint8List?> _imagensBytes = List.filled(3, null, growable: false);
 
+  // Vídeo opcional (até 30s)
+  XFile? _video;
+  Uint8List? _videoBytes;
+
+  final _classificacaoService = ClassificacaoIaService();
   String? _categoria;
+  bool _anonima = false;
+  bool _sugerindoCategoria = false;
   double? _latitude;
   double? _longitude;
 
@@ -106,6 +114,11 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
 
   // ── Fotos ────────────────────────────────────────────────────────────────
 
+  // Limites de tamanho aplicados no cliente — independentes de qualquer
+  // configuração no painel do Cloudinary (defesa em profundidade).
+  static const _maxFotoBytes = 8 * 1024 * 1024; // 8 MB
+  static const _maxVideoBytes = 50 * 1024 * 1024; // 50 MB
+
   Future<void> _selecionarImagem(int slot, ImageSource source) async {
     final img = await _picker.pickImage(
       source: source,
@@ -115,6 +128,10 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     if (!mounted || img == null) return;
     final bytes = await img.readAsBytes();
     if (!mounted) return;
+    if (bytes.length > _maxFotoBytes) {
+      _snack('Foto muito grande (máx. 8 MB). Tente outra.', error: true);
+      return;
+    }
     setState(() {
       _imagens[slot] = img;
       _imagensBytes[slot] = bytes;
@@ -179,6 +196,73 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
               onTap: () {
                 Navigator.pop(context);
                 _selecionarImagem(slot, ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Vídeo ────────────────────────────────────────────────────────────────
+
+  Future<void> _selecionarVideo(ImageSource source) async {
+    final video = await _picker.pickVideo(
+      source: source,
+      maxDuration: const Duration(seconds: 30),
+    );
+    if (!mounted || video == null) return;
+    final bytes = await video.readAsBytes();
+    if (!mounted) return;
+    if (bytes.length > _maxVideoBytes) {
+      _snack('Vídeo muito grande (máx. 50 MB). Tente outro.', error: true);
+      return;
+    }
+    setState(() {
+      _video = video;
+      _videoBytes = bytes;
+    });
+  }
+
+  void _removerVideo() {
+    setState(() {
+      _video = null;
+      _videoBytes = null;
+    });
+  }
+
+  void _abrirPickerVideo() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _C.bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            _pill(),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined, color: _C.primary),
+              title: const Text('Gravar vídeo'),
+              onTap: () {
+                Navigator.pop(context);
+                _selecionarVideo(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.video_library_outlined,
+                color: _C.primary,
+              ),
+              title: const Text('Escolher da galeria'),
+              onTap: () {
+                Navigator.pop(context);
+                _selecionarVideo(ImageSource.gallery);
               },
             ),
             const SizedBox(height: 8),
@@ -587,6 +671,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                     'Fotos',
                     '$_totalFotos foto${_totalFotos == 1 ? '' : 's'}',
                   ),
+                  _resumoItem('Vídeo', _video != null ? 'Anexado' : 'Nenhum'),
                   _resumoItem('Categoria', _categoria ?? '-'),
                   _resumoItem('Título', _tituloCtrl.text.trim()),
                   _resumoItem(
@@ -596,6 +681,10 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                   _resumoItem(
                     'Local',
                     _truncate(_enderecoCtrl.text.trim(), 60),
+                  ),
+                  _resumoItem(
+                    'Identidade',
+                    _anonima ? 'Anônima' : 'Visível',
                     last: true,
                   ),
                 ],
@@ -713,6 +802,16 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
         }
       }
 
+      String? videoUrl;
+      if (_video != null && _videoBytes != null) {
+        if (mounted) setState(() => _statusEnvio = 'Enviando vídeo...');
+        videoUrl = await _cloudinaryService.uploadVideo(
+          bytes: _videoBytes!,
+          fileName: _video!.name,
+        );
+        if (!mounted) return;
+      }
+
       setState(() => _statusEnvio = 'Salvando denúncia...');
       final perfil = await _usuarioService.carregarPerfil(uid);
       if (!mounted) return;
@@ -726,13 +825,19 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
         longitude: lon!,
         tipoLixo: categoria,
         usuarioId: uid,
-        usuarioNome: perfil?.nome.trim().isNotEmpty == true
-            ? perfil!.nome
-            : (_authService.currentUser?.displayName ??
-                  _authService.currentUser?.email?.split('@').first),
-        usuarioFotoUrl: perfil?.fotoUrl ?? _authService.currentUser?.photoURL,
+        videoUrl: videoUrl,
+        usuarioNome: _anonima
+            ? null
+            : (perfil?.nome.trim().isNotEmpty == true
+                  ? perfil!.nome
+                  : (_authService.currentUser?.displayName ??
+                        _authService.currentUser?.email?.split('@').first)),
+        usuarioFotoUrl: _anonima
+            ? null
+            : (perfil?.fotoUrl ?? _authService.currentUser?.photoURL),
         imagemUrl: urls.isNotEmpty ? urls.first : null,
         imagensUrls: urls,
+        anonima: _anonima,
       );
 
       await _ocorrenciaService.cadastrarOcorrencia(ocorrencia);
@@ -817,6 +922,8 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
           children: [
             _fotoSection(),
+            const SizedBox(height: 16),
+            _videoSection(),
             const SizedBox(height: 20),
             _categoriaSection(),
             const SizedBox(height: 16),
@@ -827,6 +934,8 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
             _localizacaoSection(),
             const SizedBox(height: 12),
             _botaoLocalizacao(),
+            const SizedBox(height: 16),
+            _anonimaSection(),
             if (_enviando) ...[const SizedBox(height: 16), _envioStatus()],
             const SizedBox(height: 24),
             _botaoEnviar(),
@@ -850,6 +959,74 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
           '$_totalFotos/3 foto${_totalFotos == 1 ? '' : 's'} selecionada${_totalFotos == 1 ? '' : 's'}',
           style: const TextStyle(fontSize: 11, color: _C.hint),
         ),
+      ],
+    );
+  }
+
+  // ── Seção vídeo (opcional) ───────────────────────────────────────────────
+
+  Widget _videoSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label('VÍDEO (OPCIONAL)'),
+        if (_video == null)
+          GestureDetector(
+            onTap: _enviando ? null : _abrirPickerVideo,
+            child: Container(
+              height: 56,
+              decoration: BoxDecoration(
+                color: _C.slotBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _C.slotBorder),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.videocam_outlined, color: _C.hint, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Adicionar vídeo (até 30s)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: _C.hint,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: _C.slotBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _C.slotBorder),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.videocam, color: _C.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _video!.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: _C.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: _enviando ? null : _removerVideo,
+                  child: const Icon(Icons.close, size: 18, color: _C.hint),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -985,11 +1162,58 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
 
   // ── Seção categoria ───────────────────────────────────────────────────────
 
+  Future<void> _sugerirCategoriaIA() async {
+    final titulo = _tituloCtrl.text.trim();
+    final descricao = _descricaoCtrl.text.trim();
+    if (titulo.isEmpty && descricao.isEmpty) {
+      _snack('Preencha título ou descrição antes de pedir sugestão.');
+      return;
+    }
+    setState(() => _sugerindoCategoria = true);
+    final categoria = await _classificacaoService.sugerirCategoria(
+      titulo: titulo,
+      descricao: descricao,
+    );
+    if (!mounted) return;
+    setState(() => _sugerindoCategoria = false);
+    if (categoria != null) {
+      setState(() => _categoria = categoria);
+    } else {
+      _snack('Não foi possível sugerir agora. Selecione manualmente.');
+    }
+  }
+
   Widget _categoriaSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label('CATEGORIA'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _label('CATEGORIA'),
+            TextButton.icon(
+              onPressed: (_enviando || _sugerindoCategoria)
+                  ? null
+                  : _sugerirCategoriaIA,
+              icon: _sugerindoCategoria
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome, size: 16),
+              label: const Text(
+                'Sugerir com IA',
+                style: TextStyle(fontSize: 12),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: _C.primary,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+              ),
+            ),
+          ],
+        ),
         DropdownButtonFormField<String>(
           initialValue: _categoria,
           decoration: _dec(''),
@@ -1291,6 +1515,33 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   }
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
+
+  Widget _anonimaSection() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: _C.slotBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _C.slotBorder),
+      ),
+      child: SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: _anonima,
+        onChanged: _enviando
+            ? null
+            : (v) => setState(() => _anonima = v),
+        activeThumbColor: _C.primary,
+        title: const Text(
+          'Denunciar anonimamente',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        subtitle: const Text(
+          'Seu nome e foto não aparecem para ninguém, nem para o órgão responsável.',
+          style: TextStyle(fontSize: 12, color: _C.hint),
+        ),
+      ),
+    );
+  }
 
   Widget _botaoEnviar() {
     return SizedBox(

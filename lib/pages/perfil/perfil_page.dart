@@ -4,8 +4,10 @@ import '../../models/ocorrencia_model.dart';
 import '../../models/usuario_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/ocorrencia_service.dart';
+import '../../services/role_service.dart';
 import '../../services/usuario_service.dart';
 import '../detalhe_ocorrencia_page.dart';
+import 'configuracoes_conta_page.dart';
 import '../../models/occurrence_types.dart';
 import '../../widgets/ocorrencia_actions.dart';
 import 'editar_perfil_page.dart';
@@ -18,7 +20,6 @@ class _C {
   static const text = Color(0xFF1A1A1A);
   static const hint = Color(0xFF8A8A8A);
   static const laranja = Color(0xFFFF8A1F);
-  static const sair = Color(0xFFC62828);
 }
 
 class PerfilPage extends StatefulWidget {
@@ -32,8 +33,23 @@ class _PerfilPageState extends State<PerfilPage> {
   final _authService = AuthService();
   final _usuarioService = UsuarioService();
   final _ocorrenciaService = OcorrenciaService();
+  final _roleService = RoleService();
 
-  int _aba = 0; // 0 = Estatísticas, 1 = Minhas denúncias
+  int _aba = 0; // 0 = Resumo, 1 = Minhas denúncias, 2 = Salvos
+  bool _isAutoridade = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checarPapel();
+  }
+
+  Future<void> _checarPapel() async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    final isAut = await _roleService.isAutoridade(uid);
+    if (mounted) setState(() => _isAutoridade = isAut);
+  }
 
   static const _meses = [
     'jan',
@@ -54,49 +70,6 @@ class _PerfilPageState extends State<PerfilPage> {
     final criacao = _authService.currentUser?.metadata.creationTime;
     if (criacao == null) return '-';
     return '${_meses[criacao.month - 1]}/${criacao.year}';
-  }
-
-  Future<void> _confirmarLogout() async {
-    final sair = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _C.bg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Sair da conta',
-          style: TextStyle(fontWeight: FontWeight.w700, color: _C.text),
-        ),
-        content: const Text(
-          'Tem certeza que deseja sair da sua conta?',
-          style: TextStyle(color: _C.text),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: _C.hint)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _C.sair,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Sair'),
-          ),
-        ],
-      ),
-    );
-
-    if (sair == true) {
-      await _authService.sair();
-      if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
-      }
-    }
   }
 
   void _abrirEdicao(UsuarioModel perfil) {
@@ -147,6 +120,16 @@ class _PerfilPageState extends State<PerfilPage> {
             Text('Meu Perfil', style: TextStyle(fontSize: 15, color: _C.hint)),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: _C.text),
+            tooltip: 'Conta e privacidade',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ConfiguracoesContaPage()),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: _C.cardBorder),
@@ -177,10 +160,10 @@ class _PerfilPageState extends State<PerfilPage> {
                     // "Sair da conta" aparece só na aba Estatísticas.
                     if (_aba == 0) ...[
                       ..._secaoEstatisticas(stats),
-                      const SizedBox(height: 20),
-                      _botaoSair(),
-                    ] else
-                      ..._secaoMinhasDenuncias(ocorrencias),
+                    ] else if (_aba == 1)
+                      ..._secaoMinhasDenuncias(ocorrencias)
+                    else
+                      _secaoSalvos(uid),
                   ],
                 ),
               );
@@ -194,70 +177,154 @@ class _PerfilPageState extends State<PerfilPage> {
   // ── Cards ─────────────────────────────────────────────────────────────────
 
   Widget _cardPerfil(UsuarioModel perfil) {
+    final incompleto =
+        perfil.bairro.trim().isEmpty && perfil.bio.trim().isEmpty;
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       decoration: BoxDecoration(
         color: _C.cardBg,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _C.cardBorder),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
           Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _avatar(perfil),
-              const SizedBox(height: 14),
-              Text(
-                perfil.nome.trim().isEmpty ? 'Sem nome' : perfil.nome,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: _C.text,
+              // Banner em gradiente
+              Container(
+                height: 76,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF16A34A), Color(0xFF22C55E)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Membro desde ${_membroDesde()}',
-                style: const TextStyle(fontSize: 13, color: _C.hint),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.location_on, size: 15, color: _C.hint),
-                  const SizedBox(width: 4),
-                  Text(
-                    perfil.bairro.trim().isEmpty
-                        ? 'Bairro não informado'
-                        : perfil.bairro,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: _C.text,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 54, 20, 20),
+                child: Column(
+                  children: [
+                    Text(
+                      perfil.nome.trim().isEmpty ? 'Sem nome' : perfil.nome,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: _C.text,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              if (perfil.bio.trim().isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  perfil.bio,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: _C.hint,
-                    height: 1.4,
-                  ),
+                    if (_isAutoridade) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFF22C55E,
+                          ).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(
+                              0xFF22C55E,
+                            ).withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.shield,
+                              size: 14,
+                              color: Color(0xFF16A34A),
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Autoridade',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF16A34A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    Text(
+                      'Membro desde ${_membroDesde()}',
+                      style: const TextStyle(fontSize: 13, color: _C.hint),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.location_on, size: 15, color: _C.hint),
+                        const SizedBox(width: 4),
+                        Text(
+                          perfil.bairro.trim().isEmpty
+                              ? 'Bairro não informado'
+                              : perfil.bairro,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: _C.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (perfil.bio.trim().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        perfil.bio,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _C.hint,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    if (incompleto) ...[
+                      const SizedBox(height: 14),
+                      _nudgeCompletar(perfil),
+                    ],
+                  ],
                 ),
-              ],
+              ),
             ],
           ),
+          // Avatar sobreposto, com anel
           Positioned(
-            top: 0,
+            top: 30,
+            left: 0,
             right: 0,
-            child: GestureDetector(
-              onTap: () => _abrirEdicao(perfil),
-              child: const Icon(Icons.edit_outlined, size: 22, color: _C.text),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: _C.cardBg,
+                  shape: BoxShape.circle,
+                ),
+                child: _avatar(perfil),
+              ),
+            ),
+          ),
+          // Botão editar sobre o banner
+          Positioned(
+            top: 6,
+            right: 6,
+            child: IconButton(
+              icon: const Icon(
+                Icons.edit_outlined,
+                size: 20,
+                color: Colors.white,
+              ),
+              tooltip: 'Editar perfil',
+              onPressed: () => _abrirEdicao(perfil),
             ),
           ),
         ],
@@ -265,16 +332,48 @@ class _PerfilPageState extends State<PerfilPage> {
     );
   }
 
+  Widget _nudgeCompletar(UsuarioModel perfil) {
+    return GestureDetector(
+      onTap: () => _abrirEdicao(perfil),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: _C.laranja.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _C.laranja.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.auto_awesome, size: 18, color: _C.laranja),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Complete seu perfil — adicione seu bairro e uma bio.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: _C.text,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18, color: _C.laranja),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _avatar(UsuarioModel perfil) {
     if (perfil.fotoUrl != null && perfil.fotoUrl!.isNotEmpty) {
       return CircleAvatar(
-        radius: 46,
+        radius: 42,
         backgroundColor: _C.avatarBg,
         backgroundImage: NetworkImage(perfil.fotoUrl!),
       );
     }
     return CircleAvatar(
-      radius: 46,
+      radius: 42,
       backgroundColor: _C.avatarBg,
       child: Text(
         perfil.iniciais,
@@ -303,39 +402,6 @@ class _PerfilPageState extends State<PerfilPage> {
             valor,
             style: const TextStyle(
               fontSize: 30,
-              fontWeight: FontWeight.w800,
-              color: _C.text,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _cardTaxa(int taxa) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: _C.cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _C.cardBorder),
-      ),
-      child: Column(
-        children: [
-          const Text(
-            'Taxa de resolução',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: _C.text,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '$taxa%',
-            style: const TextStyle(
-              fontSize: 32,
               fontWeight: FontWeight.w800,
               color: _C.text,
             ),
@@ -385,29 +451,7 @@ class _PerfilPageState extends State<PerfilPage> {
     );
   }
 
-  Widget _botaoSair() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: _confirmarLogout,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: _C.sair,
-          side: const BorderSide(color: _C.sair),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        icon: const Icon(Icons.logout, size: 18),
-        label: const Text(
-          'Sair da conta',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
-  }
-
-  // ── Abas (Estatísticas / Minhas denúncias) ────────────────────────────────
+  // ── Abas (Resumo / Minhas denúncias) ──────────────────────────────────────
 
   Widget _abas() {
     return Container(
@@ -419,8 +463,9 @@ class _PerfilPageState extends State<PerfilPage> {
       ),
       child: Row(
         children: [
-          Expanded(child: _abaBtn('Estatísticas', 0)),
+          Expanded(child: _abaBtn('Resumo', 0)),
           Expanded(child: _abaBtn('Minhas denúncias', 1)),
+          Expanded(child: _abaBtn('Salvos', 2)),
         ],
       ),
     );
@@ -455,8 +500,93 @@ class _PerfilPageState extends State<PerfilPage> {
 
   // ── Seção: Estatísticas ───────────────────────────────────────────────────
 
+  // Meu impacto: reconhecimento oficial das denúncias do usuário pela
+  // autoridade (mais forte que o status que o próprio cidadão define).
+  Widget _cardImpacto(_Stats stats) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF16A34A), Color(0xFF22C55E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.volunteer_activism, size: 18, color: Colors.white),
+              SizedBox(width: 8),
+              Text(
+                'Meu impacto',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _impactoItem(
+                  '${stats.verificadas}',
+                  'Verificadas\npela autoridade',
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 44,
+                color: Colors.white.withValues(alpha: 0.3),
+              ),
+              Expanded(
+                child: _impactoItem(
+                  '${stats.resolvidasOficial}',
+                  'Resolvidas\noficialmente',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _impactoItem(String valor, String label) {
+    return Column(
+      children: [
+        Text(
+          valor,
+          style: const TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            height: 1.3,
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+        ),
+      ],
+    );
+  }
+
   List<Widget> _secaoEstatisticas(_Stats stats) {
     return [
+      _cardImpacto(stats),
+      const SizedBox(height: 14),
       Row(
         children: [
           Expanded(child: _cardStat('Denúncias', '${stats.total}')),
@@ -464,16 +594,6 @@ class _PerfilPageState extends State<PerfilPage> {
           Expanded(child: _cardStat('Curtidas recebidas', '${stats.curtidas}')),
         ],
       ),
-      const SizedBox(height: 14),
-      Row(
-        children: [
-          Expanded(child: _cardStat('Resolvidas', '${stats.resolvidas}')),
-          const SizedBox(width: 14),
-          Expanded(child: _cardStat('Andamento', '${stats.andamento}')),
-        ],
-      ),
-      const SizedBox(height: 14),
-      _cardTaxa(stats.taxa),
       const SizedBox(height: 14),
       _cardCategoria(stats.categoriaTop),
     ];
@@ -520,7 +640,90 @@ class _PerfilPageState extends State<PerfilPage> {
     );
   }
 
-  Widget _denunciaCard(OcorrenciaModel o) {
+  Widget _secaoSalvos(String uid) {
+    return StreamBuilder<Set<String>>(
+      stream: _usuarioService.observarFavoritosIds(uid),
+      initialData: const <String>{},
+      builder: (context, favSnap) {
+        final favoritos = favSnap.data ?? const <String>{};
+        if (favoritos.isEmpty) return _salvosVazio();
+
+        return StreamBuilder<List<OcorrenciaModel>>(
+          stream: _ocorrenciaService.listarOcorrencias(),
+          builder: (context, ocorrenciasSnap) {
+            final salvas =
+                (ocorrenciasSnap.data ?? const <OcorrenciaModel>[])
+                    .where((o) => favoritos.contains(o.id))
+                    .toList()
+                  ..sort((a, b) {
+                    final da = a.dataCriacao;
+                    final db = b.dataCriacao;
+                    if (da == null && db == null) return 0;
+                    if (da == null) return 1;
+                    if (db == null) return -1;
+                    return db.compareTo(da);
+                  });
+
+            if (salvas.isEmpty) return _salvosVazio();
+            return Column(
+              children: [
+                for (final o in salvas)
+                  _denunciaCard(
+                    o,
+                    gerenciar: false,
+                    onRemoverSalvo: () => _removerSalvo(uid, o.id),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _salvosVazio() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+      decoration: BoxDecoration(
+        color: _C.cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _C.cardBorder),
+      ),
+      child: const Column(
+        children: [
+          Icon(Icons.bookmark_border, size: 48, color: _C.hint),
+          SizedBox(height: 12),
+          Text(
+            'Nenhuma denúncia salva ainda',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: _C.hint),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removerSalvo(String uid, String ocorrenciaId) async {
+    try {
+      await _usuarioService.removerFavorito(uid, ocorrenciaId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Denúncia removida dos salvos.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível remover dos salvos.')),
+      );
+    }
+  }
+
+  Widget _denunciaCard(
+    OcorrenciaModel o, {
+    bool gerenciar = true,
+    VoidCallback? onRemoverSalvo,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
@@ -593,37 +796,48 @@ class _PerfilPageState extends State<PerfilPage> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      GestureDetector(
-                        onTap: () => showOcorrenciaActions(
-                          context: context,
-                          ocorrencia: o,
-                          service: _ocorrenciaService,
-                        ),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          decoration: BoxDecoration(
-                            color: _C.text.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: _C.cardBorder),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.tune, size: 14, color: _C.text),
-                              SizedBox(width: 6),
-                              Text(
-                                'Gerenciar denúncia',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                      if (gerenciar || onRemoverSalvo != null)
+                        GestureDetector(
+                          onTap: gerenciar
+                              ? () => showOcorrenciaActions(
+                                  context: context,
+                                  ocorrencia: o,
+                                  service: _ocorrenciaService,
+                                )
+                              : onRemoverSalvo,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _C.text.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: _C.cardBorder),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  gerenciar
+                                      ? Icons.tune
+                                      : Icons.bookmark_remove_outlined,
+                                  size: 14,
                                   color: _C.text,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 6),
+                                Text(
+                                  gerenciar
+                                      ? 'Gerenciar denúncia'
+                                      : 'Remover dos salvos',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _C.text,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -696,23 +910,7 @@ class _PerfilPageState extends State<PerfilPage> {
   // ── Estatísticas ──────────────────────────────────────────────────────────
 
   _Stats _calcularStats(List<OcorrenciaModel> ocorrencias) {
-    final resolvidas = ocorrencias
-        .where(
-          (o) =>
-              OccurrenceStatusParser.fromString(o.status) ==
-              OccurrenceStatus.resolved,
-        )
-        .length;
-    final andamento = ocorrencias
-        .where(
-          (o) =>
-              OccurrenceStatusParser.fromString(o.status) ==
-              OccurrenceStatus.inProgress,
-        )
-        .length;
-    // Taxa de resolução = Resolvidas / total de denúncias
     final base = ocorrencias.length;
-    final taxa = base == 0 ? 0 : ((resolvidas / base) * 100).round();
 
     // categoria mais reportada (moda de tipoLixo)
     String? categoriaTop;
@@ -732,13 +930,18 @@ class _PerfilPageState extends State<PerfilPage> {
     // Total de curtidas recebidas somando os likes de todas as denúncias.
     final curtidas = ocorrencias.fold<int>(0, (soma, o) => soma + o.likes);
 
+    // Impacto oficial: verificadas pela autoridade e resolvidas oficialmente.
+    final verificadas = ocorrencias.where((o) => o.verificada).length;
+    final resolvidasOficial = ocorrencias
+        .where((o) => o.verificada && o.statusOficial == 'resolvida')
+        .length;
+
     return _Stats(
       total: base,
       curtidas: curtidas,
-      resolvidas: resolvidas,
-      andamento: andamento,
-      taxa: taxa,
       categoriaTop: categoriaTop,
+      verificadas: verificadas,
+      resolvidasOficial: resolvidasOficial,
     );
   }
 }
@@ -746,17 +949,15 @@ class _PerfilPageState extends State<PerfilPage> {
 class _Stats {
   final int total;
   final int curtidas;
-  final int resolvidas;
-  final int andamento;
-  final int taxa;
   final String? categoriaTop;
+  final int verificadas;
+  final int resolvidasOficial;
 
   _Stats({
     required this.total,
     required this.curtidas,
-    required this.resolvidas,
-    required this.andamento,
-    required this.taxa,
     required this.categoriaTop,
+    required this.verificadas,
+    required this.resolvidasOficial,
   });
 }

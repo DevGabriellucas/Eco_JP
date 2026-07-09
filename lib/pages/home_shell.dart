@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
+import '../services/role_service.dart';
 import '../theme/app_theme.dart';
 import 'estatisticas_page.dart';
+import 'fila_verificacao_page.dart';
 import 'home_page.dart';
 import 'mapPage/map_page.dart';
 import 'perfil/perfil_page.dart';
@@ -22,6 +25,26 @@ class _HomeShellState extends State<HomeShell> {
   // já visitadas para preservar o estado ao alternar entre elas.
   final Set<int> _visitadas = {0};
 
+  final _roleService = RoleService();
+  final _authService = AuthService();
+
+  // Autoridade não cria denúncia: o botão central vira atalho para a fila
+  // de verificação. Cidadão comum mantém o "+" para registrar denúncia.
+  bool _isAutoridade = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checarPapel();
+  }
+
+  Future<void> _checarPapel() async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    final isAut = await _roleService.isAutoridade(uid);
+    if (mounted) setState(() => _isAutoridade = isAut);
+  }
+
   // Índices: 0=Feed, 1=Mapa, (2 é o botão +), 3=Dados, 4=Perfil
   Widget _pagina(int i) {
     switch (i) {
@@ -40,7 +63,13 @@ class _HomeShellState extends State<HomeShell> {
 
   void _onTapItem(int i) {
     if (i == 2) {
-      Navigator.of(context).pushNamed('/form-ocorrencia');
+      if (_isAutoridade) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const FilaVerificacaoPage()),
+        );
+      } else {
+        Navigator.of(context).pushNamed('/form-ocorrencia');
+      }
       return;
     }
     setState(() {
@@ -59,7 +88,11 @@ class _HomeShellState extends State<HomeShell> {
           (i) => _visitadas.contains(i) ? _pagina(i) : const SizedBox.shrink(),
         ),
       ),
-      bottomNavigationBar: _BottomNav(currentIndex: _index, onTap: _onTapItem),
+      bottomNavigationBar: _BottomNav(
+        currentIndex: _index,
+        onTap: _onTapItem,
+        isAutoridade: _isAutoridade,
+      ),
     );
   }
 }
@@ -67,8 +100,13 @@ class _HomeShellState extends State<HomeShell> {
 class _BottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final bool isAutoridade;
 
-  const _BottomNav({required this.currentIndex, required this.onTap});
+  const _BottomNav({
+    required this.currentIndex,
+    required this.onTap,
+    required this.isAutoridade,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -126,6 +164,7 @@ class _BottomNav extends StatelessWidget {
   }
 
   Widget _botaoCentral() {
+    // Autoridade: atalho para a fila de verificação (selo). Cidadão: "+".
     return Expanded(
       child: Center(
         child: GestureDetector(
@@ -133,11 +172,15 @@ class _BottomNav extends StatelessWidget {
           child: Container(
             width: 52,
             height: 52,
-            decoration: const BoxDecoration(
-              color: AppColors.ink,
+            decoration: BoxDecoration(
+              color: isAutoridade ? const Color(0xFF22C55E) : AppColors.ink,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.add, color: Colors.white, size: 28),
+            child: Icon(
+              isAutoridade ? Icons.fact_check_outlined : Icons.add,
+              color: Colors.white,
+              size: 26,
+            ),
           ),
         ),
       ),

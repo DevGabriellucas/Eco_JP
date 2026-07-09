@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/ocorrencia_service.dart';
 
 enum _OcorrenciaSheetAction { edit, delete }
 
 // ─────────────────────────────────────────
-//  AÇÕES DO DONO (alterar status / excluir)
+//  AÇÕES DO DONO (editar / excluir)
 // ─────────────────────────────────────────
 
-/// Abre um menu para o dono alterar o status ou excluir a denúncia.
+/// Abre um menu para o dono editar ou excluir a denúncia.
 /// Compartilhado entre o feed (home) e o perfil.
 Future<void> showOcorrenciaActions({
   required BuildContext context,
@@ -24,19 +23,6 @@ Future<void> showOcorrenciaActions({
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (ctx) {
-      Widget opcaoStatus(OccurrenceStatus status, String valorBanco) {
-        final atual =
-            OccurrenceStatusParser.fromString(ocorrencia.status) == status;
-        return ListTile(
-          leading: Icon(status.icon, color: status.color),
-          title: Text(status.label),
-          trailing: atual
-              ? const Icon(Icons.check, size: 18, color: Color(0xFF4CAF50))
-              : null,
-          onTap: atual ? null : () => Navigator.pop(ctx, valorBanco),
-        );
-      }
-
       return SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -51,11 +37,11 @@ Future<void> showOcorrenciaActions({
               ),
             ),
             const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 6),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Alterar status',
+                  'Gerenciar denúncia',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -64,10 +50,6 @@ Future<void> showOcorrenciaActions({
                 ),
               ),
             ),
-            opcaoStatus(OccurrenceStatus.inProgress, 'Pendente'),
-            opcaoStatus(OccurrenceStatus.resolved, 'Resolvido'),
-            opcaoStatus(OccurrenceStatus.unresolved, 'Nao resolvido'),
-            const Divider(height: 1),
             ListTile(
               leading: const Icon(
                 Icons.edit_outlined,
@@ -105,19 +87,6 @@ Future<void> showOcorrenciaActions({
   // conhecido do Flutter: https://github.com/flutter/flutter/issues/39131).
   await Future<void>.delayed(Duration.zero);
   if (!context.mounted) return;
-
-  if (action is String) {
-    try {
-      await service.atualizarStatus(ocorrencia.id, action);
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível alterar o status.')),
-        );
-      }
-    }
-    return;
-  }
 
   switch (action) {
     case _OcorrenciaSheetAction.edit:

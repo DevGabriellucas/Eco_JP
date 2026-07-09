@@ -140,6 +140,122 @@ class AuthService {
     }
   }
 
+  // ── Verificação de e-mail ─────────────────────────────────────────────────
+
+  /// E-mail da conta logada (para exibir na tela de confirmação).
+  String? get emailAtual => _auth.currentUser?.email;
+
+  /// Indica se o usuário logado ainda precisa confirmar o e-mail.
+  /// Contas criadas por provedor federado (ex.: Google) já vêm verificadas, por
+  /// isso só exigimos confirmação de quem entrou apenas com e-mail/senha.
+  bool get precisaVerificarEmail {
+    final user = _auth.currentUser;
+    if (user == null || user.emailVerified) return false;
+    return user.providerData.every((p) => p.providerId == 'password');
+  }
+
+  /// Envia (ou reenvia) o e-mail de confirmação para o usuário logado.
+  Future<AuthResult> enviarEmailVerificacao() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return AuthResult(success: false, message: 'Nenhuma conta conectada.');
+      }
+      if (user.emailVerified) {
+        return AuthResult(success: true, message: 'E-mail já confirmado.');
+      }
+      await user.sendEmailVerification();
+      return AuthResult(
+        success: true,
+        message: 'Enviamos um link de confirmação para o seu e-mail.',
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'too-many-requests') {
+        return AuthResult(
+          success: false,
+          message:
+              'Muitas tentativas. Aguarde alguns minutos antes de reenviar.',
+        );
+      }
+      return AuthResult(
+        success: false,
+        message: 'Nao foi possivel enviar o e-mail (${e.code}).',
+      );
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: 'Erro ao enviar o e-mail de confirmacao: $e',
+      );
+    }
+  }
+
+  /// Recarrega os dados da conta no servidor e devolve se o e-mail já foi
+  /// confirmado. Necessário porque o status de verificação não chega sozinho
+  /// pelo [authStateChanges].
+  Future<bool> recarregarEVerificarEmail() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    try {
+      await user.reload();
+    } catch (_) {
+      return false;
+    }
+    return _auth.currentUser?.emailVerified ?? false;
+  }
+
+  // ── Exclusão de conta (LGPD art. 18) ────────────────────────────────────
+
+  /// Exclui a conta do Firebase Auth do usuário logado.
+  /// Retorna [AuthResult] com `message == 'requires-recent-login'` se o
+  /// Firebase exigir reautenticação antes da exclusão.
+  Future<AuthResult> excluirContaAuth() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return AuthResult(success: false, message: 'Nenhuma conta conectada.');
+      }
+      await user.delete();
+      return AuthResult(success: true);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        return AuthResult(success: false, message: 'requires-recent-login');
+      }
+      return AuthResult(
+        success: false,
+        message: 'Erro ao excluir conta (${e.code}).',
+      );
+    } catch (e) {
+      return AuthResult(success: false, message: 'Erro inesperado: $e');
+    }
+  }
+
+  /// Reautentica o usuário com e-mail/senha (necessário antes de excluir conta
+  /// quando a sessão é antiga).
+  Future<AuthResult> reautenticarSenha(String senha) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null || user.email == null) {
+        return AuthResult(success: false, message: 'Sessão inválida.');
+      }
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: senha,
+      );
+      await user.reauthenticateWithCredential(credential);
+      return AuthResult(success: true);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        return AuthResult(success: false, message: 'Senha incorreta.');
+      }
+      return AuthResult(
+        success: false,
+        message: 'Erro ao reautenticar (${e.code}).',
+      );
+    } catch (e) {
+      return AuthResult(success: false, message: 'Erro inesperado: $e');
+    }
+  }
+
   Future<void> sair() async {
     try {
       await GoogleSignIn().signOut();

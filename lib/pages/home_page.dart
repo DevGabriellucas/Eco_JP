@@ -1,17 +1,24 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../models/comentario_model.dart';
 import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/auth_service.dart';
 import '../services/notificacao_service.dart';
 import '../services/ocorrencia_service.dart';
+import '../services/role_service.dart';
+import '../services/usuario_service.dart';
+import '../services/moderacao_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/feed_states.dart';
 import '../widgets/occurrence_card.dart';
+import '../widgets/occurrence_comments_sheet.dart';
 import '../widgets/ocorrencia_actions.dart';
-import 'detalhe_ocorrencia_page.dart';
+import '../widgets/report_content_sheet.dart';
+import 'fila_verificacao_page.dart';
 import 'notificacoes_page.dart';
+import 'perfil/perfil_publico_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -28,6 +35,9 @@ class _HomePageState extends State<HomePage> {
   final _ocorrenciaService = OcorrenciaService();
   final _authService = AuthService();
   final _notificacaoService = NotificacaoService();
+  final _roleService = RoleService();
+  final _usuarioService = UsuarioService();
+  final _moderacaoService = ModeracaoService();
 
   late Stream<List<OcorrenciaModel>> _feedStream;
 
@@ -42,14 +52,21 @@ class _HomePageState extends State<HomePage> {
 
   final Map<String, String> _nomeCache = {};
   final Map<String, String?> _fotoCache = {};
+  final Set<String> _hiddenOccurrenceIds = <String>{};
 
   // Cache dos streams de contagem de comentários por ocorrência. Sem isso, um
   // novo listener do Firestore seria criado a cada rebuild do feed (a cada
   // like, filtro ou scroll), desperdiçando leituras e bateria.
   final Map<String, Stream<int>> _commentCountCache = {};
+  final Map<String, Stream<ComentarioModel?>> _latestCommentCache = {};
 
-  Stream<int> _commentCountStream(String id) =>
-      _commentCountCache[id] ??= _ocorrenciaService.contarComentarios(id);
+  Stream<int> _commentCountStream(String id) => _commentCountCache[id] ??=
+      _ocorrenciaService.contarComentarios(id).asBroadcastStream();
+
+  Stream<ComentarioModel?> _latestCommentStream(String id) =>
+      _latestCommentCache[id] ??= _ocorrenciaService
+          .observarUltimoComentario(id)
+          .asBroadcastStream();
 
   @override
   void initState() {
@@ -59,7 +76,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Stream<List<OcorrenciaModel>> _buildFeedStream() {
-    return _ocorrenciaService.listarOcorrenciasLimitadas(_pageLimit);
+    return _ocorrenciaService.listarFeedComFixadas(_pageLimit);
   }
 
   bool get _hasActiveFilters =>
@@ -121,6 +138,7 @@ class _HomePageState extends State<HomePage> {
     final missingIds = ocorrencias
         .where(
           (o) =>
+              !o.anonima &&
               o.usuarioId != null &&
               (o.usuarioNome == null || o.usuarioNome!.trim().isEmpty) &&
               !_nomeCache.containsKey(o.usuarioId),
@@ -157,6 +175,7 @@ class _HomePageState extends State<HomePage> {
   List<OcorrenciaModel> _applyFilters(List<OcorrenciaModel> ocorrencias) {
     final query = _searchQuery.toLowerCase().trim();
     return ocorrencias.where((o) {
+      if (_hiddenOccurrenceIds.contains(o.id)) return false;
       final matchesSearch =
           query.isEmpty ||
           o.localizacao.toLowerCase().contains(query) ||
@@ -274,10 +293,37 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _openDetail(OcorrenciaModel o) {
+  void _openComments(OcorrenciaModel o) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => OccurrenceCommentsSheet(
+        occurrence: o,
+        ocorrenciaService: _ocorrenciaService,
+        authService: _authService,
+        usuarioService: _usuarioService,
+        notificacaoService: _notificacaoService,
+      ),
+    );
+  }
+
+  void _openPublicProfile(
+    OcorrenciaModel o, {
+    required String? nomeAutor,
+    required String? fotoAutor,
+  }) {
+    final authorId = o.usuarioId;
+    if (authorId == null || o.anonima) return;
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => DetalheOcorrenciaPage(occurrence: o)),
+      MaterialPageRoute(
+        builder: (_) => PerfilPublicoPage(
+          userId: authorId,
+          fallbackName: nomeAutor ?? 'Usuário',
+          fallbackPhotoUrl: fotoAutor,
+        ),
+      ),
     );
   }
 
@@ -287,6 +333,111 @@ class _HomePageState extends State<HomePage> {
       ocorrencia: o,
       service: _ocorrenciaService,
     );
+  }
+
+  Future<void> _denunciarOcorrencia(OcorrenciaModel o) async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    final result = await showReportContentSheet(
+      context,
+      title: 'Denunciar publicação',
+    );
+    if (result == null) return;
+
+    try {
+      await _moderacaoService.denunciarOcorrencia(
+        ocorrenciaId: o.id,
+        denuncianteId: uid,
+        motivo: result.motivo,
+        detalhe: result.detalhe,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Denúncia enviada para moderação.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível enviar a denúncia.')),
+      );
+    }
+  }
+
+  void _ocultarOcorrencia(OcorrenciaModel o) {
+    setState(() => _hiddenOccurrenceIds.add(o.id));
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('Denúncia ocultada do feed.'),
+          action: SnackBarAction(
+            label: 'Desfazer',
+            onPressed: () {
+              if (!mounted) return;
+              setState(() => _hiddenOccurrenceIds.remove(o.id));
+            },
+          ),
+        ),
+      );
+  }
+
+  Future<void> _toggleSalvarOcorrencia(
+    OcorrenciaModel o, {
+    required bool salvo,
+  }) async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    final vaiSalvar = !salvo;
+
+    try {
+      await _usuarioService.definirFavorito(
+        uid: uid,
+        ocorrenciaId: o.id,
+        salvar: vaiSalvar,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              vaiSalvar
+                  ? 'Denúncia salva nos favoritos.'
+                  : 'Denúncia removida dos favoritos.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível atualizar os salvos.')),
+      );
+    }
+  }
+
+  Future<void> _toggleFixarOcorrencia(OcorrenciaModel o) async {
+    final fixar = !o.fixada;
+    try {
+      await _ocorrenciaService.definirFixada(o.id, fixada: fixar);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              fixar
+                  ? 'Denuncia fixada no topo do feed.'
+                  : 'Destaque removido do feed.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nao foi possivel atualizar o destaque.')),
+      );
+    }
   }
 
   @override
@@ -374,6 +525,21 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (uid != null)
+              StreamBuilder<bool>(
+                stream: _roleService.observarAutoridade(uid),
+                builder: (context, snap) {
+                  if (snap.data != true) return const SizedBox.shrink();
+                  return _BannerAutoridade(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const FilaVerificacaoPage(),
+                      ),
+                    ),
+                  );
+                },
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: _SearchBar(
@@ -424,6 +590,34 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildFeed(String? uid) {
+    if (uid == null) {
+      return _buildFeedContent(uid, const <String>{}, isAutoridade: false);
+    }
+
+    return StreamBuilder<Set<String>>(
+      stream: _usuarioService.observarFavoritosIds(uid),
+      initialData: const <String>{},
+      builder: (context, snapshot) {
+        return StreamBuilder<bool>(
+          stream: _roleService.observarAutoridade(uid),
+          initialData: false,
+          builder: (context, roleSnapshot) {
+            return _buildFeedContent(
+              uid,
+              snapshot.data ?? const <String>{},
+              isAutoridade: roleSnapshot.data == true,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFeedContent(
+    String? uid,
+    Set<String> favoritosIds, {
+    required bool isAutoridade,
+  }) {
     return StreamBuilder<List<OcorrenciaModel>>(
       stream: _feedStream,
       initialData: _cachedOccurrences.isEmpty ? null : _cachedOccurrences,
@@ -472,27 +666,47 @@ class _HomePageState extends State<HomePage> {
                   onLoadMore: _loadMore,
                   itemBuilder: (o) {
                     final isOwner = uid != null && o.usuarioId == uid;
-                    final nomeAutor =
-                        (o.usuarioNome != null &&
-                            o.usuarioNome!.trim().isNotEmpty)
-                        ? o.usuarioNome!
-                        : (_nomeCache[o.usuarioId]?.isNotEmpty == true
-                              ? _nomeCache[o.usuarioId]
-                              : null);
-                    final fotoAutor =
-                        (o.usuarioFotoUrl != null &&
-                            o.usuarioFotoUrl!.isNotEmpty)
-                        ? o.usuarioFotoUrl
-                        : _fotoCache[o.usuarioId];
+                    final nomeAutor = o.anonima
+                        ? 'Denunciante anônimo'
+                        : (o.usuarioNome != null &&
+                                  o.usuarioNome!.trim().isNotEmpty
+                              ? o.usuarioNome!
+                              : (_nomeCache[o.usuarioId]?.isNotEmpty == true
+                                    ? _nomeCache[o.usuarioId]
+                                    : null));
+                    final fotoAutor = o.anonima
+                        ? null
+                        : ((o.usuarioFotoUrl != null &&
+                                  o.usuarioFotoUrl!.isNotEmpty)
+                              ? o.usuarioFotoUrl
+                              : _fotoCache[o.usuarioId]);
 
                     return OccurrenceCard(
                       occurrence: o,
                       nomeAutor: nomeAutor,
                       fotoAutor: fotoAutor,
                       commentCountStream: _commentCountStream(o.id),
+                      latestCommentStream: _latestCommentStream(o.id),
+                      saved: favoritosIds.contains(o.id),
                       onLike: () => _toggleLike(o),
                       onDislike: () => _toggleDislike(o),
-                      onTap: () => _openDetail(o),
+                      onComment: () => _openComments(o),
+                      onAuthorTap: o.anonima || o.usuarioId == null
+                          ? null
+                          : () => _openPublicProfile(
+                              o,
+                              nomeAutor: nomeAutor,
+                              fotoAutor: fotoAutor,
+                            ),
+                      onReport: isOwner ? null : () => _denunciarOcorrencia(o),
+                      onTogglePin: isAutoridade
+                          ? () => _toggleFixarOcorrencia(o)
+                          : null,
+                      onSave: () => _toggleSalvarOcorrencia(
+                        o,
+                        salvo: favoritosIds.contains(o.id),
+                      ),
+                      onHide: () => _ocultarOcorrencia(o),
                       onManage: isOwner ? () => _gerenciarOcorrencia(o) : null,
                     );
                   },
@@ -803,6 +1017,45 @@ class _StatusChip extends StatelessWidget {
             fontWeight: FontWeight.w600,
             color: selected ? Colors.white : AppColors.muted,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+//  BANNER DE AUTORIDADE
+//  Visível no topo do feed apenas para contas com papel 'autoridade'.
+// ─────────────────────────────────────────
+
+class _BannerAutoridade extends StatelessWidget {
+  final VoidCallback onTap;
+  const _BannerAutoridade({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        color: const Color(0xFF1A1A1A),
+        child: Row(
+          children: const [
+            Icon(Icons.shield_outlined, size: 16, color: Color(0xFF22C55E)),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Fila de verificação — toque para ver denúncias pendentes',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 12, color: Colors.white54),
+          ],
         ),
       ),
     );

@@ -15,7 +15,7 @@ AppBar barraOcorrencias(
     actions: [
       IconButton(
         tooltip: 'Consultar coleta por bairro',
-        icon: const Icon(Icons.search, color: AppColors.ink),
+        icon: const Icon(Icons.local_shipping, color: AppColors.primary),
         onPressed: onBuscarBairro,
       ),
     ],

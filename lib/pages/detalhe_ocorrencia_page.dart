@@ -1,14 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:video_player/video_player.dart';
 
 import '../models/comentario_model.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/auth_service.dart';
 import '../services/notificacao_service.dart';
 import '../services/ocorrencia_service.dart';
+import '../services/role_service.dart';
 import '../services/usuario_service.dart';
 import '../models/occurrence_types.dart';
+import '../utils/compartilhamento.dart';
+import '../utils/navegacao_externa.dart';
 import '../utils/tempo_relativo.dart';
 
 // ─────────────────────────────────────────
@@ -24,6 +28,7 @@ class _C {
   static const orange = Color(0xFFFF8A1F);
   static const green = Color(0xFF22C55E);
   static const red = Color(0xFFEF4444);
+  static const blue = Color(0xFF3B82F6);
 }
 
 // ─────────────────────────────────────────
@@ -44,6 +49,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
   final _service = OcorrenciaService();
   final _usuarioService = UsuarioService();
   final _notificacaoService = NotificacaoService();
+  final _roleService = RoleService();
 
   late int _likes;
   late int _dislikes;
@@ -53,6 +59,14 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
   late List<String> _dislikedBy;
   String? _authorName;
   String? _authorPhoto;
+
+  // Verificação oficial
+  bool _isAutoridade = false;
+  late bool _verificada;
+  String? _verificadaPorNome;
+  DateTime? _verificadaEm;
+  String? _statusOficial;
+  bool _processandoVerif = false;
 
   @override
   void initState() {
@@ -64,11 +78,144 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
     _userDisliked = o.userDisliked;
     _likedBy = List<String>.from(o.likedBy);
     _dislikedBy = List<String>.from(o.dislikedBy);
+    _verificada = o.verificada;
+    _verificadaPorNome = o.verificadaPorNome;
+    _verificadaEm = o.verificadaEm;
+    _statusOficial = o.statusOficial;
     _fetchAuthorData();
+    _checarPapel();
+  }
+
+  Future<void> _checarPapel() async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    final isAut = await _roleService.isAutoridade(uid);
+    if (mounted) setState(() => _isAutoridade = isAut);
+  }
+
+  Future<void> _comoChegar() async {
+    final o = widget.occurrence;
+    final ok = await abrirRotaNoMapa(
+      latitude: o.latitude,
+      longitude: o.longitude,
+      rotulo: o.titulo,
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível abrir o app de mapas.')),
+      );
+    }
+  }
+
+  Future<void> _toggleVerificacao() async {
+    if (_processandoVerif) return;
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    final novo = !_verificada;
+
+    setState(() => _processandoVerif = true);
+
+    // Nome exibido no selo: usa o nome do perfil da autoridade.
+    String nome = 'Autoridade';
+    if (novo) {
+      final perfil = await _usuarioService.carregarPerfil(uid);
+      nome = perfil?.nome.trim().isNotEmpty == true
+          ? perfil!.nome.trim()
+          : (_authService.currentUser?.displayName ?? 'Autoridade');
+    }
+
+    try {
+      await _service.definirVerificacao(
+        widget.occurrence.id,
+        verificar: novo,
+        nomeAutoridade: nome,
+        autoridadeUid: uid,
+      );
+      if (!mounted) return;
+      setState(() {
+        _verificada = novo;
+        _verificadaPorNome = novo ? nome : _verificadaPorNome;
+        _verificadaEm = novo ? DateTime.now() : _verificadaEm;
+        _processandoVerif = false;
+      });
+      // Só notifica ao confirmar — reverter é correção interna, não avanço.
+      if (novo) _notificarStatusOficial('status_confirmada', nome);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _processandoVerif = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível alterar a verificação. Tente de novo.',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Define o status de triagem (em_analise / nao_confirmada / null = reverter).
+  Future<void> _handleStatusOficial(String? novoStatus) async {
+    if (_processandoVerif) return;
+    setState(() => _processandoVerif = true);
+
+    // Nome da autoridade só é necessário quando vamos notificar o cidadão
+    // (não notificamos reversões — são correção interna, não avanço real).
+    String? nomeAutoridade;
+    if (novoStatus != null) {
+      final uid = _authService.currentUser?.uid;
+      if (uid != null) {
+        final perfil = await _usuarioService.carregarPerfil(uid);
+        nomeAutoridade = perfil?.nome.trim().isNotEmpty == true
+            ? perfil!.nome.trim()
+            : (_authService.currentUser?.displayName ?? 'Autoridade');
+      }
+    }
+
+    try {
+      await _service.definirStatusOficial(widget.occurrence.id, novoStatus);
+      if (!mounted) return;
+      setState(() {
+        _statusOficial = novoStatus;
+        _processandoVerif = false;
+      });
+      if (novoStatus != null && nomeAutoridade != null) {
+        _notificarStatusOficial('status_$novoStatus', nomeAutoridade);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _processandoVerif = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível atualizar o status.')),
+      );
+    }
+  }
+
+  // Avisa o cidadão (no próprio inbox dele) que o status oficial avançou.
+  // Não revela identidade de ninguém — é uma notificação privada ao dono.
+  void _notificarStatusOficial(String tipo, String nomeAutoridade) {
+    final dono = widget.occurrence.usuarioId;
+    if (dono == null) return;
+    _notificacaoService.notificar(
+      donoId: dono,
+      tipo: tipo,
+      deUsuarioNome: nomeAutoridade,
+      ocorrenciaId: widget.occurrence.id,
+      ocorrenciaTitulo: widget.occurrence.titulo,
+    );
   }
 
   Future<void> _fetchAuthorData() async {
     final o = widget.occurrence;
+
+    // Proteção do denunciante: nunca resolve nome/foto reais, nem para
+    // autoridade — a identidade não é exibida em nenhuma tela.
+    if (o.anonima) {
+      setState(() {
+        _authorName = 'Denunciante anônimo';
+        _authorPhoto = null;
+      });
+      return;
+    }
 
     final hasSavedName =
         o.usuarioNome != null && o.usuarioNome!.trim().isNotEmpty;
@@ -252,7 +399,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
     }
   }
 
-  void _openCommentSheet() {
+  void _openCommentSheet({String? parentId, String? respondendoA}) {
     final authUser = _authService.currentUser;
     if (authUser == null) return;
 
@@ -261,6 +408,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _CommentInputSheet(
+        respondendoA: respondendoA,
         onSubmit: (text) async {
           final perfil = await _usuarioService.carregarPerfil(authUser.uid);
           final nome = perfil?.nome.trim().isNotEmpty == true
@@ -274,6 +422,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
             userName: nome,
             userPhotoUrl: foto,
             texto: text,
+            parentId: parentId,
           );
           await _service.adicionarComentario(widget.occurrence.id, comentario);
           // Notifica o dono da denúncia (se não for o próprio autor).
@@ -290,6 +439,18 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
         },
       ),
     );
+  }
+
+  Future<void> _toggleLikeComentario(ComentarioModel c) async {
+    if (_uid.isEmpty) return;
+    try {
+      await _service.toggleLikeComentario(widget.occurrence.id, c.id, _uid);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível curtir agora.')),
+      );
+    }
   }
 
   Future<void> _deleteComment(ComentarioModel c) async {
@@ -356,11 +517,49 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                       ],
                     ),
 
+                    if (o.videoUrl != null) _VideoPlayerCard(url: o.videoUrl!),
+
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (_verificada && _statusOficial == 'resolvida') ...[
+                            _StatusOficialBanner(
+                              label: 'Resolvida — tratada pelo órgão responsável',
+                              icon: Icons.check_circle,
+                              color: _C.green,
+                            ),
+                            const SizedBox(height: 10),
+                          ] else if (_verificada &&
+                              _statusOficial == 'encaminhada') ...[
+                            _StatusOficialBanner(
+                              label: 'Encaminhada ao órgão responsável',
+                              icon: Icons.send,
+                              color: _C.blue,
+                            ),
+                            const SizedBox(height: 10),
+                          ] else if (_verificada) ...[
+                            _VerificadaBanner(
+                              nome: _verificadaPorNome,
+                              data: _verificadaEm,
+                            ),
+                            const SizedBox(height: 10),
+                          ] else if (_statusOficial == 'em_analise') ...[
+                            _StatusOficialBanner(
+                              label: 'Em análise pela autoridade',
+                              icon: Icons.search,
+                              color: _C.orange,
+                            ),
+                            const SizedBox(height: 10),
+                          ] else if (_statusOficial == 'nao_confirmada') ...[
+                            _StatusOficialBanner(
+                              label: 'Não confirmada — problema não encontrado no local',
+                              icon: Icons.cancel_outlined,
+                              color: _C.red,
+                            ),
+                            const SizedBox(height: 10),
+                          ],
                           // Título
                           _FieldCard(
                             child: Text(
@@ -432,6 +631,24 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                               ),
                             ],
                           ),
+                          if (_isAutoridade) ...[
+                            const SizedBox(height: 16),
+                            _PainelAutoridade(
+                              verificada: _verificada,
+                              statusOficial: _statusOficial,
+                              processando: _processandoVerif,
+                              onConfirmar: _toggleVerificacao,
+                              onEmAnalise: () =>
+                                  _handleStatusOficial('em_analise'),
+                              onNaoConfirmada: () =>
+                                  _handleStatusOficial('nao_confirmada'),
+                              onEncaminhar: () =>
+                                  _handleStatusOficial('encaminhada'),
+                              onResolver: () =>
+                                  _handleStatusOficial('resolvida'),
+                              onReverter: () => _handleStatusOficial(null),
+                            ),
+                          ],
                           const SizedBox(height: 28),
 
                           // Seção de acompanhamento (linha do tempo de status)
@@ -511,16 +728,46 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                               if (comentarios.isEmpty) {
                                 return const _EmptyComments();
                               }
+                              // Agrupa respostas sob o comentário raiz.
+                              final raizes = comentarios
+                                  .where((c) => c.parentId == null)
+                                  .toList();
+                              final respostasPor =
+                                  <String, List<ComentarioModel>>{};
+                              for (final c in comentarios) {
+                                if (c.parentId != null) {
+                                  (respostasPor[c.parentId!] ??= []).add(c);
+                                }
+                              }
                               return Column(
-                                children: comentarios
-                                    .map(
-                                      (c) => _CommentItem(
-                                        comentario: c,
-                                        isOwn: c.userId == _uid,
-                                        onDelete: () => _deleteComment(c),
+                                children: [
+                                  for (final raiz in raizes) ...[
+                                    _CommentItem(
+                                      comentario: raiz,
+                                      isOwn: raiz.userId == _uid,
+                                      onDelete: () => _deleteComment(raiz),
+                                      onLike: () => _toggleLikeComentario(raiz),
+                                      onReply: () => _openCommentSheet(
+                                        parentId: raiz.id,
+                                        respondendoA: raiz.userName,
                                       ),
-                                    )
-                                    .toList(),
+                                    ),
+                                    for (final resp
+                                        in respostasPor[raiz.id] ?? [])
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 38),
+                                        child: _CommentItem(
+                                          comentario: resp,
+                                          isOwn: resp.userId == _uid,
+                                          onDelete: () => _deleteComment(resp),
+                                          onLike: () =>
+                                              _toggleLikeComentario(resp),
+                                          // Sem responder em resposta (1 nível).
+                                          onReply: null,
+                                        ),
+                                      ),
+                                  ],
+                                ],
                               );
                             },
                           ),
@@ -564,6 +811,11 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                     ),
                   ),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.share_outlined, color: _C.text),
+                  tooltip: 'Compartilhar',
+                  onPressed: () => compartilharOcorrencia(widget.occurrence),
+                ),
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: const Color(0xFFE8F5E9),
@@ -606,6 +858,28 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                 const SizedBox(width: 8),
                 _StatusBadge(status: statusEnum),
               ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _comoChegar,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _C.green,
+                  side: const BorderSide(color: _C.green),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.directions_outlined, size: 18),
+                label: const Text(
+                  'Como chegar',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
             ),
           ),
           const Divider(height: 1, color: Color(0xFFE5E7EB)),
@@ -763,6 +1037,106 @@ class _Placeholder extends StatelessWidget {
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+//  VÍDEO DA DENÚNCIA
+// ─────────────────────────────────────────
+
+class _VideoPlayerCard extends StatefulWidget {
+  final String url;
+  const _VideoPlayerCard({required this.url});
+
+  @override
+  State<_VideoPlayerCard> createState() => _VideoPlayerCardState();
+}
+
+class _VideoPlayerCardState extends State<_VideoPlayerCard> {
+  late final VideoPlayerController _controller;
+  bool _erro = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (mounted) setState(() {});
+      }).catchError((_) {
+        if (mounted) setState(() => _erro = true);
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _togglePlay() {
+    setState(() {
+      _controller.value.isPlaying ? _controller.pause() : _controller.play();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_erro) {
+      return Container(
+        height: 120,
+        width: double.infinity,
+        color: const Color(0xFFF3F4F6),
+        alignment: Alignment.center,
+        child: const Text(
+          'Não foi possível carregar o vídeo.',
+          style: TextStyle(color: _C.hint, fontSize: 12),
+        ),
+      );
+    }
+
+    if (!_controller.value.isInitialized) {
+      return Container(
+        height: 200,
+        width: double.infinity,
+        color: Colors.black12,
+        alignment: Alignment.center,
+        child: const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _togglePlay,
+      child: AspectRatio(
+        aspectRatio: _controller.value.aspectRatio,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            VideoPlayer(_controller),
+            AnimatedOpacity(
+              opacity: _controller.value.isPlaying ? 0 : 1,
+              duration: const Duration(milliseconds: 150),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.play_arrow,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -967,11 +1341,15 @@ class _CommentItem extends StatelessWidget {
   final ComentarioModel comentario;
   final bool isOwn;
   final VoidCallback onDelete;
+  final VoidCallback onLike;
+  final VoidCallback? onReply;
 
   const _CommentItem({
     required this.comentario,
     required this.isOwn,
     required this.onDelete,
+    required this.onLike,
+    this.onReply,
   });
 
   String _formatDate(DateTime? dt) => tempoRelativo(dt);
@@ -1056,10 +1434,359 @@ class _CommentItem extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
+                const SizedBox(height: 6),
+                // Ações: curtir + responder
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: onLike,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            c.userLiked
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            size: 15,
+                            color: c.userLiked ? _C.red : _C.hint,
+                          ),
+                          if (c.likes > 0) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '${c.likes}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: c.userLiked ? _C.red : _C.hint,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (onReply != null) ...[
+                      const SizedBox(width: 18),
+                      GestureDetector(
+                        onTap: onReply,
+                        child: const Text(
+                          'Responder',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _C.hint,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+//  VERIFICAÇÃO OFICIAL
+// ─────────────────────────────────────────
+
+class _VerificadaBanner extends StatelessWidget {
+  final String? nome;
+  final DateTime? data;
+
+  const _VerificadaBanner({required this.nome, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final quando = data != null ? DateFormat('dd/MM/yyyy').format(data!) : null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _C.green.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _C.green.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.verified, color: _C.green, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  nome != null && nome!.isNotEmpty
+                      ? 'Verificada por $nome'
+                      : 'Denúncia verificada',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF15803D),
+                  ),
+                ),
+                if (quando != null)
+                  Text(
+                    'Confirmada em $quando',
+                    style: const TextStyle(fontSize: 11, color: _C.hint),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+//  BANNER STATUS OFICIAL (em análise / não confirmada)
+// ─────────────────────────────────────────
+
+class _StatusOficialBanner extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _StatusOficialBanner({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+//  PAINEL DE AUTORIDADE
+//  Fluxo: Pendente → Em análise → Confirmada / Não confirmada
+// ─────────────────────────────────────────
+
+class _PainelAutoridade extends StatelessWidget {
+  final bool verificada;
+  final String? statusOficial;
+  final bool processando;
+  final VoidCallback onConfirmar;
+  final VoidCallback onEmAnalise;
+  final VoidCallback onNaoConfirmada;
+  final VoidCallback onEncaminhar;
+  final VoidCallback onResolver;
+  final VoidCallback onReverter;
+
+  const _PainelAutoridade({
+    required this.verificada,
+    required this.statusOficial,
+    required this.processando,
+    required this.onConfirmar,
+    required this.onEmAnalise,
+    required this.onNaoConfirmada,
+    required this.onEncaminhar,
+    required this.onResolver,
+    required this.onReverter,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (processando) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2, color: _C.green),
+          ),
+        ),
+      );
+    }
+
+    // ── Estados pós-confirmação (verificada == true) ──
+    if (verificada) {
+      // Estado: Resolvida
+      if (statusOficial == 'resolvida') {
+        return _botaoTexto(
+          label: 'Reverter para encaminhada',
+          onTap: onEncaminhar,
+        );
+      }
+
+      // Estado: Encaminhada
+      if (statusOficial == 'encaminhada') {
+        return Column(
+          children: [
+            _botao(
+              label: 'Marcar como resolvida',
+              icon: Icons.check_circle_outline,
+              color: _C.green,
+              onTap: onResolver,
+            ),
+            const SizedBox(height: 8),
+            _botaoTexto(
+              label: 'Reverter para confirmada',
+              onTap: onReverter,
+            ),
+          ],
+        );
+      }
+
+      // Estado: Confirmada
+      return Column(
+        children: [
+          _botao(
+            label: 'Encaminhar ao órgão',
+            icon: Icons.send,
+            color: _C.blue,
+            onTap: onEncaminhar,
+          ),
+          const SizedBox(height: 8),
+          _botaoTexto(label: 'Remover verificação', onTap: onConfirmar),
+        ],
+      );
+    }
+
+    // ── Estados pré-confirmação (verificada == false) ──
+
+    // Estado: Em análise
+    if (statusOficial == 'em_analise') {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _botao(
+                  label: 'Confirmar',
+                  icon: Icons.verified_outlined,
+                  color: _C.green,
+                  onTap: onConfirmar,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _botao(
+                  label: 'Não confirmada',
+                  icon: Icons.cancel_outlined,
+                  color: _C.red,
+                  onTap: onNaoConfirmada,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _botaoTexto(label: 'Reverter para pendente', onTap: onReverter),
+        ],
+      );
+    }
+
+    // Estado: Não confirmada
+    if (statusOficial == 'nao_confirmada') {
+      return _botao(
+        label: 'Reverter para pendente',
+        icon: Icons.undo,
+        color: _C.hint,
+        onTap: onReverter,
+      );
+    }
+
+    // Estado: Pendente (padrão)
+    return Row(
+      children: [
+        Expanded(
+          child: _botao(
+            label: 'Em análise',
+            icon: Icons.search,
+            color: _C.orange,
+            onTap: onEmAnalise,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _botao(
+            label: 'Confirmar',
+            icon: Icons.verified_outlined,
+            color: _C.green,
+            onTap: onConfirmar,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _botao({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _botaoTexto({required String label, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Center(
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: _C.hint,
+            decoration: TextDecoration.underline,
+          ),
+        ),
       ),
     );
   }
@@ -1178,8 +1905,9 @@ class _StatusTimeline extends StatelessWidget {
 
 class _CommentInputSheet extends StatefulWidget {
   final Future<void> Function(String text) onSubmit;
+  final String? respondendoA;
 
-  const _CommentInputSheet({required this.onSubmit});
+  const _CommentInputSheet({required this.onSubmit, this.respondendoA});
 
   @override
   State<_CommentInputSheet> createState() => _CommentInputSheetState();
@@ -1233,11 +1961,13 @@ class _CommentInputSheetState extends State<_CommentInputSheet> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Adicionar comentário',
-              style: TextStyle(
+              widget.respondendoA != null
+                  ? 'Respondendo a ${widget.respondendoA}'
+                  : 'Adicionar comentário',
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: _C.text,

@@ -150,6 +150,61 @@ class _CabecalhoGrupo extends StatelessWidget {
   }
 }
 
+// Ícone, cor e frase de cada tipo de notificação — comentário/curtida (ação
+// de outro usuário) e status_* (avanço do ciclo oficial pela autoridade).
+({IconData icone, Color cor, String frase}) _infoNotificacao(String tipo) {
+  switch (tipo) {
+    case 'comentario':
+      return (
+        icone: Icons.chat_bubble,
+        cor: const Color(0xFF3B82F6),
+        frase: 'comentou na sua denúncia',
+      );
+    case 'curtida':
+      return (
+        icone: Icons.thumb_up_alt,
+        cor: const Color(0xFF4CAF50),
+        frase: 'curtiu a sua denúncia',
+      );
+    case 'status_em_analise':
+      return (
+        icone: Icons.search,
+        cor: const Color(0xFFF97316),
+        frase: 'está analisando sua denúncia',
+      );
+    case 'status_confirmada':
+      return (
+        icone: Icons.verified,
+        cor: const Color(0xFF22C55E),
+        frase: 'confirmou sua denúncia',
+      );
+    case 'status_nao_confirmada':
+      return (
+        icone: Icons.cancel,
+        cor: const Color(0xFFEF4444),
+        frase: 'não confirmou sua denúncia',
+      );
+    case 'status_encaminhada':
+      return (
+        icone: Icons.send,
+        cor: const Color(0xFF3B82F6),
+        frase: 'encaminhou sua denúncia ao órgão responsável',
+      );
+    case 'status_resolvida':
+      return (
+        icone: Icons.check_circle,
+        cor: const Color(0xFF22C55E),
+        frase: 'marcou sua denúncia como resolvida',
+      );
+    default:
+      return (
+        icone: Icons.notifications,
+        cor: const Color(0xFF6B7280),
+        frase: 'interagiu com sua denúncia',
+      );
+  }
+}
+
 class _NotificacaoTile extends StatelessWidget {
   final NotificacaoModel n;
   final VoidCallback onTap;
@@ -157,12 +212,10 @@ class _NotificacaoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isComentario = n.tipo == 'comentario';
-    final icone = isComentario ? Icons.chat_bubble : Icons.thumb_up_alt;
-    final cor = isComentario
-        ? const Color(0xFF3B82F6)
-        : const Color(0xFF4CAF50);
-    final acao = isComentario ? 'comentou na' : 'curtiu a';
+    final info = _infoNotificacao(n.tipo);
+    final icone = info.icone;
+    final cor = info.cor;
+    final frase = info.frase;
 
     return Container(
       color: n.lida ? Colors.white : const Color(0xFFEFF6FF),
@@ -180,7 +233,7 @@ class _NotificacaoTile extends StatelessWidget {
                 text: n.deUsuarioNome,
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              TextSpan(text: ' $acao sua denúncia '),
+              TextSpan(text: ' $frase '),
               TextSpan(
                 text: '"${n.ocorrenciaTitulo}"',
                 style: const TextStyle(fontStyle: FontStyle.italic),

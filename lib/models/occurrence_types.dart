@@ -149,7 +149,7 @@ extension OccurrenceStatusLabel on OccurrenceStatus {
       case OccurrenceStatus.resolved:
         return 'Concluído';
       case OccurrenceStatus.inProgress:
-        return 'Em andamento';
+        return 'Pendente';
       case OccurrenceStatus.unresolved:
         return 'Não resolvido';
     }
@@ -160,7 +160,7 @@ extension OccurrenceStatusLabel on OccurrenceStatus {
       case OccurrenceStatus.resolved:
         return const Color(0xFF22C55E);
       case OccurrenceStatus.inProgress:
-        return const Color(0xFFF97316);
+        return const Color(0xFF9CA3AF);
       case OccurrenceStatus.unresolved:
         return const Color(0xFFEF4444);
     }
@@ -171,11 +171,170 @@ extension OccurrenceStatusLabel on OccurrenceStatus {
       case OccurrenceStatus.resolved:
         return Icons.check;
       case OccurrenceStatus.inProgress:
-        return Icons.more_horiz;
+        return Icons.schedule;
       case OccurrenceStatus.unresolved:
         return Icons.close;
     }
   }
+}
+
+// ─────────────────────────────────────────
+//  STATUS OFICIAL (autoridade)
+//  Triagem antes da confirmação final.
+// ─────────────────────────────────────────
+
+enum StatusOficial { emAnalise, naoConfirmada, encaminhada, resolvida }
+
+extension StatusOficialInfo on StatusOficial {
+  String get valor {
+    switch (this) {
+      case StatusOficial.emAnalise:
+        return 'em_analise';
+      case StatusOficial.naoConfirmada:
+        return 'nao_confirmada';
+      case StatusOficial.encaminhada:
+        return 'encaminhada';
+      case StatusOficial.resolvida:
+        return 'resolvida';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case StatusOficial.emAnalise:
+        return 'Em análise';
+      case StatusOficial.naoConfirmada:
+        return 'Não confirmada';
+      case StatusOficial.encaminhada:
+        return 'Encaminhada';
+      case StatusOficial.resolvida:
+        return 'Resolvida';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case StatusOficial.emAnalise:
+        return const Color(0xFFF97316);
+      case StatusOficial.naoConfirmada:
+        return const Color(0xFFEF4444);
+      case StatusOficial.encaminhada:
+        return const Color(0xFF3B82F6);
+      case StatusOficial.resolvida:
+        return const Color(0xFF22C55E);
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case StatusOficial.emAnalise:
+        return Icons.search;
+      case StatusOficial.naoConfirmada:
+        return Icons.cancel_outlined;
+      case StatusOficial.encaminhada:
+        return Icons.send;
+      case StatusOficial.resolvida:
+        return Icons.check_circle;
+    }
+  }
+
+  static StatusOficial? fromString(String? value) {
+    switch (value) {
+      case 'em_analise':
+        return StatusOficial.emAnalise;
+      case 'nao_confirmada':
+        return StatusOficial.naoConfirmada;
+      case 'encaminhada':
+        return StatusOficial.encaminhada;
+      case 'resolvida':
+        return StatusOficial.resolvida;
+      default:
+        return null;
+    }
+  }
+}
+
+// ─────────────────────────────────────────
+//  ESTÁGIO OFICIAL (visão unificada)
+//  Combina `verificada` + `statusOficial` em um único estágio do ciclo de
+//  triagem, usado para exibir um selo coerente no feed, na fila e no detalhe.
+// ─────────────────────────────────────────
+
+enum EstagioOficial {
+  pendente,
+  emAnalise,
+  naoConfirmada,
+  confirmada,
+  encaminhada,
+  resolvida,
+}
+
+extension EstagioOficialInfo on EstagioOficial {
+  /// Deriva o estágio a partir dos campos persistidos da ocorrência.
+  static EstagioOficial calcular(bool verificada, String? statusOficial) {
+    if (verificada) {
+      if (statusOficial == 'resolvida') return EstagioOficial.resolvida;
+      if (statusOficial == 'encaminhada') return EstagioOficial.encaminhada;
+      return EstagioOficial.confirmada;
+    }
+    if (statusOficial == 'em_analise') return EstagioOficial.emAnalise;
+    if (statusOficial == 'nao_confirmada') return EstagioOficial.naoConfirmada;
+    return EstagioOficial.pendente;
+  }
+
+  String get label {
+    switch (this) {
+      case EstagioOficial.pendente:
+        return 'Pendente';
+      case EstagioOficial.emAnalise:
+        return 'Em análise';
+      case EstagioOficial.naoConfirmada:
+        return 'Não confirmada';
+      case EstagioOficial.confirmada:
+        return 'Verificada';
+      case EstagioOficial.encaminhada:
+        return 'Encaminhada';
+      case EstagioOficial.resolvida:
+        return 'Resolvida';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case EstagioOficial.pendente:
+        return const Color(0xFF9CA3AF);
+      case EstagioOficial.emAnalise:
+        return const Color(0xFFF97316);
+      case EstagioOficial.naoConfirmada:
+        return const Color(0xFFEF4444);
+      case EstagioOficial.confirmada:
+        return const Color(0xFF22C55E);
+      case EstagioOficial.encaminhada:
+        return const Color(0xFF3B82F6);
+      case EstagioOficial.resolvida:
+        return const Color(0xFF16A34A);
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case EstagioOficial.pendente:
+        return Icons.schedule;
+      case EstagioOficial.emAnalise:
+        return Icons.search;
+      case EstagioOficial.naoConfirmada:
+        return Icons.cancel_outlined;
+      case EstagioOficial.confirmada:
+        return Icons.verified;
+      case EstagioOficial.encaminhada:
+        return Icons.send;
+      case EstagioOficial.resolvida:
+        return Icons.check_circle;
+    }
+  }
+
+  /// Estágios que representam ação oficial já tomada (não-pendente).
+  bool get temAcaoOficial => this != EstagioOficial.pendente;
 }
 
 extension OccurrenceStatusParser on OccurrenceStatus {
