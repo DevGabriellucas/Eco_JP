@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/ocorrencia_model.dart';
 import '../services/ocorrencia_service.dart';
+import '../theme/app_theme.dart';
 
 enum _OcorrenciaSheetAction { edit, delete }
 
@@ -45,7 +46,7 @@ Future<void> showOcorrenciaActions({
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF8A8A8A),
+                    color: AppColors.hint,
                   ),
                 ),
               ),
@@ -53,7 +54,7 @@ Future<void> showOcorrenciaActions({
             ListTile(
               leading: const Icon(
                 Icons.edit_outlined,
-                color: Color(0xFF1A1A1A),
+                color: AppColors.ink,
               ),
               title: const Text('Editar título/descrição'),
               onTap: () => Navigator.pop(ctx, _OcorrenciaSheetAction.edit),
@@ -61,12 +62,12 @@ Future<void> showOcorrenciaActions({
             ListTile(
               leading: const Icon(
                 Icons.delete_outline,
-                color: Color(0xFFEF4444),
+                color: AppColors.danger,
               ),
               title: const Text(
                 'Excluir denúncia',
                 style: TextStyle(
-                  color: Color(0xFFEF4444),
+                  color: AppColors.danger,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -119,13 +120,13 @@ Future<void> _confirmarExcluirOcorrencia(
           onPressed: () => Navigator.pop(ctx, false),
           child: const Text(
             'Cancelar',
-            style: TextStyle(color: Color(0xFF8A8A8A)),
+            style: TextStyle(color: AppColors.hint),
           ),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(ctx, true),
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFEF4444),
+            backgroundColor: AppColors.danger,
             foregroundColor: Colors.white,
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -173,7 +174,7 @@ Future<void> _editarOcorrencia(
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Color(0xFF1A1A1A), width: 1.5),
+      borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
     ),
   );
 
@@ -225,7 +226,7 @@ Future<void> _editarOcorrencia(
                 onPressed: salvando ? null : () => Navigator.of(ctx).pop(),
                 child: const Text(
                   'Cancelar',
-                  style: TextStyle(color: Color(0xFF8A8A8A)),
+                  style: TextStyle(color: AppColors.hint),
                 ),
               ),
               ElevatedButton(
@@ -260,7 +261,7 @@ Future<void> _editarOcorrencia(
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A1A1A),
+                  backgroundColor: AppColors.ink,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(

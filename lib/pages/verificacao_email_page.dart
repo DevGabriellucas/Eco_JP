@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../theme/app_theme.dart';
 
 /// Tela exibida quando o usuário entrou com e-mail/senha mas ainda não
 /// confirmou o e-mail. Bloqueia o acesso ao app até a confirmação.
@@ -136,7 +137,7 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A1A),
+                      color: AppColors.ink,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -145,7 +146,7 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                       style: const TextStyle(
                         fontSize: 14,
                         height: 1.5,
-                        color: Color(0xFF6B7280),
+                        color: AppColors.muted,
                       ),
                       children: [
                         const TextSpan(
@@ -155,7 +156,7 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                           text: email,
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF1A1A1A),
+                            color: AppColors.ink,
                           ),
                         ),
                         const TextSpan(
@@ -213,7 +214,7 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                         fontWeight: FontWeight.w500,
                         color: _cooldown > 0
                             ? const Color(0xFFBDBDBD)
-                            : const Color(0xFF1A1A1A),
+                            : AppColors.ink,
                       ),
                     ),
                   ),
@@ -222,7 +223,7 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                     onPressed: _sair,
                     child: const Text(
                       'Usar outra conta',
-                      style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
+                      style: TextStyle(fontSize: 14, color: AppColors.muted),
                     ),
                   ),
                 ],

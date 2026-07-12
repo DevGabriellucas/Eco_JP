@@ -6,13 +6,14 @@ import '../../models/usuario_model.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/ocorrencia_service.dart';
 import '../../services/usuario_service.dart';
+import '../../theme/app_theme.dart';
 
 class _C {
   static const bg = Colors.white;
-  static const text = Color(0xFF1A1A1A);
-  static const hint = Color(0xFF8A8A8A);
+  static const text = AppColors.ink;
+  static const hint = AppColors.hint;
   static const avatarBg = Color(0xFF9E9E9E);
-  static const border = Color(0xFF1A1A1A);
+  static const border = AppColors.ink;
   static const error = Color(0xFFB00020);
 }
 

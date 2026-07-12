@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/consent_service.dart';
 import '../services/usuario_service.dart';
 import 'legal/documentos_legais.dart';
+import '../theme/app_theme.dart';
 
 class CadastroPage extends StatefulWidget {
   const CadastroPage({super.key});
@@ -88,6 +89,18 @@ class _CadastroPageState extends State<CadastroPage> {
       return;
     }
 
+    // Exige pelo menos "razoável" no medidor (score 2 de 4) — o mínimo do
+    // próprio Firebase é só 6 caracteres, insuficiente contra senhas comuns.
+    if (_forcaSenha(_passwordController.text) < 2) {
+      const msg = 'Escolha uma senha mais forte: use letras maiúsculas e '
+          'minúsculas, números ou símbolos.';
+      setState(() => _errorMessage = msg);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(msg)));
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -159,13 +172,13 @@ class _CadastroPageState extends State<CadastroPage> {
       fontFamily: 'Roboto',
       fontSize: 13,
       fontWeight: FontWeight.w600,
-      color: Color(0xFF1A1A1A),
+      color: AppColors.ink,
       decoration: TextDecoration.underline,
     );
     const textStyle = TextStyle(
       fontFamily: 'Roboto',
       fontSize: 13,
-      color: Color(0xFF6B7280),
+      color: AppColors.muted,
     );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -441,9 +454,9 @@ class _CadastroPageState extends State<CadastroPage> {
                                         fontFamily: 'Roboto',
                                         fontSize: 15,
                                         fontWeight: FontWeight.w400,
-                                        color: Color(0xFF1A1A1A),
+                                        color: AppColors.ink,
                                         decoration: TextDecoration.underline,
-                                        decorationColor: Color(0xFF1A1A1A),
+                                        decorationColor: AppColors.ink,
                                       ),
                                     ),
                                   ),
@@ -472,7 +485,7 @@ class _CadastroPageState extends State<CadastroPage> {
         fontFamily: 'Roboto',
         fontSize: 15,
         fontWeight: FontWeight.w500,
-        color: Color(0xFF1A1A1A),
+        color: AppColors.ink,
       ),
     );
   }
@@ -491,7 +504,7 @@ class _CadastroPageState extends State<CadastroPage> {
       style: const TextStyle(
         fontFamily: 'Roboto',
         fontSize: 14,
-        color: Color(0xFF1A1A1A),
+        color: AppColors.ink,
       ),
       decoration: InputDecoration(
         hintText: hint,
@@ -512,7 +525,7 @@ class _CadastroPageState extends State<CadastroPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF1A1A1A), width: 1.5),
+          borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -542,9 +555,9 @@ class _MedidorForcaSenha extends StatelessWidget {
     // 0-2 = fraca (1 segmento), 3 = média (2 segmentos), 4 = forte (3).
     final int nivel = forca <= 2 ? 1 : (forca == 3 ? 2 : 3);
     final Color cor = switch (nivel) {
-      1 => const Color(0xFFEF4444),
+      1 => AppColors.danger,
       2 => const Color(0xFFF59E0B),
-      _ => const Color(0xFF22C55E),
+      _ => AppColors.success,
     };
     final String label = switch (nivel) {
       1 => 'Senha fraca',

@@ -16,6 +16,7 @@ import '../widgets/occurrence_card.dart';
 import '../widgets/occurrence_comments_sheet.dart';
 import '../widgets/ocorrencia_actions.dart';
 import '../widgets/report_content_sheet.dart';
+import '../utils/reacao_ocorrencia.dart';
 import 'fila_verificacao_page.dart';
 import 'notificacoes_page.dart';
 import 'perfil/perfil_publico_page.dart';
@@ -54,14 +55,15 @@ class _HomePageState extends State<HomePage> {
   final Map<String, String?> _fotoCache = {};
   final Set<String> _hiddenOccurrenceIds = <String>{};
 
-  // Cache dos streams de contagem de comentários por ocorrência. Sem isso, um
-  // novo listener do Firestore seria criado a cada rebuild do feed (a cada
-  // like, filtro ou scroll), desperdiçando leituras e bateria.
+  // Cache da contagem de comentários por ocorrência. A contagem agora usa
+  // aggregation .count() (uma leitura pontual, não um listener por doc). O
+  // cache evita refazer a contagem a cada rebuild do feed (like, filtro,
+  // scroll). Envolvido em asStream() para preservar a API do card.
   final Map<String, Stream<int>> _commentCountCache = {};
   final Map<String, Stream<ComentarioModel?>> _latestCommentCache = {};
 
   Stream<int> _commentCountStream(String id) => _commentCountCache[id] ??=
-      _ocorrenciaService.contarComentarios(id).asBroadcastStream();
+      _ocorrenciaService.contarComentarios(id).asStream().asBroadcastStream();
 
   Stream<ComentarioModel?> _latestCommentStream(String id) =>
       _latestCommentCache[id] ??= _ocorrenciaService
@@ -175,6 +177,7 @@ class _HomePageState extends State<HomePage> {
   List<OcorrenciaModel> _applyFilters(List<OcorrenciaModel> ocorrencias) {
     final query = _searchQuery.toLowerCase().trim();
     return ocorrencias.where((o) {
+      if (o.oculto) return false; // ocultada pela autoridade (moderação)
       if (_hiddenOccurrenceIds.contains(o.id)) return false;
       final matchesSearch =
           query.isEmpty ||
@@ -190,107 +193,38 @@ class _HomePageState extends State<HomePage> {
     }).toList();
   }
 
-  // Guarda o estado de reação para reverter caso a gravação falhe.
-  void _restaurarReacao(OcorrenciaModel o, _ReacaoSnapshot s) {
-    o.userLiked = s.userLiked;
-    o.userDisliked = s.userDisliked;
-    o.likes = s.likes;
-    o.dislikes = s.dislikes;
-    o.likedBy = s.likedBy;
-    o.dislikedBy = s.dislikedBy;
-  }
-
-  _ReacaoSnapshot _snapshotReacao(OcorrenciaModel o) => _ReacaoSnapshot(
-    userLiked: o.userLiked,
-    userDisliked: o.userDisliked,
-    likes: o.likes,
-    dislikes: o.dislikes,
-    likedBy: List<String>.from(o.likedBy),
-    dislikedBy: List<String>.from(o.dislikedBy),
-  );
-
   Future<void> _toggleLike(OcorrenciaModel o) async {
     final uid = _authService.currentUser?.uid;
     if (uid == null) return;
-    final vaiCurtir = !o.userLiked;
-    final anterior = _snapshotReacao(o);
-
-    setState(() {
-      if (o.userLiked) {
-        o.userLiked = false;
-        o.likes--;
-        o.likedBy.remove(uid);
-      } else {
-        if (o.userDisliked) {
-          o.userDisliked = false;
-          o.dislikes--;
-          o.dislikedBy.remove(uid);
-        }
-        o.userLiked = true;
-        o.likes++;
-        if (!o.likedBy.contains(uid)) o.likedBy.add(uid);
-      }
-    });
-
-    try {
-      await _ocorrenciaService.toggleLike(o.id, uid);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _restaurarReacao(o, anterior));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Não foi possível curtir agora. Tente novamente.'),
-        ),
-      );
-      return;
-    }
-
-    if (vaiCurtir && o.usuarioId != null && o.usuarioId != uid) {
-      final eu = _authService.currentUser;
-      final nome = eu?.displayName ?? eu?.email?.split('@').first ?? 'Alguém';
-      _notificacaoService.notificar(
-        donoId: o.usuarioId!,
-        tipo: 'curtida',
-        deUsuarioNome: nome,
-        ocorrenciaId: o.id,
-        ocorrenciaTitulo: o.titulo,
-      );
-    }
+    final eu = _authService.currentUser;
+    final nome = eu?.displayName ?? eu?.email?.split('@').first;
+    await reagirOcorrencia(
+      context: context,
+      ocorrencia: o,
+      uid: uid,
+      isLike: true,
+      ocorrenciaService: _ocorrenciaService,
+      notificacaoService: _notificacaoService,
+      nomeAutor: nome,
+      onMudou: () => setState(() {}),
+    );
   }
 
   Future<void> _toggleDislike(OcorrenciaModel o) async {
     final uid = _authService.currentUser?.uid;
     if (uid == null) return;
-    final anterior = _snapshotReacao(o);
-
-    setState(() {
-      if (o.userDisliked) {
-        o.userDisliked = false;
-        o.dislikes--;
-        o.dislikedBy.remove(uid);
-      } else {
-        if (o.userLiked) {
-          o.userLiked = false;
-          o.likes--;
-          o.likedBy.remove(uid);
-        }
-        o.userDisliked = true;
-        o.dislikes++;
-        if (!o.dislikedBy.contains(uid)) o.dislikedBy.add(uid);
-      }
-    });
-
-    try {
-      await _ocorrenciaService.toggleDislike(o.id, uid);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _restaurarReacao(o, anterior));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Não foi possível reagir agora. Tente novamente.'),
-        ),
-      );
-    }
+    final eu = _authService.currentUser;
+    final nome = eu?.displayName ?? eu?.email?.split('@').first;
+    await reagirOcorrencia(
+      context: context,
+      ocorrencia: o,
+      uid: uid,
+      isLike: false,
+      ocorrenciaService: _ocorrenciaService,
+      notificacaoService: _notificacaoService,
+      nomeAutor: nome,
+      onMudou: () => setState(() {}),
+    );
   }
 
   void _openComments(OcorrenciaModel o) {
@@ -602,10 +536,23 @@ class _HomePageState extends State<HomePage> {
           stream: _roleService.observarAutoridade(uid),
           initialData: false,
           builder: (context, roleSnapshot) {
-            return _buildFeedContent(
-              uid,
-              snapshot.data ?? const <String>{},
-              isAutoridade: roleSnapshot.data == true,
+            // Denúncias anônimas não guardam usuarioId no documento público
+            // (S2) — para saber "é minha denúncia" nesse caso, comparamos
+            // com os ponteiros do próprio perfil, não com o campo.
+            return StreamBuilder<Set<String>>(
+              stream: _ocorrenciaService.observarMinhasDenunciasAnonimasIds(
+                uid,
+              ),
+              initialData: const <String>{},
+              builder: (context, minhasAnonimasSnap) {
+                return _buildFeedContent(
+                  uid,
+                  snapshot.data ?? const <String>{},
+                  isAutoridade: roleSnapshot.data == true,
+                  minhasDenunciasAnonimasIds:
+                      minhasAnonimasSnap.data ?? const <String>{},
+                );
+              },
             );
           },
         );
@@ -617,6 +564,7 @@ class _HomePageState extends State<HomePage> {
     String? uid,
     Set<String> favoritosIds, {
     required bool isAutoridade,
+    Set<String> minhasDenunciasAnonimasIds = const <String>{},
   }) {
     return StreamBuilder<List<OcorrenciaModel>>(
       stream: _feedStream,
@@ -665,7 +613,12 @@ class _HomePageState extends State<HomePage> {
                   loadingMore: _loadingMore,
                   onLoadMore: _loadMore,
                   itemBuilder: (o) {
-                    final isOwner = uid != null && o.usuarioId == uid;
+                    // Anônima: o campo usuarioId sumiu do documento (S2), então
+                    // "é minha" vem dos ponteiros do próprio perfil.
+                    final isOwner = uid != null &&
+                        (o.anonima
+                            ? minhasDenunciasAnonimasIds.contains(o.id)
+                            : o.usuarioId == uid);
                     final nomeAutor = o.anonima
                         ? 'Denunciante anônimo'
                         : (o.usuarioNome != null &&
@@ -715,26 +668,6 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
-}
-
-// Estado de reação preservado para reverter uma curtida/descurtida otimista
-// quando a gravação no Firestore falha.
-class _ReacaoSnapshot {
-  final bool userLiked;
-  final bool userDisliked;
-  final int likes;
-  final int dislikes;
-  final List<String> likedBy;
-  final List<String> dislikedBy;
-
-  _ReacaoSnapshot({
-    required this.userLiked,
-    required this.userDisliked,
-    required this.likes,
-    required this.dislikes,
-    required this.likedBy,
-    required this.dislikedBy,
-  });
 }
 
 class _OccurrenceList extends StatelessWidget {
@@ -1039,10 +972,10 @@ class _BannerAutoridade extends StatelessWidget {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color: const Color(0xFF1A1A1A),
+        color: AppColors.ink,
         child: Row(
           children: const [
-            Icon(Icons.shield_outlined, size: 16, color: Color(0xFF22C55E)),
+            Icon(Icons.shield_outlined, size: 16, color: AppColors.success),
             SizedBox(width: 8),
             Expanded(
               child: Text(

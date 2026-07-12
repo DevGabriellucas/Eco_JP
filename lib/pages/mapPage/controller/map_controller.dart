@@ -120,7 +120,9 @@ class MapController extends ChangeNotifier {
     try {
       _subscription?.cancel();
 
-      _subscription = service.listarOcorrencias().listen(
+      _subscription = service
+          .listarOcorrenciasLimitadas(OcorrenciaService.tetoAgregado)
+          .listen(
         (data) {
           _todasOcorrencias = data;
           state = MapControllerStateLoaded(data);
@@ -234,6 +236,7 @@ class MapController extends ChangeNotifier {
 
   List<OcorrenciaModel> get _ocorrenciasFiltradas {
     return _todasOcorrencias.where((o) {
+      if (o.oculto) return false; // ocultada pela autoridade (moderação)
       if (!_temCoordenadaValida(o)) return false;
       final tipo = OccurrenceTypeParser.fromString(o.tipoLixo);
       if (_categoriasOcultas.contains(tipo)) return false;

@@ -7,6 +7,8 @@ import '../models/notificacao_model.dart';
 /// notificacoes/{uid}/items. Quando alguém comenta ou curte a denúncia
 /// de outra pessoa, criamos um documento para o DONO da denúncia.
 class NotificacaoService {
+  static final NotificacaoService instance = NotificacaoService();
+
   CollectionReference<Map<String, dynamic>> _ref(String uid) =>
       FirebaseFirestore.instance
           .collection('notificacoes')

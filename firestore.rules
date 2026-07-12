@@ -148,6 +148,11 @@ service cloud.firestore {
           'comments',
           'likedBy',
           'dislikedBy',
+          'fixada',
+          // Opcional (não exigido em hasAll): identifica o município da
+          // denúncia. Dados novos já enviam; dados antigos ficam sem, sem
+          // quebrar leitura — preparação para expansão multi-município.
+          'municipioId',
         ])
         && isValidTitle(data.titulo)
         && isValidDescription(data.descricao)
@@ -156,7 +161,13 @@ service cloud.firestore {
         && isValidCategory(data.tipoLixo)
         && data.status == 'Pendente'
         && data.dataCriacao == request.time
-        && data.usuarioId == request.auth.uid
+        // Proteção do denunciante anônimo: quando anonima==true, usuarioId no
+        // documento público fica null (o UID real vive só na subcoleção
+        // privada ocorrencias/{id}/dono/info, ver isValidDonoInfo). Quando
+        // não-anônima, usuarioId precisa ser o próprio uid (evita forjar autor).
+        && (data.anonima == true
+          ? data.usuarioId == null
+          : data.usuarioId == request.auth.uid)
         && isValidOccurrenceImages(data)
         && isValidPublicUserFields(data)
         && (!('videoUrl' in data) || isOptionalVideoUrl(data.videoUrl))
@@ -174,8 +185,22 @@ service cloud.firestore {
         && data.dislikedBy is list && data.dislikedBy.size() == 0;
     }
 
+    // Dono de uma ocorrência: campo direto (não-anônima) ou, quando anônima,
+    // a subcoleção privada dono/info (só o próprio uid consegue ler/criar).
     function isOwner() {
-      return signedIn() && resource.data.usuarioId == request.auth.uid;
+      return signedIn()
+        && (resource.data.usuarioId == request.auth.uid
+          || (resource.data.anonima == true
+            && exists(/databases/$(database)/documents/ocorrencias/$(resource.id)/dono/info)
+            && get(/databases/$(database)/documents/ocorrencias/$(resource.id)/dono/info).data.usuarioId == request.auth.uid));
+    }
+
+    // Subcoleção privada que guarda o UID real do denunciante quando a
+    // ocorrência é anônima. Só o próprio dono ou a autoridade podem ler —
+    // protege contra correlacionar denúncias anônimas por usuarioId (S2).
+    function isValidDonoInfo(data) {
+      return data.keys().hasOnly(['usuarioId'])
+        && data.usuarioId == request.auth.uid;
     }
 
     function addedCurrentUser(before, after) {
@@ -296,6 +321,12 @@ service cloud.firestore {
     function isValidFixadaUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fixada'])
         && request.resource.data.fixada is bool;
+    }
+
+    // Autoridade oculta/reexibe conteúdo denunciado por abuso (moderação).
+    function isValidOcultarUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['oculto'])
+        && request.resource.data.oculto is bool;
     }
 
     function isValidComment(data) {
@@ -453,6 +484,9 @@ service cloud.firestore {
         (isAutoridade() && isValidStatusOficialUpdate())
         ||
         (isAutoridade() && isValidFixadaUpdate())
+        ||
+        // Autoridade oculta conteúdo denunciado por abuso (moderação).
+        (isAutoridade() && isValidOcultarUpdate())
       );
 
       allow delete: if isOwner();
@@ -461,14 +495,35 @@ service cloud.firestore {
         allow read: if signedIn();
         allow create: if emailVerificado() && isValidComment(request.resource.data);
         allow delete: if signedIn() && resource.data.userId == request.auth.uid;
-        // Só curtidas podem ser atualizadas (texto/autor são imutáveis).
+        // Curtidas/texto pelo autor; ocultação por abuso pela autoridade.
         allow update: if emailVerificado()
-          && (isValidCommentLikeUpdate() || isValidCommentTextUpdate());
+          && (isValidCommentLikeUpdate() || isValidCommentTextUpdate()
+            || (isAutoridade() && isValidOcultarUpdate()));
       }
 
       match /historico/{eventoId} {
         allow read: if signedIn();
         allow create, update, delete: if false;
+      }
+
+      // UID real do denunciante quando a ocorrência é anônima (S2). Só o
+      // próprio dono ou autoridade leem; ninguém mais consegue correlacionar
+      // denúncias anônimas pelo autor. Criado junto com a ocorrência pai
+      // (mesmo request, mesma transação lógica no client).
+      match /dono/{docId} {
+        allow read: if signedIn()
+          && (resource.data.usuarioId == request.auth.uid || isAutoridade());
+        // !exists() impede que um segundo usuário sobrescreva dono/info já
+        // gravado pelo dono real (create com o mesmo docId seria um set()
+        // substituindo o documento) — só a primeira escrita vale.
+        allow create: if emailVerificado()
+          && !exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/dono/$(docId))
+          && get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.anonima == true
+          && get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.usuarioId == null
+          && isValidDonoInfo(request.resource.data);
+        // Só o próprio dono apaga (ao excluir a denúncia anônima).
+        allow delete: if signedIn() && resource.data.usuarioId == request.auth.uid;
+        allow update: if false;
       }
     }
 
@@ -486,6 +541,18 @@ service cloud.firestore {
           && request.auth.uid == userId
           && isValidFavorite(request.resource.data, ocorrenciaId);
         allow delete: if signedIn() && request.auth.uid == userId;
+      }
+
+      // Ponteiros (só o ID) das próprias denúncias anônimas do usuário (S2).
+      // Necessário porque o documento público da ocorrência não guarda mais
+      // usuarioId quando anonima==true — sem isso, "Minhas denúncias" não
+      // conseguiria listar as próprias denúncias anônimas.
+      match /minhas_denuncias_anonimas/{ocorrenciaId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow create: if emailVerificado()
+          && request.auth.uid == userId
+          && get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.anonima == true;
+        allow update, delete: if signedIn() && request.auth.uid == userId;
       }
 
       match /seguindo/{alvoUid} {

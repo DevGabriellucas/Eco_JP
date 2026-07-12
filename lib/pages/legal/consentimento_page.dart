@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'documentos_legais.dart';
+import '../../theme/app_theme.dart';
 
 /// Tela de consentimento exibida quando o usuário ainda não aceitou os
 /// documentos legais (ou aceitou uma versão antiga). Bloqueia o acesso ao
@@ -51,10 +52,10 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
     const linkStyle = TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.w600,
-      color: Color(0xFF1A1A1A),
+      color: AppColors.ink,
       decoration: TextDecoration.underline,
     );
-    const textStyle = TextStyle(fontSize: 14, color: Color(0xFF6B7280));
+    const textStyle = TextStyle(fontSize: 14, color: AppColors.muted);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -68,7 +69,7 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
               const Icon(
                 Icons.privacy_tip_outlined,
                 size: 44,
-                color: Color(0xFF22C55E),
+                color: AppColors.success,
               ),
               const SizedBox(height: 16),
               const Text(
@@ -76,7 +77,7 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: AppColors.ink,
                 ),
               ),
               const SizedBox(height: 8),
@@ -86,7 +87,7 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.5,
-                  color: Color(0xFF6B7280),
+                  color: AppColors.muted,
                 ),
               ),
               const SizedBox(height: 20),
@@ -135,7 +136,7 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                       onChanged: _processando
                           ? null
                           : (v) => setState(() => _aceito = v ?? false),
-                      activeColor: const Color(0xFF22C55E),
+                      activeColor: AppColors.success,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
@@ -173,7 +174,7 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                 child: ElevatedButton(
                   onPressed: (_aceito && !_processando) ? _confirmar : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A1A1A),
+                    backgroundColor: AppColors.ink,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: const Color(0xFFBDBDBD),
                     elevation: 0,
@@ -220,7 +221,7 @@ class _Topico extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icone, size: 20, color: const Color(0xFF22C55E)),
+          Icon(icone, size: 20, color: AppColors.success),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

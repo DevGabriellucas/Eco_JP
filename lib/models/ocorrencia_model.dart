@@ -52,6 +52,10 @@ class OcorrenciaModel {
   DateTime? resolvidaEm;
   bool fixada;
 
+  // Moderação (Fase 3): quando true, a ocorrência foi ocultada pela autoridade
+  // após denúncia de abuso e não deve aparecer no feed do cidadão.
+  bool oculto;
+
   OcorrenciaModel({
     required this.id,
     required this.titulo,
@@ -83,6 +87,7 @@ class OcorrenciaModel {
     this.resolvidaEm,
     this.fixada = false,
     this.anonima = false,
+    this.oculto = false,
   }) : likedBy = likedBy ?? [],
        dislikedBy = dislikedBy ?? [];
 
@@ -96,7 +101,11 @@ class OcorrenciaModel {
       'tipoLixo': tipoLixo,
       'status': status,
       'dataCriacao': dataCriacao ?? FieldValue.serverTimestamp(),
-      'usuarioId': usuarioId,
+      // Denúncia anônima: o UID real não vai no documento público (protege
+      // o denunciante de correlação entre denúncias). Fica só na subcoleção
+      // privada ocorrencias/{id}/dono/info, criada pelo OcorrenciaService
+      // logo após este documento — ver cadastrarOcorrencia().
+      'usuarioId': anonima ? null : usuarioId,
       'usuarioNome': usuarioNome,
       'usuarioFotoUrl': usuarioFotoUrl,
       'imagemUrl': imagemUrl,
@@ -109,6 +118,10 @@ class OcorrenciaModel {
       'likedBy': [],
       'dislikedBy': [],
       'fixada': false,
+      // Fixo por enquanto (app é só João Pessoa hoje). Gravar isso desde já
+      // evita migração retroativa de dados quando o app expandir para outros
+      // municípios da Paraíba — dados novos já nascem particionados.
+      'municipioId': 'joao-pessoa',
     };
   }
 
@@ -158,6 +171,7 @@ class OcorrenciaModel {
           : null,
       fixada: map['fixada'] == true,
       anonima: map['anonima'] == true,
+      oculto: map['oculto'] == true,
     );
   }
 }

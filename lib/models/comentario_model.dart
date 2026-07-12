@@ -16,6 +16,9 @@ class ComentarioModel {
   final int likes;
   final bool userLiked; // derivado de likedBy + usuário atual
 
+  // Moderação: quando true, foi ocultado pela autoridade após denúncia de abuso.
+  final bool oculto;
+
   ComentarioModel({
     required this.id,
     required this.userId,
@@ -27,6 +30,7 @@ class ComentarioModel {
     List<String>? likedBy,
     this.likes = 0,
     this.userLiked = false,
+    this.oculto = false,
   }) : likedBy = likedBy ?? [];
 
   Map<String, dynamic> toMap() => {
@@ -59,6 +63,7 @@ class ComentarioModel {
       likedBy: likedBy,
       likes: map['likes'] ?? likedBy.length,
       userLiked: currentUserId != null && likedBy.contains(currentUserId),
+      oculto: map['oculto'] == true,
     );
   }
 }

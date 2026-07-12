@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class InicialPage extends StatelessWidget {
   const InicialPage({super.key});
@@ -131,7 +132,7 @@ class InicialPage extends StatelessWidget {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
-                              foregroundColor: const Color(0xFF1A1A1A),
+                              foregroundColor: AppColors.ink,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(28),

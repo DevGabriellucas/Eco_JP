@@ -10,6 +10,8 @@ import '../pages/legal/documentos_legais.dart';
 /// quando e a qual versão da política o usuário consentiu. Quando a versão
 /// muda, o app pede um novo consentimento.
 class ConsentService {
+  static final ConsentService instance = ConsentService();
+
   final CollectionReference<Map<String, dynamic>> _ref =
       FirebaseFirestore.instance.collection('consentimentos');
 

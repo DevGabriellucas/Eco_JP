@@ -13,7 +13,9 @@ import '../services/usuario_service.dart';
 import '../models/occurrence_types.dart';
 import '../utils/compartilhamento.dart';
 import '../utils/navegacao_externa.dart';
-import '../utils/tempo_relativo.dart';
+import '../theme/app_theme.dart';
+import '../utils/reacao_ocorrencia.dart';
+import '../widgets/occurrence_comments_sheet.dart';
 
 // ─────────────────────────────────────────
 //  PALETA
@@ -23,11 +25,11 @@ class _C {
   static const bg = Color(0xFFF2F2F2);
   static const white = Colors.white;
   static const border = Color(0xFFD8D8D8);
-  static const text = Color(0xFF1A1A1A);
-  static const hint = Color(0xFF8A8A8A);
+  static const text = AppColors.ink;
+  static const hint = AppColors.hint;
   static const orange = Color(0xFFFF8A1F);
-  static const green = Color(0xFF22C55E);
-  static const red = Color(0xFFEF4444);
+  static const green = AppColors.success;
+  static const red = AppColors.danger;
   static const blue = Color(0xFF3B82F6);
 }
 
@@ -55,8 +57,6 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
   late int _dislikes;
   late bool _userLiked;
   late bool _userDisliked;
-  late List<String> _likedBy;
-  late List<String> _dislikedBy;
   String? _authorName;
   String? _authorPhoto;
 
@@ -76,8 +76,6 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
     _dislikes = o.dislikes;
     _userLiked = o.userLiked;
     _userDisliked = o.userDisliked;
-    _likedBy = List<String>.from(o.likedBy);
-    _dislikedBy = List<String>.from(o.dislikedBy);
     _verificada = o.verificada;
     _verificadaPorNome = o.verificadaPorNome;
     _verificadaEm = o.verificadaEm;
@@ -268,221 +266,63 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
 
   String get _uid => _authService.currentUser?.uid ?? '';
 
-  // Reaplica o estado anterior de reação se a gravação falhar.
-  void _restaurarReacao(
-    bool userLiked,
-    bool userDisliked,
-    int likes,
-    int dislikes,
-    List<String> likedBy,
-    List<String> dislikedBy,
-  ) {
-    _userLiked = userLiked;
-    _userDisliked = userDisliked;
-    _likes = likes;
-    _dislikes = dislikes;
-    _likedBy = likedBy;
-    _dislikedBy = dislikedBy;
+  // Sincroniza os campos locais (usados pela UI desta tela) a partir do
+  // OcorrenciaModel compartilhado, após reagirOcorrencia mutá-lo.
+  void _sincronizarComOcorrencia() {
+    final o = widget.occurrence;
+    _likes = o.likes;
+    _dislikes = o.dislikes;
+    _userLiked = o.userLiked;
+    _userDisliked = o.userDisliked;
   }
 
   Future<void> _handleLike() async {
     if (_uid.isEmpty) return;
-    final vaiCurtir = !_userLiked;
-    final pLiked = _userLiked,
-        pDisliked = _userDisliked,
-        pLikes = _likes,
-        pDislikes = _dislikes;
-    final pLikedBy = List<String>.from(_likedBy);
-    final pDislikedBy = List<String>.from(_dislikedBy);
-
-    setState(() {
-      if (_userLiked) {
-        _userLiked = false;
-        _likes--;
-        _likedBy.remove(_uid);
-      } else {
-        if (_userDisliked) {
-          _userDisliked = false;
-          _dislikes--;
-          _dislikedBy.remove(_uid);
-        }
-        _userLiked = true;
-        _likes++;
-        _likedBy.add(_uid);
-      }
-    });
-
-    try {
-      await _service.toggleLike(widget.occurrence.id, _uid);
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-        () => _restaurarReacao(
-          pLiked,
-          pDisliked,
-          pLikes,
-          pDislikes,
-          pLikedBy,
-          pDislikedBy,
-        ),
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Não foi possível curtir agora. Tente novamente.'),
-        ),
-      );
-      return;
-    }
-
-    if (vaiCurtir) _notificarCurtida();
-  }
-
-  void _notificarCurtida() {
-    final dono = widget.occurrence.usuarioId;
     final eu = _authService.currentUser;
-    if (dono == null || eu == null || dono == eu.uid) return;
-    final nome = eu.displayName ?? eu.email?.split('@').first ?? 'Alguém';
-    _notificacaoService.notificar(
-      donoId: dono,
-      tipo: 'curtida',
-      deUsuarioNome: nome,
-      ocorrenciaId: widget.occurrence.id,
-      ocorrenciaTitulo: widget.occurrence.titulo,
+    final nome = eu?.displayName ?? eu?.email?.split('@').first;
+    await reagirOcorrencia(
+      context: context,
+      ocorrencia: widget.occurrence,
+      uid: _uid,
+      isLike: true,
+      ocorrenciaService: _service,
+      notificacaoService: _notificacaoService,
+      nomeAutor: nome,
+      onMudou: () => setState(_sincronizarComOcorrencia),
     );
   }
 
   Future<void> _handleDislike() async {
     if (_uid.isEmpty) return;
-    final pLiked = _userLiked,
-        pDisliked = _userDisliked,
-        pLikes = _likes,
-        pDislikes = _dislikes;
-    final pLikedBy = List<String>.from(_likedBy);
-    final pDislikedBy = List<String>.from(_dislikedBy);
-
-    setState(() {
-      if (_userDisliked) {
-        _userDisliked = false;
-        _dislikes--;
-        _dislikedBy.remove(_uid);
-      } else {
-        if (_userLiked) {
-          _userLiked = false;
-          _likes--;
-          _likedBy.remove(_uid);
-        }
-        _userDisliked = true;
-        _dislikes++;
-        _dislikedBy.add(_uid);
-      }
-    });
-
-    try {
-      await _service.toggleDislike(widget.occurrence.id, _uid);
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-        () => _restaurarReacao(
-          pLiked,
-          pDisliked,
-          pLikes,
-          pDislikes,
-          pLikedBy,
-          pDislikedBy,
-        ),
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Não foi possível reagir agora. Tente novamente.'),
-        ),
-      );
-    }
+    final eu = _authService.currentUser;
+    final nome = eu?.displayName ?? eu?.email?.split('@').first;
+    await reagirOcorrencia(
+      context: context,
+      ocorrencia: widget.occurrence,
+      uid: _uid,
+      isLike: false,
+      ocorrenciaService: _service,
+      notificacaoService: _notificacaoService,
+      nomeAutor: nome,
+      onMudou: () => setState(_sincronizarComOcorrencia),
+    );
   }
 
-  void _openCommentSheet({String? parentId, String? respondendoA}) {
-    final authUser = _authService.currentUser;
-    if (authUser == null) return;
-
-    showModalBottomSheet(
+  // Mesmo sheet usado no feed (OccurrenceCommentsSheet) — evita reimplementar
+  // adicionar/curtir/excluir/responder comentário aqui também.
+  void _abrirComentarios() {
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CommentInputSheet(
-        respondendoA: respondendoA,
-        onSubmit: (text) async {
-          final perfil = await _usuarioService.carregarPerfil(authUser.uid);
-          final nome = perfil?.nome.trim().isNotEmpty == true
-              ? perfil!.nome
-              : (authUser.displayName ?? 'Usuário');
-          final foto = perfil?.fotoUrl ?? authUser.photoURL;
-
-          final comentario = ComentarioModel(
-            id: '',
-            userId: authUser.uid,
-            userName: nome,
-            userPhotoUrl: foto,
-            texto: text,
-            parentId: parentId,
-          );
-          await _service.adicionarComentario(widget.occurrence.id, comentario);
-          // Notifica o dono da denúncia (se não for o próprio autor).
-          final dono = widget.occurrence.usuarioId;
-          if (dono != null && dono != authUser.uid) {
-            await _notificacaoService.notificar(
-              donoId: dono,
-              tipo: 'comentario',
-              deUsuarioNome: nome,
-              ocorrenciaId: widget.occurrence.id,
-              ocorrenciaTitulo: widget.occurrence.titulo,
-            );
-          }
-        },
+      builder: (_) => OccurrenceCommentsSheet(
+        occurrence: widget.occurrence,
+        ocorrenciaService: _service,
+        authService: _authService,
+        usuarioService: _usuarioService,
+        notificacaoService: _notificacaoService,
       ),
     );
-  }
-
-  Future<void> _toggleLikeComentario(ComentarioModel c) async {
-    if (_uid.isEmpty) return;
-    try {
-      await _service.toggleLikeComentario(widget.occurrence.id, c.id, _uid);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível curtir agora.')),
-      );
-    }
-  }
-
-  Future<void> _deleteComment(ComentarioModel c) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Excluir comentário'),
-        content: const Text('Tem certeza que deseja excluir este comentário?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: _C.hint)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _C.red,
-              foregroundColor: _C.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await _service.deletarComentario(widget.occurrence.id, c.id);
-    }
   }
 
   @override
@@ -626,7 +466,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: _AddCommentButton(
-                                  onTap: _openCommentSheet,
+                                  onTap: _abrirComentarios,
                                 ),
                               ),
                             ],
@@ -664,112 +504,69 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                           _StatusTimeline(occurrence: o, service: _service),
                           const SizedBox(height: 28),
 
-                          // Seção de comentários (com contador em tempo real)
-                          StreamBuilder<int>(
-                            stream: _service.contarComentarios(o.id),
-                            initialData: o.comments,
-                            builder: (context, snap) {
-                              final total = snap.data ?? 0;
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  const Text(
-                                    'Comentários',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700,
-                                      color: _C.text,
-                                    ),
-                                  ),
-                                  if (total > 0) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFF3B82F6,
-                                        ).withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        '$total',
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF3B82F6),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
+                          // Seção de comentários: abre o mesmo sheet do feed
+                          // (OccurrenceCommentsSheet), evitando reimplementar
+                          // a lógica de adicionar/curtir/excluir aqui também.
                           StreamBuilder<List<ComentarioModel>>(
                             stream: _service.listarComentarios(o.id),
                             builder: (context, snap) {
-                              if (snap.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 24),
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                );
-                              }
-                              final comentarios = snap.data ?? [];
-                              if (comentarios.isEmpty) {
-                                return const _EmptyComments();
-                              }
-                              // Agrupa respostas sob o comentário raiz.
-                              final raizes = comentarios
-                                  .where((c) => c.parentId == null)
-                                  .toList();
-                              final respostasPor =
-                                  <String, List<ComentarioModel>>{};
-                              for (final c in comentarios) {
-                                if (c.parentId != null) {
-                                  (respostasPor[c.parentId!] ??= []).add(c);
-                                }
-                              }
-                              return Column(
-                                children: [
-                                  for (final raiz in raizes) ...[
-                                    _CommentItem(
-                                      comentario: raiz,
-                                      isOwn: raiz.userId == _uid,
-                                      onDelete: () => _deleteComment(raiz),
-                                      onLike: () => _toggleLikeComentario(raiz),
-                                      onReply: () => _openCommentSheet(
-                                        parentId: raiz.id,
-                                        respondendoA: raiz.userName,
+                              final total = (snap.data ?? const [])
+                                  .where((c) => !c.oculto)
+                                  .length;
+                              return InkWell(
+                                onTap: () => _abrirComentarios(),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      'Comentários',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                        color: _C.text,
                                       ),
                                     ),
-                                    for (final resp
-                                        in respostasPor[raiz.id] ?? [])
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 38),
-                                        child: _CommentItem(
-                                          comentario: resp,
-                                          isOwn: resp.userId == _uid,
-                                          onDelete: () => _deleteComment(resp),
-                                          onLike: () =>
-                                              _toggleLikeComentario(resp),
-                                          // Sem responder em resposta (1 nível).
-                                          onReply: null,
+                                    if (total > 0) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF3B82F6,
+                                          ).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '$total',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF3B82F6),
+                                          ),
                                         ),
                                       ),
+                                    ],
+                                    const Spacer(),
+                                    const Icon(
+                                      Icons.chevron_right,
+                                      color: _C.hint,
+                                    ),
                                   ],
-                                ],
+                                ),
                               );
                             },
+                          ),
+                          const SizedBox(height: 4),
+                          OutlinedButton.icon(
+                            onPressed: _abrirComentarios,
+                            icon: const Icon(Icons.mode_comment_outlined),
+                            label: const Text('Ver e comentar'),
                           ),
                         ],
                       ),
@@ -944,6 +741,10 @@ class _ImageAreaState extends State<_ImageArea> {
               child: Image.network(
                 images[i],
                 fit: BoxFit.contain,
+                // Descrição para leitores de tela (sem isto vira só "imagem").
+                semanticLabel: images.length > 1
+                    ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
+                    : 'Foto da denúncia: ${widget.type.label}',
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
                   return const Center(
@@ -1305,191 +1106,6 @@ class _AddCommentButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────
-//  EMPTY COMMENTS
-// ─────────────────────────────────────────
-
-class _EmptyComments extends StatelessWidget {
-  const _EmptyComments();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 40),
-      child: Column(
-        children: [
-          Icon(Icons.chat_bubble_outline, size: 64, color: Color(0xFFD1D5DB)),
-          SizedBox(height: 12),
-          Text(
-            'Sem comentários',
-            style: TextStyle(
-              fontSize: 18,
-              color: Color(0xFFD1D5DB),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-//  COMMENT ITEM
-// ─────────────────────────────────────────
-
-class _CommentItem extends StatelessWidget {
-  final ComentarioModel comentario;
-  final bool isOwn;
-  final VoidCallback onDelete;
-  final VoidCallback onLike;
-  final VoidCallback? onReply;
-
-  const _CommentItem({
-    required this.comentario,
-    required this.isOwn,
-    required this.onDelete,
-    required this.onLike,
-    this.onReply,
-  });
-
-  String _formatDate(DateTime? dt) => tempoRelativo(dt);
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = comentario;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Avatar
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: const Color(0xFFE8F5E9),
-            backgroundImage:
-                c.userPhotoUrl != null && c.userPhotoUrl!.isNotEmpty
-                ? NetworkImage(c.userPhotoUrl!)
-                : null,
-            child: c.userPhotoUrl == null || c.userPhotoUrl!.isEmpty
-                ? Text(
-                    _initials(c.userName),
-                    style: const TextStyle(
-                      color: Color(0xFF4CAF50),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  )
-                : null,
-          ),
-          const SizedBox(width: 10),
-
-          // Conteúdo do comentário
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        c.userName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: _C.text,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      _formatDate(c.dataCriacao),
-                      style: const TextStyle(fontSize: 11, color: _C.hint),
-                    ),
-                    if (isOwn) ...[
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: onDelete,
-                        child: const Icon(
-                          Icons.delete_outline,
-                          size: 16,
-                          color: _C.red,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  c.texto,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF374151),
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                // Ações: curtir + responder
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: onLike,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            c.userLiked
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            size: 15,
-                            color: c.userLiked ? _C.red : _C.hint,
-                          ),
-                          if (c.likes > 0) ...[
-                            const SizedBox(width: 4),
-                            Text(
-                              '${c.likes}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: c.userLiked ? _C.red : _C.hint,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (onReply != null) ...[
-                      const SizedBox(width: 18),
-                      GestureDetector(
-                        onTap: onReply,
-                        child: const Text(
-                          'Responder',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _C.hint,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────
 //  VERIFICAÇÃO OFICIAL
 // ─────────────────────────────────────────
 
@@ -1814,7 +1430,7 @@ class _StatusTimeline extends StatelessWidget {
             <({IconData icone, Color cor, String label, DateTime? data})>[
               (
                 icone: Icons.add_location_alt_outlined,
-                cor: const Color(0xFF6B7280),
+                cor: AppColors.muted,
                 label: 'Registrada',
                 data: occurrence.dataCriacao,
               ),
@@ -1895,136 +1511,6 @@ class _StatusTimeline extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-//  COMMENT INPUT SHEET
-// ─────────────────────────────────────────
-
-class _CommentInputSheet extends StatefulWidget {
-  final Future<void> Function(String text) onSubmit;
-  final String? respondendoA;
-
-  const _CommentInputSheet({required this.onSubmit, this.respondendoA});
-
-  @override
-  State<_CommentInputSheet> createState() => _CommentInputSheetState();
-}
-
-class _CommentInputSheetState extends State<_CommentInputSheet> {
-  final _controller = TextEditingController();
-  bool _sending = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _send() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
-    setState(() => _sending = true);
-    try {
-      await widget.onSubmit(text);
-      if (mounted) Navigator.pop(context);
-    } catch (_) {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag handle
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              widget.respondendoA != null
-                  ? 'Respondendo a ${widget.respondendoA}'
-                  : 'Adicionar comentário',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: _C.text,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: TextField(
-                    controller: _controller,
-                    autofocus: true,
-                    maxLines: null,
-                    textCapitalization: TextCapitalization.sentences,
-                    style: const TextStyle(fontSize: 14),
-                    decoration: const InputDecoration(
-                      hintText: 'Escreva um comentário...',
-                      hintStyle: TextStyle(color: _C.hint, fontSize: 13),
-                      border: InputBorder.none,
-                    ),
-                    onSubmitted: (_) => _send(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              GestureDetector(
-                onTap: _send,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 42,
-                  height: 42,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF4CAF50),
-                    shape: BoxShape.circle,
-                  ),
-                  child: _sending
-                      ? const Padding(
-                          padding: EdgeInsets.all(10),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.send, color: Colors.white, size: 18),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

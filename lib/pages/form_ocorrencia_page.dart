@@ -13,8 +13,10 @@ import '../services/auth_service.dart';
 import '../services/classificacao_ia_service.dart';
 import '../services/cloudinary_service.dart';
 import '../services/ocorrencia_service.dart';
+import '../services/rate_limiter.dart';
 import '../services/usuario_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/imagem_privacidade.dart';
 
 // ─── Paleta ────────────────────────────────────────────────────────────────
 
@@ -126,7 +128,12 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       maxWidth: 1600,
     );
     if (!mounted || img == null) return;
-    final bytes = await img.readAsBytes();
+    final bytesOriginais = await img.readAsBytes();
+    if (!mounted) return;
+    // Remove EXIF (inclui GPS embutido na foto) antes de qualquer outra
+    // validação — sem isso, a localização exata poderia vazar mesmo em
+    // denúncia marcada como anônima.
+    final bytes = await removerMetadadosImagem(bytesOriginais);
     if (!mounted) return;
     if (bytes.length > _maxFotoBytes) {
       _snack('Foto muito grande (máx. 8 MB). Tente outra.', error: true);
@@ -853,7 +860,10 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     } catch (e) {
       debugPrint('Envio error: $e');
       final String msg;
-      if (e is CloudinaryConfigException) {
+      if (e is RateLimitException) {
+        msg =
+            'Aguarde ${e.segundosRestantes}s antes de enviar outra denúncia.';
+      } else if (e is CloudinaryConfigException) {
         msg = 'Cloudinary não configurado: ${e.message}';
       } else if (e is CloudinaryUploadException) {
         msg = 'Erro no upload da foto: ${e.message}';
@@ -1094,20 +1104,24 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: GestureDetector(
-                      onTap: _enviando
-                          ? null
-                          : () => _removerFoto(_fotoAtivaIdx),
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: const Icon(
-                          Icons.close,
-                          size: 16,
-                          color: _C.primary,
+                    child: Semantics(
+                      button: true,
+                      label: 'Remover foto',
+                      child: GestureDetector(
+                        onTap: _enviando
+                            ? null
+                            : () => _removerFoto(_fotoAtivaIdx),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: _C.primary,
+                          ),
                         ),
                       ),
                     ),
@@ -1143,17 +1157,21 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
               ),
             ),
         if (_totalFotos < 3)
-          GestureDetector(
-            onTap: _enviando ? null : _adicionarFoto,
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: _C.slotBg,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: _C.slotBorder),
+          Semantics(
+            button: true,
+            label: 'Adicionar foto',
+            child: GestureDetector(
+              onTap: _enviando ? null : _adicionarFoto,
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: _C.slotBg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _C.slotBorder),
+                ),
+                child: const Icon(Icons.add, color: _C.hint, size: 22),
               ),
-              child: const Icon(Icons.add, color: _C.hint, size: 22),
             ),
           ),
       ],

@@ -7,9 +7,11 @@ import '../services/auth_service.dart';
 import '../services/moderacao_service.dart';
 import '../services/notificacao_service.dart';
 import '../services/ocorrencia_service.dart';
+import '../services/rate_limiter.dart';
 import '../services/usuario_service.dart';
 import '../utils/tempo_relativo.dart';
 import 'report_content_sheet.dart';
+import '../theme/app_theme.dart';
 
 class OccurrenceCommentsSheet extends StatefulWidget {
   final OcorrenciaModel occurrence;
@@ -101,8 +103,11 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
         ),
       );
 
+      // Denúncia anônima nunca notifica o dono (S2): o UID real não é
+      // acessível a quem comenta, protegendo o denunciante de correlação
+      // entre denúncias.
       final dono = widget.occurrence.usuarioId;
-      if (dono != null && dono != user.uid) {
+      if (!widget.occurrence.anonima && dono != null && dono != user.uid) {
         await widget.notificacaoService.notificar(
           donoId: dono,
           tipo: 'comentario',
@@ -119,11 +124,14 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
         _replyParentId = null;
         _sending = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _sending = false);
+      final msg = e is RateLimitException
+          ? 'Aguarde ${e.segundosRestantes}s antes de comentar de novo.'
+          : 'Não foi possível comentar agora.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível comentar agora.')),
+        SnackBar(content: Text(msg)),
       );
     }
   }
@@ -268,7 +276,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
+              backgroundColor: AppColors.danger,
               foregroundColor: Colors.white,
               elevation: 0,
             ),
@@ -385,7 +393,11 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                       );
                     }
 
-                    final comentarios = snapshot.data ?? const [];
+                    // Comentários ocultados pela autoridade (moderação) não
+                    // aparecem no fluxo público.
+                    final comentarios = (snapshot.data ?? const [])
+                        .where((c) => !c.oculto)
+                        .toList();
                     if (comentarios.isEmpty) {
                       return const _EmptyComments();
                     }
@@ -546,7 +558,7 @@ class _CommentTile extends StatelessWidget {
                         'Responder',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Color(0xFF6B7280),
+                          color: AppColors.muted,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -578,7 +590,7 @@ class _CommentTile extends StatelessWidget {
                   c.userLiked ? Icons.favorite : Icons.favorite_border,
                   size: 18,
                   color: c.userLiked
-                      ? const Color(0xFFEF4444)
+                      ? AppColors.danger
                       : const Color(0xFF9CA3AF),
                 ),
                 onPressed: onLike,
@@ -656,7 +668,7 @@ class _CommentMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? const Color(0xFFEF4444) : const Color(0xFF111827);
+    final color = danger ? AppColors.danger : const Color(0xFF111827);
     return Row(
       children: [
         Icon(icon, size: 18, color: color),
@@ -694,7 +706,7 @@ class _ReplyBanner extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFF6B7280),
+                color: AppColors.muted,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),

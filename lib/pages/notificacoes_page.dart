@@ -6,6 +6,7 @@ import '../services/notificacao_service.dart';
 import '../services/ocorrencia_service.dart';
 import '../utils/tempo_relativo.dart';
 import 'detalhe_ocorrencia_page.dart';
+import '../theme/app_theme.dart';
 
 class NotificacoesPage extends StatefulWidget {
   const NotificacoesPage({super.key});
@@ -80,7 +81,7 @@ class _NotificacoesPageState extends State<NotificacoesPage> {
       backgroundColor: const Color(0xFFF2F2F2),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: AppColors.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
         title: const Text(
@@ -88,7 +89,7 @@ class _NotificacoesPageState extends State<NotificacoesPage> {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: AppColors.ink,
           ),
         ),
         bottom: const PreferredSize(
@@ -143,7 +144,7 @@ class _CabecalhoGrupo extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.5,
-          color: Color(0xFF8A8A8A),
+          color: AppColors.hint,
         ),
       ),
     );
@@ -169,19 +170,19 @@ class _CabecalhoGrupo extends StatelessWidget {
     case 'status_em_analise':
       return (
         icone: Icons.search,
-        cor: const Color(0xFFF97316),
+        cor: AppColors.warning,
         frase: 'está analisando sua denúncia',
       );
     case 'status_confirmada':
       return (
         icone: Icons.verified,
-        cor: const Color(0xFF22C55E),
+        cor: AppColors.success,
         frase: 'confirmou sua denúncia',
       );
     case 'status_nao_confirmada':
       return (
         icone: Icons.cancel,
-        cor: const Color(0xFFEF4444),
+        cor: AppColors.danger,
         frase: 'não confirmou sua denúncia',
       );
     case 'status_encaminhada':
@@ -193,13 +194,13 @@ class _CabecalhoGrupo extends StatelessWidget {
     case 'status_resolvida':
       return (
         icone: Icons.check_circle,
-        cor: const Color(0xFF22C55E),
+        cor: AppColors.success,
         frase: 'marcou sua denúncia como resolvida',
       );
     default:
       return (
         icone: Icons.notifications,
-        cor: const Color(0xFF6B7280),
+        cor: AppColors.muted,
         frase: 'interagiu com sua denúncia',
       );
   }
@@ -227,7 +228,7 @@ class _NotificacaoTile extends StatelessWidget {
         ),
         title: RichText(
           text: TextSpan(
-            style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A1A)),
+            style: const TextStyle(fontSize: 14, color: AppColors.ink),
             children: [
               TextSpan(
                 text: n.deUsuarioNome,
@@ -248,7 +249,7 @@ class _NotificacaoTile extends StatelessWidget {
                   tempoRelativo(n.dataCriacao),
                   style: const TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF8A8A8A),
+                    color: AppColors.hint,
                   ),
                 ),
               )
@@ -276,7 +277,7 @@ class _Vazio extends StatelessWidget {
           SizedBox(height: 12),
           Text(
             'Você ainda não tem notificações',
-            style: TextStyle(fontSize: 15, color: Color(0xFF8A8A8A)),
+            style: TextStyle(fontSize: 15, color: AppColors.hint),
           ),
           SizedBox(height: 4),
           Text(

@@ -14,6 +14,8 @@ import '../models/rota_coleta_model.dart';
 /// cacheado em memória após a primeira leitura — evita reabrir e reparsear
 /// o JSON a cada vez que o usuário usa a camada ou a busca.
 class RotaColetaService {
+  static final RotaColetaService instance = RotaColetaService();
+
   static List<RotaColetaModel>? _cache;
 
   Future<List<RotaColetaModel>> carregarRotas() async {

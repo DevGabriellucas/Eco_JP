@@ -190,7 +190,7 @@ class _MapDisplayState extends State<MapDisplay> {
               FloatingActionButton.small(
                 heroTag: 'mapa-calor',
                 backgroundColor: widget.controller.heatmapAtivo
-                    ? const Color(0xFFEF4444)
+                    ? AppColors.danger
                     : Colors.white,
                 foregroundColor: widget.controller.heatmapAtivo
                     ? Colors.white

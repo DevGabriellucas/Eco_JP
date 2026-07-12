@@ -5,19 +5,20 @@ import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/ocorrencia_service.dart';
 import 'detalhe_ocorrencia_page.dart';
+import '../theme/app_theme.dart';
 
 class FilaVerificacaoPage extends StatelessWidget {
   const FilaVerificacaoPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final service = OcorrenciaService();
+    final service = OcorrenciaService.instance;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F2),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: AppColors.ink,
         elevation: 0,
         title: const Text(
           'Fila de verificação',
@@ -88,7 +89,7 @@ class _ContadorBanner extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFF97316).withValues(alpha: 0.12),
+              color: AppColors.warning.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -96,7 +97,7 @@ class _ContadorBanner extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFFF97316),
+                color: AppColors.warning,
               ),
             ),
           ),
@@ -104,7 +105,7 @@ class _ContadorBanner extends StatelessWidget {
           const Expanded(
             child: Text(
               'Ordenadas da mais antiga para a mais recente',
-              style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+              style: TextStyle(fontSize: 12, color: AppColors.hint),
             ),
           ),
         ],
@@ -243,7 +244,7 @@ class _ItemFila extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: AppColors.ink,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -276,7 +277,7 @@ class _ItemFila extends StatelessWidget {
                     dataStr,
                     style: const TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF8A8A8A),
+                      color: AppColors.hint,
                     ),
                   ),
                 ],
@@ -289,11 +290,11 @@ class _ItemFila extends StatelessWidget {
   }
 
   Color _idadeCor(DateTime? dt) {
-    if (dt == null) return const Color(0xFF8A8A8A);
+    if (dt == null) return AppColors.hint;
     final dias = DateTime.now().difference(dt).inDays;
-    if (dias >= 7) return const Color(0xFFEF4444);
-    if (dias >= 3) return const Color(0xFFF97316);
-    return const Color(0xFF8A8A8A);
+    if (dias >= 7) return AppColors.danger;
+    if (dias >= 3) return AppColors.warning;
+    return AppColors.hint;
   }
 }
 
@@ -310,20 +311,20 @@ class _FilaVazia extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle_outline, size: 72, color: Color(0xFF22C55E)),
+          Icon(Icons.check_circle_outline, size: 72, color: AppColors.success),
           SizedBox(height: 16),
           Text(
             'Tudo verificado!',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A1A),
+              color: AppColors.ink,
             ),
           ),
           SizedBox(height: 8),
           Text(
             'Não há denúncias pendentes de verificação.',
-            style: TextStyle(fontSize: 14, color: Color(0xFF8A8A8A)),
+            style: TextStyle(fontSize: 14, color: AppColors.hint),
           ),
         ],
       ),

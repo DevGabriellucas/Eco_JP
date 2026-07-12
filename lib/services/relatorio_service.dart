@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -7,10 +9,14 @@ import '../models/ocorrencia_model.dart';
 import '../models/occurrence_types.dart';
 import '../models/usuario_model.dart';
 import '../pages/mapPage/controller/calc_mostaffectedzones.dart';
+import 'analytics_service.dart';
 
 /// Gera um relatório PDF das denúncias (triagem) para a autoridade levar a
 /// reuniões. O conteúdo é agregado — não expõe dados pessoais do denunciante.
 class RelatorioService {
+  static final RelatorioService instance = RelatorioService();
+
+  final AnalyticsService _analytics = AnalyticsService();
   Future<void> gerarECompartilhar({
     required List<OcorrenciaModel> ocorrencias,
     required String periodoLabel,
@@ -242,6 +248,7 @@ class RelatorioService {
       bytes: bytes,
       filename: 'meus_dados_ecojp_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
+    unawaited(_analytics.dadosExportados());
   }
 
   pw.Widget _secao(String titulo) => pw.Padding(

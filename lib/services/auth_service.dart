@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
+import 'analytics_service.dart';
 
 class AuthResult {
   final bool success;
@@ -11,7 +15,10 @@ class AuthResult {
 }
 
 class AuthService {
+  static final AuthService instance = AuthService();
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final AnalyticsService _analytics = AnalyticsService();
 
   User? get currentUser => _auth.currentUser;
 
@@ -30,6 +37,8 @@ class AuthService {
         email: email,
         password: password,
       );
+      unawaited(_analytics.cadastro(metodo: 'password'));
+      unawaited(_analytics.definirUsuario(result.user?.uid));
 
       return AuthResult(
         success: true,
@@ -56,6 +65,8 @@ class AuthService {
         email: email,
         password: password,
       );
+      unawaited(_analytics.login(metodo: 'password'));
+      unawaited(_analytics.definirUsuario(result.user?.uid));
 
       return AuthResult(
         success: true,
@@ -74,6 +85,8 @@ class AuthService {
       if (kIsWeb) {
         // Web: usa popup do Firebase Auth (não precisa de clientId no código)
         final result = await _auth.signInWithPopup(GoogleAuthProvider());
+        unawaited(_analytics.login(metodo: 'google'));
+        unawaited(_analytics.definirUsuario(result.user?.uid));
         return AuthResult(
           success: true,
           user: result.user,
@@ -94,6 +107,8 @@ class AuthService {
           idToken: googleAuth.idToken,
         );
         final result = await _auth.signInWithCredential(credential);
+        unawaited(_analytics.login(metodo: 'google'));
+        unawaited(_analytics.definirUsuario(result.user?.uid));
         return AuthResult(
           success: true,
           user: result.user,

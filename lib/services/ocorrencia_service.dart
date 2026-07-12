@@ -6,43 +6,67 @@ import 'package:flutter/foundation.dart';
 
 import '../models/comentario_model.dart';
 import '../models/ocorrencia_model.dart';
+import 'analytics_service.dart';
+import 'rate_limiter.dart';
 
 class OcorrenciaService {
+  // Teto de leitura para visões agregadas (mapa, estatísticas). Evita baixar a
+  // coleção inteira e limita o custo de Firestore conforme o app cresce.
+  static const int tetoAgregado = 500;
+
+  // Instância compartilhada opcional — evita recriar o service em cada
+  // widget (43+ pontos no app faziam `OcorrenciaService()` direto). O
+  // construtor padrão continua disponível para quem preferir instanciar.
+  static final OcorrenciaService instance = OcorrenciaService();
+
   final CollectionReference<Map<String, dynamic>> _ocorrenciasRef =
       FirebaseFirestore.instance.collection('ocorrencias');
+  final AnalyticsService _analytics = AnalyticsService();
 
   String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
 
   // ── CREATE ────────────────────────────────────────────────────────────────
 
   Future<void> cadastrarOcorrencia(OcorrenciaModel ocorrencia) async {
+    // Anti-spam client-side: bloqueia envios em rajada do mesmo usuário.
+    // Proteção real fica no servidor (Blaze/Cloud Functions), ver RateLimiter.
+    RateLimiter.instance.checarERegistrar(
+      'denuncia_${_currentUserId ?? "anon"}',
+      RateLimiter.intervaloDenuncia,
+    );
     try {
-      await _ocorrenciasRef.add(ocorrencia.toMap());
+      final doc = await _ocorrenciasRef.add(ocorrencia.toMap());
+
+      // Denúncia anônima: o UID real não vai no documento público (toMap()
+      // já grava usuarioId como null nesse caso) — guardamos numa subcoleção
+      // privada, legível só pelo próprio dono e pela autoridade (protege
+      // contra correlacionar denúncias anônimas pelo autor, S2). Também
+      // gravamos um ponteiro no perfil do dono, senão "Minhas denúncias" não
+      // consegue mais encontrar essa denúncia (o campo usuarioId sumiu dela).
+      if (ocorrencia.anonima && ocorrencia.usuarioId != null) {
+        final uid = ocorrencia.usuarioId!;
+        await doc.collection('dono').doc('info').set({'usuarioId': uid});
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(uid)
+            .collection('minhas_denuncias_anonimas')
+            .doc(doc.id)
+            .set({});
+      }
+
+      unawaited(
+        _analytics.denunciaCriada(
+          categoria: ocorrencia.tipoLixo,
+          anonima: ocorrencia.anonima,
+        ),
+      );
     } catch (e) {
       debugPrint('Erro ao salvar ocorrência: $e');
       rethrow;
     }
   }
 
-  // ── READ — stream completo (estatísticas / perfil) ────────────────────────
-
-  Stream<List<OcorrenciaModel>> listarOcorrencias() {
-    final uid = _currentUserId;
-    return _ocorrenciasRef
-        .orderBy('dataCriacao', descending: true)
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map(
-                (doc) => OcorrenciaModel.fromMap(
-                  doc.data(),
-                  doc.id,
-                  currentUserId: uid,
-                ),
-              )
-              .toList(),
-        );
-  }
+  // ── READ ──────────────────────────────────────────────────────────────────
 
   Stream<List<OcorrenciaModel>> listarOcorrenciasLimitadas(int limit) {
     final uid = _currentUserId;
@@ -151,6 +175,130 @@ class OcorrenciaService {
         );
   }
 
+  /// IDs das próprias denúncias anônimas do usuário (ponteiros gravados em
+  /// `usuarios/{uid}/minhas_denuncias_anonimas`, já que o documento público
+  /// dessas denúncias não guarda usuarioId — ver cadastrarOcorrencia/S2).
+  Stream<Set<String>> observarMinhasDenunciasAnonimasIds(String uid) {
+    return FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(uid)
+        .collection('minhas_denuncias_anonimas')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.id).toSet());
+  }
+
+  /// "Minhas denúncias" completo: combina as não-anônimas (query direta por
+  /// usuarioId) com as anônimas (buscadas pelos ponteiros do próprio perfil).
+  Stream<List<OcorrenciaModel>> listarMinhasDenuncias(String uid) {
+    final naoAnonimas = listarPorUsuario(uid);
+    final anonimasIds = observarMinhasDenunciasAnonimasIds(uid);
+
+    late final StreamController<List<OcorrenciaModel>> controller;
+    List<OcorrenciaModel> ultimasNaoAnonimas = const [];
+    Set<String> ultimosIdsAnonimos = const {};
+    StreamSubscription? subNaoAnonimas;
+    StreamSubscription? subIds;
+    StreamSubscription<List<OcorrenciaModel>>? subAnonimas;
+
+    void emitirAnonimas(Set<String> ids) {
+      subAnonimas?.cancel();
+      subAnonimas = observarPorIds(ids).listen((anonimas) {
+        final merged = <String, OcorrenciaModel>{
+          for (final o in ultimasNaoAnonimas) o.id: o,
+          for (final o in anonimas) o.id: o,
+        };
+        final lista = merged.values.toList()..sort(_ordenarFeed);
+        controller.add(lista);
+      });
+    }
+
+    controller = StreamController<List<OcorrenciaModel>>(
+      onListen: () {
+        subNaoAnonimas = naoAnonimas.listen((lista) {
+          ultimasNaoAnonimas = lista;
+          emitirAnonimas(ultimosIdsAnonimos);
+        });
+        subIds = anonimasIds.listen((ids) {
+          ultimosIdsAnonimos = ids;
+          emitirAnonimas(ids);
+        });
+      },
+      onCancel: () async {
+        await subNaoAnonimas?.cancel();
+        await subIds?.cancel();
+        await subAnonimas?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  // Observa um conjunto específico de ocorrências por id (usado nos favoritos
+  // do perfil). Evita baixar a coleção inteira só para filtrar por id. O
+  // Firestore limita `whereIn` a 30 valores; para conjuntos maiores, particiona.
+  Stream<List<OcorrenciaModel>> observarPorIds(Set<String> ids) {
+    if (ids.isEmpty) {
+      return Stream.value(const <OcorrenciaModel>[]);
+    }
+    final uid = _currentUserId;
+    final lista = ids.toList();
+    final lotes = <List<String>>[];
+    for (var i = 0; i < lista.length; i += 30) {
+      lotes.add(lista.sublist(i, i + 30 > lista.length ? lista.length : i + 30));
+    }
+
+    final streams = lotes.map(
+      (lote) => _ocorrenciasRef
+          .where(FieldPath.documentId, whereIn: lote)
+          .snapshots()
+          .map(
+            (snap) => snap.docs
+                .map(
+                  (doc) => OcorrenciaModel.fromMap(
+                    doc.data(),
+                    doc.id,
+                    currentUserId: uid,
+                  ),
+                )
+                .toList(),
+          ),
+    );
+
+    // Combina os lotes num único stream de lista concatenada.
+    return _combinarListas(streams.toList());
+  }
+
+  static Stream<List<OcorrenciaModel>> _combinarListas(
+    List<Stream<List<OcorrenciaModel>>> streams,
+  ) {
+    if (streams.length == 1) return streams.first;
+    final atual = List<List<OcorrenciaModel>>.filled(streams.length, const []);
+    late final StreamController<List<OcorrenciaModel>> controller;
+    final subs = <StreamSubscription<List<OcorrenciaModel>>>[];
+
+    void emitir() => controller.add([for (final l in atual) ...l]);
+
+    controller = StreamController<List<OcorrenciaModel>>(
+      onListen: () {
+        for (var i = 0; i < streams.length; i++) {
+          final idx = i;
+          subs.add(
+            streams[idx].listen((lista) {
+              atual[idx] = lista;
+              emitir();
+            }, onError: controller.addError),
+          );
+        }
+      },
+      onCancel: () async {
+        for (final s in subs) {
+          await s.cancel();
+        }
+      },
+    );
+    return controller.stream;
+  }
+
   // Busca uma única ocorrência pelo id (usado ao tocar numa notificação).
   Future<OcorrenciaModel?> buscarPorId(String id) async {
     final doc = await _ocorrenciasRef.doc(id).get();
@@ -227,7 +375,26 @@ class OcorrenciaService {
 
   Future<void> deletarOcorrencia(String id) async {
     try {
-      await _ocorrenciasRef.doc(id).delete();
+      // Denúncia anônima tem documentos auxiliares (dono/info e o ponteiro
+      // em minhas_denuncias_anonimas) que não são apagados em cascata pelo
+      // Firestore — precisam ser limpos manualmente antes/junto da exclusão
+      // do doc principal, senão ficam órfãos.
+      final ref = _ocorrenciasRef.doc(id);
+      final snap = await ref.get();
+      final data = snap.data();
+      final uid = _currentUserId;
+
+      if (data?['anonima'] == true && uid != null) {
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(uid)
+            .collection('minhas_denuncias_anonimas')
+            .doc(id)
+            .delete();
+        await ref.collection('dono').doc('info').delete();
+      }
+
+      await ref.delete();
     } catch (e) {
       debugPrint('Erro ao deletar ocorrência: $e');
       rethrow;
@@ -294,6 +461,9 @@ class OcorrenciaService {
         data['resolvidaEm'] = FieldValue.serverTimestamp();
       }
       await _ocorrenciasRef.doc(id).update(data);
+      if (status != null) {
+        unawaited(_analytics.statusAvancado(statusOficial: status));
+      }
     } catch (e) {
       debugPrint('Erro ao definir status oficial: $e');
       rethrow;
@@ -305,6 +475,37 @@ class OcorrenciaService {
       await _ocorrenciasRef.doc(id).update({'fixada': fixada});
     } catch (e) {
       debugPrint('Erro ao definir destaque da denuncia: $e');
+      rethrow;
+    }
+  }
+
+  // ── MODERAÇÃO (autoridade) ────────────────────────────────────────────────
+
+  /// Oculta/reexibe uma ocorrência denunciada por abuso. Conteúdo oculto some
+  /// do feed do cidadão (ver filtro em listarFeedComFixadas / home_page).
+  Future<void> definirOculto(String id, {required bool oculto}) async {
+    try {
+      await _ocorrenciasRef.doc(id).update({'oculto': oculto});
+    } catch (e) {
+      debugPrint('Erro ao ocultar denúncia: $e');
+      rethrow;
+    }
+  }
+
+  /// Oculta/reexibe um comentário denunciado por abuso.
+  Future<void> definirComentarioOculto(
+    String ocorrenciaId,
+    String comentarioId, {
+    required bool oculto,
+  }) async {
+    try {
+      await _ocorrenciasRef
+          .doc(ocorrenciaId)
+          .collection('comentarios')
+          .doc(comentarioId)
+          .update({'oculto': oculto});
+    } catch (e) {
+      debugPrint('Erro ao ocultar comentário: $e');
       rethrow;
     }
   }
@@ -404,13 +605,16 @@ class OcorrenciaService {
 
   // ── COMENTÁRIOS ───────────────────────────────────────────────────────────
 
-  // Quantidade de comentários em tempo real (usado no contador do feed).
-  Stream<int> contarComentarios(String ocorrenciaId) {
-    return _ocorrenciasRef
+  // Quantidade de comentários via aggregation .count(): uma leitura de contagem
+  // em vez de baixar todos os documentos. Pontual (não reativo) — o feed
+  // recarrega ao abrir/reconstruir, suficiente para o contador.
+  Future<int> contarComentarios(String ocorrenciaId) async {
+    final snap = await _ocorrenciasRef
         .doc(ocorrenciaId)
         .collection('comentarios')
-        .snapshots()
-        .map((snap) => snap.size);
+        .count()
+        .get();
+    return snap.count ?? 0;
   }
 
   Stream<List<ComentarioModel>> listarComentarios(String ocorrenciaId) {
@@ -456,6 +660,11 @@ class OcorrenciaService {
     String ocorrenciaId,
     ComentarioModel comentario,
   ) async {
+    // Anti-spam client-side (mesma ressalva do cadastrarOcorrencia).
+    RateLimiter.instance.checarERegistrar(
+      'comentario_${_currentUserId ?? "anon"}',
+      RateLimiter.intervaloComentario,
+    );
     try {
       await _ocorrenciasRef
           .doc(ocorrenciaId)

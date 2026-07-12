@@ -6,6 +6,7 @@ import '../../models/usuario_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/ocorrencia_service.dart';
 import '../../services/usuario_service.dart';
+import '../../theme/app_theme.dart';
 import '../detalhe_ocorrencia_page.dart';
 
 class PerfilPublicoPage extends StatelessWidget {
@@ -158,13 +159,13 @@ class _ProfileHeader extends StatelessWidget {
               const Icon(
                 Icons.location_on_outlined,
                 size: 15,
-                color: Color(0xFF6B7280),
+                color: AppColors.muted,
               ),
               const SizedBox(width: 4),
               Text(
                 perfil.bairro.trim(),
                 style: const TextStyle(
-                  color: Color(0xFF6B7280),
+                  color: AppColors.muted,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -178,7 +179,7 @@ class _ProfileHeader extends StatelessWidget {
             perfil.bio.trim(),
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: Color(0xFF6B7280),
+              color: AppColors.muted,
               fontSize: 13,
               height: 1.35,
             ),
@@ -338,7 +339,7 @@ class _SocialCount extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF6B7280),
+              color: AppColors.muted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -408,7 +409,7 @@ class _StatBox extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF6B7280),
+              color: AppColors.muted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -466,7 +467,7 @@ class _PublicOccurrenceTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFF6B7280),
+                          color: AppColors.muted,
                           fontSize: 12,
                         ),
                       ),
@@ -521,6 +522,7 @@ class _Thumb extends StatelessWidget {
               width: 58,
               height: 58,
               fit: BoxFit.cover,
+              semanticLabel: 'Foto da denúncia: ${occurrence.titulo}',
               errorBuilder: (_, _, _) => _placeholder(),
             )
           : _placeholder(),
@@ -553,7 +555,7 @@ class _EmptyPublicPosts extends StatelessWidget {
       child: const Text(
         'Nenhuma denúncia pública neste perfil.',
         textAlign: TextAlign.center,
-        style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+        style: TextStyle(color: AppColors.muted, fontSize: 13),
       ),
     );
   }

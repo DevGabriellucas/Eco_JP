@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/role_service.dart';
 import '../theme/app_theme.dart';
 import 'estatisticas_page.dart';
+import 'fila_moderacao_page.dart';
 import 'fila_verificacao_page.dart';
 import 'home_page.dart';
 import 'mapPage/map_page.dart';
@@ -64,9 +65,7 @@ class _HomeShellState extends State<HomeShell> {
   void _onTapItem(int i) {
     if (i == 2) {
       if (_isAutoridade) {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const FilaVerificacaoPage()),
-        );
+        _abrirMenuAutoridade();
       } else {
         Navigator.of(context).pushNamed('/form-ocorrencia');
       }
@@ -76,6 +75,66 @@ class _HomeShellState extends State<HomeShell> {
       _index = i;
       _visitadas.add(i);
     });
+  }
+
+  // Autoridade escolhe entre a fila de verificação de denúncias e a fila de
+  // moderação de conteúdo abusivo.
+  void _abrirMenuAutoridade() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(
+                Icons.fact_check_outlined,
+                color: AppColors.primary,
+              ),
+              title: const Text('Fila de verificação'),
+              subtitle: const Text('Verificar e triar denúncias ambientais'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const FilaVerificacaoPage(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.report_gmailerrorred_outlined,
+                color: AppColors.danger,
+              ),
+              title: const Text('Fila de moderação'),
+              subtitle: const Text('Denúncias de conteúdo abusivo'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const FilaModeracaoPage()),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -137,27 +196,32 @@ class _BottomNav extends StatelessWidget {
   Widget _item(int i, IconData icon, IconData iconAtivo, String label) {
     final ativo = currentIndex == i;
     return Expanded(
-      child: InkWell(
-        onTap: () => onTap(i),
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              ativo ? iconAtivo : icon,
-              size: 24,
-              color: ativo ? AppColors.ink : AppColors.hint,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: ativo ? FontWeight.w600 : FontWeight.w400,
+      child: Semantics(
+        button: true,
+        selected: ativo,
+        label: label,
+        child: InkWell(
+          onTap: () => onTap(i),
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                ativo ? iconAtivo : icon,
+                size: 24,
                 color: ativo ? AppColors.ink : AppColors.hint,
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: ativo ? FontWeight.w600 : FontWeight.w400,
+                  color: ativo ? AppColors.ink : AppColors.hint,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -165,21 +229,29 @@ class _BottomNav extends StatelessWidget {
 
   Widget _botaoCentral() {
     // Autoridade: atalho para a fila de verificação (selo). Cidadão: "+".
+    final label = isAutoridade ? 'Fila de verificação e moderação' : 'Nova denúncia';
     return Expanded(
       child: Center(
-        child: GestureDetector(
-          onTap: () => onTap(2),
-          child: Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: isAutoridade ? const Color(0xFF22C55E) : AppColors.ink,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isAutoridade ? Icons.fact_check_outlined : Icons.add,
-              color: Colors.white,
-              size: 26,
+        child: Semantics(
+          button: true,
+          label: label,
+          child: Tooltip(
+            message: label,
+            child: GestureDetector(
+              onTap: () => onTap(2),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: isAutoridade ? AppColors.success : AppColors.ink,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isAutoridade ? Icons.fact_check_outlined : Icons.add,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
             ),
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 // ⚠️ Estes textos são um MODELO inicial em conformidade com a LGPD
 // (Lei 13.709/2018). Antes de publicar de verdade, devem ser revisados
@@ -99,7 +100,7 @@ class DocumentoLegalPage extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: AppColors.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
@@ -107,7 +108,7 @@ class DocumentoLegalPage extends StatelessWidget {
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: AppColors.ink,
           ),
         ),
       ),

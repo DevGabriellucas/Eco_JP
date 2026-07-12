@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 // ─────────────────────────────────────────
 //  TIPOS E STATUS DE OCORRÊNCIA
@@ -71,15 +72,15 @@ extension OccurrenceTypeLabel on OccurrenceType {
       case OccurrenceType.enchentes:
         return const Color(0xFF1D4ED8);
       case OccurrenceType.esgoto:
-        return const Color(0xFF22C55E);
+        return AppColors.success;
       case OccurrenceType.faltaIluminacao:
         return const Color(0xFFEC4899);
       case OccurrenceType.lixo:
-        return const Color(0xFFF97316);
+        return AppColors.warning;
       case OccurrenceType.queimada:
-        return const Color(0xFFEF4444);
+        return AppColors.danger;
       case OccurrenceType.outros:
-        return const Color(0xFF6B7280);
+        return AppColors.muted;
     }
   }
 
@@ -158,11 +159,11 @@ extension OccurrenceStatusLabel on OccurrenceStatus {
   Color get color {
     switch (this) {
       case OccurrenceStatus.resolved:
-        return const Color(0xFF22C55E);
+        return AppColors.success;
       case OccurrenceStatus.inProgress:
         return const Color(0xFF9CA3AF);
       case OccurrenceStatus.unresolved:
-        return const Color(0xFFEF4444);
+        return AppColors.danger;
     }
   }
 
@@ -215,13 +216,13 @@ extension StatusOficialInfo on StatusOficial {
   Color get color {
     switch (this) {
       case StatusOficial.emAnalise:
-        return const Color(0xFFF97316);
+        return AppColors.warning;
       case StatusOficial.naoConfirmada:
-        return const Color(0xFFEF4444);
+        return AppColors.danger;
       case StatusOficial.encaminhada:
         return const Color(0xFF3B82F6);
       case StatusOficial.resolvida:
-        return const Color(0xFF22C55E);
+        return AppColors.success;
     }
   }
 
@@ -304,11 +305,11 @@ extension EstagioOficialInfo on EstagioOficial {
       case EstagioOficial.pendente:
         return const Color(0xFF9CA3AF);
       case EstagioOficial.emAnalise:
-        return const Color(0xFFF97316);
+        return AppColors.warning;
       case EstagioOficial.naoConfirmada:
-        return const Color(0xFFEF4444);
+        return AppColors.danger;
       case EstagioOficial.confirmada:
-        return const Color(0xFF22C55E);
+        return AppColors.success;
       case EstagioOficial.encaminhada:
         return const Color(0xFF3B82F6);
       case EstagioOficial.resolvida:

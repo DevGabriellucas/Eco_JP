@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart';
 /// É só uma sugestão: o usuário sempre pode escolher outra categoria antes
 /// de enviar a denúncia (humano decide por último).
 class ClassificacaoIaService {
+  static final ClassificacaoIaService instance = ClassificacaoIaService();
+
   static const categorias = [
     'Lixo',
     'Queimada',

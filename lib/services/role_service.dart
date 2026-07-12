@@ -6,6 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// criando um documento `roles/{uid}` com `{ role: 'autoridade' }`. O app
 /// nunca escreve nessa coleção — apenas lê o próprio papel.
 class RoleService {
+  static final RoleService instance = RoleService();
+
   final CollectionReference<Map<String, dynamic>> _ref = FirebaseFirestore
       .instance
       .collection('roles');

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'firebase_options.dart';
 import 'pages/login_page.dart';
 import 'pages/cadastro_page.dart';
@@ -16,24 +19,50 @@ import 'services/consent_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    await FirebaseAppCheck.instance.activate(
-      // Em produção Android usa Play Integrity (validado pela Play Store).
-      // Em debug/emulador usa o provider de depuração pra não bloquear testes.
-      providerAndroid: kDebugMode
-          ? const AndroidDebugProvider()
-          : const AndroidPlayIntegrityProvider(),
-      providerApple: const AppleDebugProvider(),
-    );
-    runApp(const MyApp());
-  } catch (e) {
-    // Se o Firebase não inicializar, mostra uma tela de erro em vez de tela branca.
-    runApp(const _AppErroInicializacao());
-  }
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        await FirebaseAppCheck.instance.activate(
+          // Em produção Android usa Play Integrity (validado pela Play Store).
+          // Em debug/emulador usa o provider de depuração pra não bloquear testes.
+          providerAndroid: kDebugMode
+              ? const AndroidDebugProvider()
+              : const AndroidPlayIntegrityProvider(),
+          // Mesma lógica no Apple: App Attest em produção (exige dispositivo
+          // real e conta Apple Developer), debug provider só em kDebugMode —
+          // sem isso, o App Check ficava sem proteção real em builds iOS
+          // de produção mesmo fora do modo debug.
+          providerApple: kDebugMode
+              ? const AppleDebugProvider()
+              : const AppleAppAttestProvider(),
+        );
+
+        // Crashlytics: desativado em debug (evita poluir o console com
+        // crashes de desenvolvimento) e captura erros do Flutter framework +
+        // erros não tratados fora dele (o runZonedGuarded cobre o resto).
+        await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+          !kDebugMode,
+        );
+        FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
+        runApp(const MyApp());
+      } catch (e) {
+        // Se o Firebase não inicializar, mostra uma tela de erro em vez de tela branca.
+        runApp(const _AppErroInicializacao());
+      }
+    },
+    (error, stack) {
+      // Erros fora da árvore de widgets (streams, futures soltos) também vão
+      // pro Crashlytics, quando o Firebase já foi inicializado com sucesso.
+      if (Firebase.apps.isNotEmpty) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      }
+    },
+  );
 }
 
 class _AppErroInicializacao extends StatelessWidget {

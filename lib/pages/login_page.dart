@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/auth_service.dart';
+import '../theme/app_theme.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -91,7 +92,7 @@ class _LoginPageState extends State<LoginPage> {
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 18,
-                  color: Color(0xFF1A1A1A),
+                  color: AppColors.ink,
                 ),
               ),
               content: Column(
@@ -100,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   const Text(
                     'Digite seu email e enviaremos um link para você redefinir sua senha.',
-                    style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
+                    style: TextStyle(fontSize: 14, color: AppColors.muted),
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -109,7 +110,7 @@ class _LoginPageState extends State<LoginPage> {
                     autofocus: true,
                     style: const TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF1A1A1A),
+                      color: AppColors.ink,
                     ),
                     decoration: InputDecoration(
                       hintText: 'Email',
@@ -128,7 +129,7 @@ class _LoginPageState extends State<LoginPage> {
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: const BorderSide(
-                          color: Color(0xFF1A1A1A),
+                          color: AppColors.ink,
                           width: 1.5,
                         ),
                       ),
@@ -141,7 +142,7 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: enviando ? null : () => Navigator.of(ctx).pop(),
                   child: const Text(
                     'Cancelar',
-                    style: TextStyle(color: Color(0xFF8A8A8A)),
+                    style: TextStyle(color: AppColors.hint),
                   ),
                 ),
                 ElevatedButton(
@@ -389,9 +390,9 @@ class _LoginPageState extends State<LoginPage> {
                                         fontFamily: 'Roboto',
                                         fontSize: 15,
                                         fontWeight: FontWeight.w400,
-                                        color: Color(0xFF1A1A1A),
+                                        color: AppColors.ink,
                                         decoration: TextDecoration.underline,
-                                        decorationColor: Color(0xFF1A1A1A),
+                                        decorationColor: AppColors.ink,
                                       ),
                                     ),
                                   ),
@@ -431,7 +432,7 @@ class _LoginPageState extends State<LoginPage> {
                                                 child:
                                                     CircularProgressIndicator(
                                                       strokeWidth: 2,
-                                                      color: Color(0xFF1A1A1A),
+                                                      color: AppColors.ink,
                                                     ),
                                               )
                                             : Row(
@@ -450,7 +451,7 @@ class _LoginPageState extends State<LoginPage> {
                                                       fontSize: 14,
                                                       fontWeight:
                                                           FontWeight.w500,
-                                                      color: Color(0xFF1A1A1A),
+                                                      color: AppColors.ink,
                                                     ),
                                                   ),
                                                 ],
@@ -472,7 +473,7 @@ class _LoginPageState extends State<LoginPage> {
                                             fontFamily: 'Roboto',
                                             fontSize: 15,
                                             fontWeight: FontWeight.w400,
-                                            color: Color(0xFF1A1A1A),
+                                            color: AppColors.ink,
                                           ),
                                           children: [
                                             TextSpan(text: 'Não tem conta? '),
@@ -517,7 +518,7 @@ class _LoginPageState extends State<LoginPage> {
         fontFamily: 'Roboto',
         fontSize: 15,
         fontWeight: FontWeight.w500,
-        color: Color(0xFF1A1A1A),
+        color: AppColors.ink,
       ),
     );
   }
@@ -536,7 +537,7 @@ class _LoginPageState extends State<LoginPage> {
       style: const TextStyle(
         fontFamily: 'Roboto',
         fontSize: 14,
-        color: Color(0xFF1A1A1A),
+        color: AppColors.ink,
       ),
       decoration: InputDecoration(
         hintText: hint,
@@ -557,7 +558,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF1A1A1A), width: 1.5),
+          borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),

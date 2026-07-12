@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../models/usuario_model.dart';
 
 class UsuarioService {
+  static final UsuarioService instance = UsuarioService();
+
   final CollectionReference<Map<String, dynamic>> _ref = FirebaseFirestore
       .instance
       .collection('usuarios');

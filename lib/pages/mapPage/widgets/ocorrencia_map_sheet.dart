@@ -85,6 +85,7 @@ class _OcorrenciaMapSheet extends StatelessWidget {
                   child: Image.network(
                     imagem,
                     fit: BoxFit.contain,
+                    semanticLabel: 'Foto da denúncia',
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
                       return const SizedBox(

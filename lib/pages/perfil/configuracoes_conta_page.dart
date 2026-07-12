@@ -6,14 +6,15 @@ import '../../services/consent_service.dart';
 import '../../services/ocorrencia_service.dart';
 import '../../services/relatorio_service.dart';
 import '../../services/usuario_service.dart';
+import '../../theme/app_theme.dart';
 import '../legal/documentos_legais.dart';
 
 class _C {
   static const bg = Colors.white;
   static const cardBg = Color(0xFFEDEDED);
   static const cardBorder = Color(0xFFD8D8D8);
-  static const text = Color(0xFF1A1A1A);
-  static const hint = Color(0xFF8A8A8A);
+  static const text = AppColors.ink;
+  static const hint = AppColors.hint;
   static const sair = Color(0xFFC62828);
 }
 

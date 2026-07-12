@@ -9,6 +9,7 @@ import '../services/relatorio_service.dart';
 import '../services/role_service.dart';
 import '../models/occurrence_types.dart';
 import 'mapPage/controller/calc_mostaffectedzones.dart';
+import '../theme/app_theme.dart';
 
 enum _Periodo { semana, mes, ano, tudo }
 
@@ -39,13 +40,13 @@ extension _PeriodoInfo on _Periodo {
 //  PALETA
 // ─────────────────────────────────────────
 
-const _resolvedColor = Color(0xFF22C55E);
+const _resolvedColor = AppColors.success;
 const _pendingColor = Color(0xFF9CA3AF);
-const _unresolvedColor = Color(0xFFEF4444);
+const _unresolvedColor = AppColors.danger;
 const _chartPurple = Color(0xFF8B7CF6);
 const _gridColor = Color(0xFFE5E7EB);
 const _axisLabelColor = Color(0xFF9CA3AF);
-const _legendTextColor = Color(0xFF6B7280);
+const _legendTextColor = AppColors.muted;
 
 // ─────────────────────────────────────────
 //  ESTATÍSTICAS PAGE
@@ -228,13 +229,13 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A1A),
+                color: AppColors.ink,
               ),
             ),
             SizedBox(width: 12),
             Text(
               'Estatísticas',
-              style: TextStyle(fontSize: 15, color: Color(0xFF8A8A8A)),
+              style: TextStyle(fontSize: 15, color: AppColors.hint),
             ),
           ],
         ),
@@ -257,7 +258,9 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
     }
 
     return StreamBuilder<List<OcorrenciaModel>>(
-      stream: _ocorrenciaService.listarOcorrencias(),
+      stream: _ocorrenciaService.listarOcorrenciasLimitadas(
+        OcorrenciaService.tetoAgregado,
+      ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -359,7 +362,7 @@ class _AreaExclusivaAutoridade extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: const Color(0xFF22C55E).withValues(alpha: 0.12),
+                color: AppColors.success.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -375,7 +378,7 @@ class _AreaExclusivaAutoridade extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A1A),
+                color: AppColors.ink,
               ),
             ),
             const SizedBox(height: 10),
@@ -387,7 +390,7 @@ class _AreaExclusivaAutoridade extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: Color(0xFF6B7280),
+                color: AppColors.muted,
               ),
             ),
           ],
@@ -450,11 +453,11 @@ class _PeriodoSelector extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 9),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: periodo == p ? const Color(0xFF1A1A1A) : Colors.white,
+                  color: periodo == p ? AppColors.ink : Colors.white,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: periodo == p
-                        ? const Color(0xFF1A1A1A)
+                        ? AppColors.ink
                         : const Color(0xFFD8D8D8),
                   ),
                 ),
@@ -465,7 +468,7 @@ class _PeriodoSelector extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     color: periodo == p
                         ? Colors.white
-                        : const Color(0xFF6B7280),
+                        : AppColors.muted,
                   ),
                 ),
               ),
@@ -550,7 +553,7 @@ class _RankingBairrosCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A1A),
+              color: AppColors.ink,
             ),
           ),
           const SizedBox(height: 14),
@@ -613,7 +616,7 @@ class _LinhaBairro extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A1A1A),
+                  color: AppColors.ink,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -708,14 +711,14 @@ class _DashboardAutoridade extends StatelessWidget {
         children: [
           Row(
             children: const [
-              Icon(Icons.shield_outlined, size: 18, color: Color(0xFF1A1A1A)),
+              Icon(Icons.shield_outlined, size: 18, color: AppColors.ink),
               SizedBox(width: 8),
               Text(
                 'Painel da autoridade',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: AppColors.ink,
                 ),
               ),
             ],
@@ -898,7 +901,7 @@ class _IndicadorLinha extends StatelessWidget {
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF1A1A1A),
+            color: AppColors.ink,
           ),
         ),
         const SizedBox(height: 2),
@@ -941,7 +944,7 @@ class _StatusPieCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A1A),
+                color: AppColors.ink,
               ),
             ),
           ),

@@ -6,6 +6,7 @@ import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
 import '../utils/compartilhamento.dart';
 import '../utils/tempo_relativo.dart';
+import '../theme/app_theme.dart';
 
 class OccurrenceCard extends StatelessWidget {
   final OcorrenciaModel occurrence;
@@ -101,8 +102,9 @@ class OccurrenceCard extends StatelessWidget {
                   iconFilled: Icons.favorite,
                   count: o.likes,
                   active: o.userLiked,
-                  activeColor: const Color(0xFFEF4444),
+                  activeColor: AppColors.danger,
                   onTap: onLike,
+                  semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
                 ),
                 StreamBuilder<int>(
                   stream: commentCountStream,
@@ -112,8 +114,9 @@ class OccurrenceCard extends StatelessWidget {
                     iconFilled: Icons.mode_comment,
                     count: snap.data ?? o.comments,
                     active: false,
-                    activeColor: const Color(0xFF2563EB),
+                    activeColor: AppColors.info,
                     onTap: onComment ?? () {},
+                    semanticLabel: 'Comentar',
                   ),
                 ),
                 _IconAction(
@@ -166,7 +169,7 @@ class OccurrenceCard extends StatelessWidget {
                     const Icon(
                       Icons.location_on_outlined,
                       size: 14,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.muted,
                     ),
                     const SizedBox(width: 4),
                     Expanded(
@@ -176,7 +179,7 @@ class OccurrenceCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF6B7280),
+                          color: AppColors.muted,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -324,7 +327,7 @@ class _CommentPreview extends StatelessWidget {
                         ? 'Ver comentário'
                         : 'Ver todos os $count comentários',
                     style: const TextStyle(
-                      color: Color(0xFF6B7280),
+                      color: AppColors.muted,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -431,7 +434,7 @@ class _CardHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.muted,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -533,7 +536,7 @@ class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? const Color(0xFFEF4444) : const Color(0xFF374151);
+    final color = danger ? AppColors.danger : const Color(0xFF374151);
     return Row(
       children: [
         Icon(icon, size: 18, color: color),
@@ -756,7 +759,7 @@ class _OfficialStatusStrip extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF6B7280),
+                    color: AppColors.muted,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -850,6 +853,11 @@ class _ImageSliderState extends State<_ImageSlider> {
                     width: double.infinity,
                     height: double.infinity,
                     fit: BoxFit.cover,
+                    // Descrição para leitores de tela: sem isto o Image.network
+                    // é anunciado apenas como "imagem", sem contexto.
+                    semanticLabel: images.length > 1
+                        ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
+                        : 'Foto da denúncia: ${widget.type.label}',
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
                       return const Center(
@@ -1066,6 +1074,7 @@ class _ActionButton extends StatelessWidget {
   final bool active;
   final Color activeColor;
   final VoidCallback onTap;
+  final String semanticLabel;
 
   const _ActionButton({
     required this.icon,
@@ -1074,37 +1083,46 @@ class _ActionButton extends StatelessWidget {
     required this.active,
     required this.activeColor,
     required this.onTap,
+    required this.semanticLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkResponse(
-      onTap: onTap,
-      radius: 24,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              child: Icon(
-                active ? iconFilled : icon,
-                key: ValueKey(active),
-                size: 24,
-                color: active ? activeColor : const Color(0xFF111827),
-              ),
+    return Semantics(
+      button: true,
+      label: '$semanticLabel, $count',
+      selected: active,
+      child: Tooltip(
+        message: semanticLabel,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 24,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: Icon(
+                    active ? iconFilled : icon,
+                    key: ValueKey(active),
+                    size: 24,
+                    color: active ? activeColor : const Color(0xFF111827),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: active ? activeColor : const Color(0xFF374151),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: active ? activeColor : const Color(0xFF374151),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1230,7 +1248,7 @@ class _AccountSheet extends StatelessWidget {
                             : 'Conta da comunidade EcoJP',
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF6B7280),
+                          color: AppColors.muted,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -1256,7 +1274,7 @@ class _AccountSheet extends StatelessWidget {
               const Text(
                 'O autor escolheu publicar sem expor nome ou foto.',
                 style: TextStyle(
-                  color: Color(0xFF6B7280),
+                  color: AppColors.muted,
                   fontSize: 12,
                   height: 1.35,
                 ),
@@ -1294,7 +1312,7 @@ class _AccountInfoRow extends StatelessWidget {
               Text(
                 label,
                 style: const TextStyle(
-                  color: Color(0xFF6B7280),
+                  color: AppColors.muted,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),

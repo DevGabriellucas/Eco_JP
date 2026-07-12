@@ -9,6 +9,7 @@ import '../../services/usuario_service.dart';
 import '../detalhe_ocorrencia_page.dart';
 import 'configuracoes_conta_page.dart';
 import '../../models/occurrence_types.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/ocorrencia_actions.dart';
 import 'editar_perfil_page.dart';
 
@@ -17,8 +18,8 @@ class _C {
   static const cardBg = Color(0xFFEDEDED);
   static const cardBorder = Color(0xFFD8D8D8);
   static const avatarBg = Color(0xFF9E9E9E);
-  static const text = Color(0xFF1A1A1A);
-  static const hint = Color(0xFF8A8A8A);
+  static const text = AppColors.ink;
+  static const hint = AppColors.hint;
   static const laranja = Color(0xFFFF8A1F);
 }
 
@@ -142,7 +143,7 @@ class _PerfilPageState extends State<PerfilPage> {
               perfilSnap.data ?? UsuarioModel(uid: uid, nome: emailFallback);
 
           return StreamBuilder<List<OcorrenciaModel>>(
-            stream: _ocorrenciaService.listarPorUsuario(uid),
+            stream: _ocorrenciaService.listarMinhasDenuncias(uid),
             builder: (context, ocSnap) {
               final ocorrencias = ocSnap.data ?? [];
               final stats = _calcularStats(ocorrencias);
@@ -196,7 +197,7 @@ class _PerfilPageState extends State<PerfilPage> {
                 height: 76,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF16A34A), Color(0xFF22C55E)],
+                    colors: [Color(0xFF16A34A), AppColors.success],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -508,7 +509,7 @@ class _PerfilPageState extends State<PerfilPage> {
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF16A34A), Color(0xFF22C55E)],
+          colors: [Color(0xFF16A34A), AppColors.success],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -649,12 +650,10 @@ class _PerfilPageState extends State<PerfilPage> {
         if (favoritos.isEmpty) return _salvosVazio();
 
         return StreamBuilder<List<OcorrenciaModel>>(
-          stream: _ocorrenciaService.listarOcorrencias(),
+          stream: _ocorrenciaService.observarPorIds(favoritos),
           builder: (context, ocorrenciasSnap) {
             final salvas =
-                (ocorrenciasSnap.data ?? const <OcorrenciaModel>[])
-                    .where((o) => favoritos.contains(o.id))
-                    .toList()
+                (ocorrenciasSnap.data ?? const <OcorrenciaModel>[]).toList()
                   ..sort((a, b) {
                     final da = a.dataCriacao;
                     final db = b.dataCriacao;
@@ -859,6 +858,7 @@ class _PerfilPageState extends State<PerfilPage> {
               width: 60,
               height: 60,
               fit: BoxFit.cover,
+              semanticLabel: 'Foto da denúncia: ${o.titulo}',
               errorBuilder: (_, _, _) => _thumbPlaceholder(),
             )
           : _thumbPlaceholder(),

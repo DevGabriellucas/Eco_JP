@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class ReportContentResult {
   final String motivo;
@@ -139,7 +140,7 @@ class _ReportContentSheetState extends State<_ReportContentSheet> {
               icon: const Icon(Icons.flag_outlined, size: 18),
               label: const Text('Enviar denúncia'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
+                backgroundColor: AppColors.danger,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -169,7 +170,7 @@ class _SelectionDot extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: selected ? const Color(0xFFEF4444) : const Color(0xFF9CA3AF),
+          color: selected ? AppColors.danger : const Color(0xFF9CA3AF),
           width: selected ? 6 : 2,
         ),
       ),
