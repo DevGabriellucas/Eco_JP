@@ -580,23 +580,33 @@ Relatório: **PRODUCTION_READINESS_AUDIT.md**
 
 ---
 
-### ETAPA 17.2 — REVISÃO DE MÓDULOS (Próximo)
+### ETAPA 17.2 — REVISÃO DE MÓDULOS ✅
 
-Analisar cada módulo:
+Realizada em: **13 de julho de 2026**
+Relatório completo: **PRODUCTION_READINESS_MODULOS.md**
 
-| Módulo | Responsável | Nota | Problemas | Prioridade |
-|---|---|---|---|---|
-| Auth | Verificar | — | — | — |
-| Home | Verificar | — | — | — |
-| Mapa | Verificar | — | — | — |
-| Denúncias | Verificar | — | — | — |
-| Perfil | Verificar | — | — | — |
-| Admin | Verificar | — | — | — |
-| Configurações | Verificar | — | — | — |
-| Notificações | Verificar | — | — | — |
-| Histórico | Verificar | — | — | — |
-| Favoritos | Verificar | — | — | — |
-| Analytics | Verificar | — | — | — |
+| Módulo | Nota | Prioridade |
+|---|---|---|
+| Auth | 8/10 | Baixa |
+| Home / Feed | 6/10 | **Alta** |
+| Mapa | 8/10 | Baixa |
+| Denúncias (Ocorrências) | 7/10 | **Alta** |
+| Perfil | 6/10 | Média |
+| Admin (Fila Verificação + Moderação) | 6.5/10 | Média |
+| Configurações | 7.5/10 | **Alta** (compliance) |
+| Notificações | 7.5/10 | Baixa |
+| Favoritos | 7/10 | Baixa |
+| Estatísticas | 6.5/10 | Média |
+
+**Média geral dos módulos: 7.05/10**
+
+**Achados transversais principais** (detalhes no relatório completo):
+1. Migração Riverpod pela metade — providers de denúncias existem mas não são consumidos em nenhuma page
+2. Duplicação de lógica de resolução de autor entre Home e Detalhe de Ocorrência
+3. Duas violações diretas de camada (Firestore chamado fora de service/repository)
+4. Padrão StreamBuilder aninhado repetido em Home e Perfil
+5. Ausência de `.limit()` em 3 queries administrativas (Fila Verificação, Moderação, Favoritos)
+6. Verificação de papel (`isAutoridade`) repetida de forma independente em 5+ telas
 
 ---
 
@@ -686,7 +696,7 @@ Objetivo: 90% de cobertura em regras críticas
 
 ### ETAPA 17.10 — PUBLICAÇÃO
 - Google Play Store
-- Apple App Store
+- Apple App Store ⏸️ **PAUSADO** (ver nota abaixo)
 - Firebase Hosting (Web)
 - Ícones e splash screen
 - Screenshots
@@ -697,6 +707,20 @@ Objetivo: 90% de cobertura em regras críticas
 - Assinaturas digitais
 - Certificados
 - Ambientes de produção
+
+> ⏸️ **PENDENTE DE DECISÃO DO USUÁRIO — retomar quando disponível:**
+>
+> | Item | Bloqueia | Status | Custo |
+> |---|---|---|---|
+> | **Conta Apple Developer** | Build IPA, TestFlight, App Store | Não adquirida | US$ 99/ano |
+> | **Firebase Blaze (pay-as-you-go)** | Cloud Functions → push notifications reais, detecção de duplicidade, rate limit server-side, agregação server-side de estatísticas | Não adquirido | Variável (tier gratuito generoso; só cobra acima dele) |
+>
+> **Enquanto isso:** todo o trabalho de Android + Web + refatoração + testes + CI/CD
+> segue normalmente, pois não depende de nenhum dos dois. Quando o usuário
+> obtiver o plano Blaze e/ou a conta Apple Developer, retomar exatamente a
+> partir daqui: build iOS (17.9/17.10) e Cloud Functions (push notification,
+> detecção de duplicidade, rate limit server-side — ver Seção 1.5 e 6.3 do
+> corpo principal deste documento).
 
 ---
 
@@ -739,11 +763,23 @@ Relatório contendo:
 - Auditoria completa realizada
 - Relatório disponível em: `PRODUCTION_READINESS_AUDIT.md`
 
-**Ações Críticas Identificadas:**
+**ETAPA 17.2 — ✅ Concluída**
+- Revisão de 10 módulos realizada com leitura direta do código
+- Relatório disponível em: `PRODUCTION_READINESS_MODULOS.md`
+- Nota média dos módulos: 7.05/10
+
+**Ações Críticas Identificadas (ETAPA 17.1):**
 1. 🔴 Refatorar 4 widgets/services > 1000 linhas
 2. 🔴 Adicionar testes de widget
 3. 🔴 Integrar Firestore Rules tests ao CI/CD
 4. 🔴 Rate limiting server-side
 5. 🔴 Build APK automático no CI
 
-**Próxima:** ETAPA 17.2 — Revisão de Módulos (aguardando aprovação)
+**Ações Adicionais Identificadas (ETAPA 17.2):**
+6. 🔴 2 violações diretas de camada (Firestore fora de service) + duplicação de resolução de autor
+7. 🔴 Catch silencioso em exclusão de conta (LGPD) sem log/retry
+8. ⚠️ `.limit()` ausente em 3 queries administrativas (Fila Verificação, Moderação, Favoritos)
+9. ⚠️ Decidir destino dos providers Riverpod não utilizados (remover ou migrar de fato)
+10. ⚠️ Verificação de papel (`isAutoridade`) duplicada em 5+ telas — candidato a provider único
+
+**Próxima:** ETAPA 17.3 — Refatoração (aguardando aprovação)
