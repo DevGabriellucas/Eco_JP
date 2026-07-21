@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../data/repositories/ocorrencia_repository.dart';
 import '../models/ocorrencia_model.dart';
-import '../services/ocorrencia_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/mensagem_erro.dart';
 
 enum _OcorrenciaSheetAction { edit, delete }
 
@@ -15,11 +16,11 @@ enum _OcorrenciaSheetAction { edit, delete }
 Future<void> showOcorrenciaActions({
   required BuildContext context,
   required OcorrenciaModel ocorrencia,
-  required OcorrenciaService service,
+  required OcorrenciaRepository service,
 }) async {
   final action = await showModalBottomSheet<Object>(
     context: context,
-    backgroundColor: Colors.white,
+    backgroundColor: context.pal.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -33,7 +34,7 @@ Future<void> showOcorrenciaActions({
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFBDBDBD),
+                color: context.pal.border,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -52,9 +53,9 @@ Future<void> showOcorrenciaActions({
               ),
             ),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.edit_outlined,
-                color: AppColors.ink,
+                color: context.pal.ink,
               ),
               title: const Text('Editar título/descrição'),
               onTap: () => Navigator.pop(ctx, _OcorrenciaSheetAction.edit),
@@ -102,11 +103,12 @@ Future<void> showOcorrenciaActions({
 Future<void> _confirmarExcluirOcorrencia(
   BuildContext context,
   OcorrenciaModel ocorrencia,
-  OcorrenciaService service,
+  OcorrenciaRepository service,
 ) async {
   final confirmar = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
+      backgroundColor: context.pal.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Text(
         'Excluir denúncia',
@@ -146,10 +148,10 @@ Future<void> _confirmarExcluirOcorrencia(
           context,
         ).showSnackBar(const SnackBar(content: Text('Denúncia excluída.')));
       }
-    } catch (_) {
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível excluir a denúncia.')),
+          SnackBar(content: Text(mensagemErro(e, acao: 'excluir a denúncia'))),
         );
       }
     }
@@ -159,7 +161,7 @@ Future<void> _confirmarExcluirOcorrencia(
 Future<void> _editarOcorrencia(
   BuildContext context,
   OcorrenciaModel ocorrencia,
-  OcorrenciaService service,
+  OcorrenciaRepository service,
 ) async {
   final tituloCtrl = TextEditingController(text: ocorrencia.titulo);
   final descCtrl = TextEditingController(text: ocorrencia.descricao);
@@ -170,11 +172,11 @@ Future<void> _editarOcorrencia(
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+      borderSide: BorderSide(color: context.pal.border),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
+      borderSide: BorderSide(color: context.pal.ink, width: 1.5),
     ),
   );
 
@@ -184,7 +186,7 @@ Future<void> _editarOcorrencia(
       return StatefulBuilder(
         builder: (ctx, setDialogState) {
           return AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.pal.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -261,20 +263,20 @@ Future<void> _editarOcorrencia(
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.ink,
-                  foregroundColor: Colors.white,
+                  backgroundColor: context.pal.ink,
+                  foregroundColor: context.pal.surface,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 child: salvando
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: context.pal.surface,
                         ),
                       )
                     : const Text('Salvar'),

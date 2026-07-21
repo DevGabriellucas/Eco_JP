@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../data/repositories/comentario_repository.dart';
 import '../models/comentario_model.dart';
 import '../models/ocorrencia_model.dart';
 import '../models/usuario_model.dart';
 import '../services/auth_service.dart';
 import '../services/moderacao_service.dart';
 import '../services/notificacao_service.dart';
-import '../services/ocorrencia_service.dart';
 import '../services/rate_limiter.dart';
 import '../services/usuario_service.dart';
+import '../utils/imagem_cacheada.dart';
+import '../utils/mensagem_erro.dart';
 import '../utils/tempo_relativo.dart';
 import 'report_content_sheet.dart';
 import '../theme/app_theme.dart';
 
 class OccurrenceCommentsSheet extends StatefulWidget {
   final OcorrenciaModel occurrence;
-  final OcorrenciaService ocorrenciaService;
+  final ComentarioRepository comentarioRepository;
   final AuthService authService;
   final UsuarioService usuarioService;
   final NotificacaoService notificacaoService;
@@ -23,7 +25,7 @@ class OccurrenceCommentsSheet extends StatefulWidget {
   const OccurrenceCommentsSheet({
     super.key,
     required this.occurrence,
-    required this.ocorrenciaService,
+    required this.comentarioRepository,
     required this.authService,
     required this.usuarioService,
     required this.notificacaoService,
@@ -35,7 +37,20 @@ class OccurrenceCommentsSheet extends StatefulWidget {
 }
 
 class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
-  static const _emojis = ['❤️', '👏', '🔥', '🙌', '😮', '😢', '👍', '🌱'];
+  static const _emojis = [
+    '❤️',
+    '👍',
+    '👏',
+    '🔥',
+    '🙌',
+    '😮',
+    '😢',
+    '😡',
+    '🤔',
+    '🌱',
+    '🌍',
+    '🚀',
+  ];
 
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
@@ -91,7 +106,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     final parentId = _replyParentId ?? _replyTo?.id;
 
     try {
-      await widget.ocorrenciaService.adicionarComentario(
+      await widget.comentarioRepository.adicionarComentario(
         widget.occurrence.id,
         ComentarioModel(
           id: '',
@@ -130,9 +145,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       final msg = e is RateLimitException
           ? 'Aguarde ${e.segundosRestantes}s antes de comentar de novo.'
           : 'Não foi possível comentar agora.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 
@@ -160,7 +173,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     final user = widget.authService.currentUser;
     if (user == null) return;
     try {
-      await widget.ocorrenciaService.toggleLikeComentario(
+      await widget.comentarioRepository.toggleLikeComentario(
         widget.occurrence.id,
         comentario.id,
         user.uid,
@@ -174,6 +187,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
   }
 
   Future<void> _editComment(ComentarioModel comentario) async {
+    final pal = context.pal;
     final controller = TextEditingController(text: comentario.texto);
     var saving = false;
 
@@ -182,12 +196,17 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: pal.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            title: const Text(
+            title: Text(
               'Editar comentário',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: pal.ink,
+              ),
             ),
             content: TextField(
               controller: controller,
@@ -195,10 +214,12 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
               minLines: 1,
               maxLines: 5,
               textCapitalization: TextCapitalization.sentences,
+              style: TextStyle(color: pal.ink),
               decoration: InputDecoration(
                 hintText: 'Escreva seu comentário',
+                hintStyle: TextStyle(color: pal.hint),
                 filled: true,
-                fillColor: const Color(0xFFF3F4F6),
+                fillColor: pal.surfaceAlt,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -245,29 +266,38 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     if (updatedText == null || updatedText == comentario.texto.trim()) return;
 
     try {
-      await widget.ocorrenciaService.editarComentario(
+      await widget.comentarioRepository.editarComentario(
         widget.occurrence.id,
         comentario.id,
         updatedText,
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível editar o comentário.')),
+        SnackBar(content: Text(mensagemErro(e, acao: 'editar o comentário'))),
       );
     }
   }
 
   Future<void> _deleteComment(ComentarioModel comentario) async {
+    final pal = context.pal;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        backgroundColor: pal.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Excluir comentário',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: pal.ink,
+          ),
         ),
-        content: const Text('Tem certeza que deseja excluir este comentário?'),
+        content: Text(
+          'Tem certeza que deseja excluir este comentário?',
+          style: TextStyle(color: pal.ink),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -289,14 +319,14 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     if (confirmed != true) return;
 
     try {
-      await widget.ocorrenciaService.deletarComentario(
+      await widget.comentarioRepository.deletarComentario(
         widget.occurrence.id,
         comentario.id,
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível excluir o comentário.')),
+        SnackBar(content: Text(mensagemErro(e, acao: 'excluir o comentário'))),
       );
     }
   }
@@ -332,6 +362,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final user = widget.authService.currentUser;
     final currentName = _displayName(user?.displayName, user?.email);
@@ -342,9 +373,9 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       child: FractionallySizedBox(
         heightFactor: viewInsets > 0 ? 0.94 : 0.86,
         child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+          decoration: BoxDecoration(
+            color: pal.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
           ),
           child: Column(
             children: [
@@ -353,7 +384,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                 width: 42,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD1D5DB),
+                  color: pal.border,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
@@ -361,29 +392,29 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
                 child: Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Comentários',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 16,
-                          color: Color(0xFF111827),
+                          color: pal.ink,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
                     IconButton(
                       tooltip: 'Fechar',
-                      icon: const Icon(Icons.close, size: 22),
+                      icon: Icon(Icons.close, size: 22, color: pal.ink),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFE5E7EB)),
+              Divider(height: 1, color: pal.border),
               Expanded(
                 child: StreamBuilder<List<ComentarioModel>>(
-                  stream: widget.ocorrenciaService.listarComentarios(
+                  stream: widget.comentarioRepository.listarComentarios(
                     widget.occurrence.id,
                   ),
                   builder: (context, snapshot) {
@@ -458,7 +489,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                   },
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFE5E7EB)),
+              Divider(height: 1, color: pal.border),
               if (_replyTo != null)
                 _ReplyBanner(
                   name: _replyTo!.userName,
@@ -507,6 +538,7 @@ class _CommentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final c = comentario;
     return Padding(
       padding: EdgeInsets.only(bottom: compact ? 14 : 18),
@@ -527,7 +559,7 @@ class _CommentTile extends StatelessWidget {
                   text: TextSpan(
                     style: TextStyle(
                       fontSize: compact ? 12.5 : 13,
-                      color: const Color(0xFF111827),
+                      color: pal.ink,
                       height: 1.35,
                     ),
                     children: [
@@ -545,35 +577,28 @@ class _CommentTile extends StatelessWidget {
                   children: [
                     Text(
                       tempoRelativo(c.dataCriacao),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xFF9CA3AF),
+                        color: pal.hint,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(width: 14),
-                    GestureDetector(
-                      onTap: onReply,
-                      child: const Text(
-                        'Responder',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.muted,
-                          fontWeight: FontWeight.w700,
+                    Semantics(
+                      button: true,
+                      label: 'Responder comentário',
+                      child: GestureDetector(
+                        onTap: onReply,
+                        child: Text(
+                          'Responder',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: pal.muted,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
-                    if (c.likes > 0) ...[
-                      const SizedBox(width: 14),
-                      Text(
-                        '${c.likes} curtida${c.likes == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF9CA3AF),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ],
@@ -586,22 +611,32 @@ class _CommentTile extends StatelessWidget {
               IconButton(
                 tooltip: c.userLiked ? 'Remover curtida' : 'Curtir comentário',
                 visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                 icon: Icon(
                   c.userLiked ? Icons.favorite : Icons.favorite_border,
                   size: 18,
-                  color: c.userLiked
-                      ? AppColors.danger
-                      : const Color(0xFF9CA3AF),
+                  color: c.userLiked ? AppColors.danger : pal.hint,
                 ),
                 onPressed: onLike,
               ),
+              // Número de curtidas logo abaixo do coração (antes ficava na
+              // linha de metadados junto de "Responder").
+              if (c.likes > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 2),
+                  child: Text(
+                    '${c.likes}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: c.userLiked ? AppColors.danger : pal.hint,
+                    ),
+                  ),
+                ),
               PopupMenuButton<_CommentOwnerAction>(
                 tooltip: 'Opções do comentário',
-                icon: const Icon(
-                  Icons.more_horiz,
-                  size: 18,
-                  color: Color(0xFF9CA3AF),
-                ),
+                icon: Icon(Icons.more_horiz, size: 18, color: pal.hint),
                 padding: EdgeInsets.zero,
                 onSelected: (action) {
                   switch (action) {
@@ -668,7 +703,7 @@ class _CommentMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppColors.danger : const Color(0xFF111827);
+    final color = danger ? AppColors.danger : context.pal.ink;
     return Row(
       children: [
         Icon(icon, size: 18, color: color),
@@ -694,10 +729,11 @@ class _ReplyBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-      color: const Color(0xFFF9FAFB),
+      color: pal.surfaceAlt,
       child: Row(
         children: [
           Expanded(
@@ -705,8 +741,8 @@ class _ReplyBanner extends StatelessWidget {
               'Respondendo a $name',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.muted,
+              style: TextStyle(
+                color: pal.muted,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -776,6 +812,7 @@ class _CommentComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final bottom = MediaQuery.of(context).padding.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + bottom),
@@ -796,9 +833,9 @@ class _CommentComposer extends StatelessWidget {
               constraints: const BoxConstraints(minHeight: 42, maxHeight: 110),
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
+                color: pal.surfaceAlt,
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: pal.border),
               ),
               child: TextField(
                 controller: controller,
@@ -806,12 +843,10 @@ class _CommentComposer extends StatelessWidget {
                 minLines: 1,
                 maxLines: 4,
                 textCapitalization: TextCapitalization.sentences,
+                style: TextStyle(color: pal.ink, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Comentar como $userName',
-                  hintStyle: const TextStyle(
-                    color: Color(0xFF9CA3AF),
-                    fontSize: 13,
-                  ),
+                  hintStyle: TextStyle(color: pal.hint, fontSize: 13),
                   border: InputBorder.none,
                 ),
               ),
@@ -840,36 +875,29 @@ class _EmptyComments extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final pal = context.pal;
+    return Center(
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 36),
+        padding: const EdgeInsets.symmetric(horizontal: 36),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.mode_comment_outlined,
-              size: 52,
-              color: Color(0xFFD1D5DB),
-            ),
-            SizedBox(height: 12),
+            Icon(Icons.mode_comment_outlined, size: 52, color: pal.hint),
+            const SizedBox(height: 12),
             Text(
               'Nenhum comentário ainda',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
-                color: Color(0xFF9CA3AF),
+                color: pal.ink,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               'Seja a primeira pessoa a comentar esta denúncia.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: Color(0xFF9CA3AF),
-                height: 1.35,
-              ),
+              style: TextStyle(fontSize: 13, color: pal.hint, height: 1.35),
             ),
           ],
         ),
@@ -894,8 +922,8 @@ class _UserAvatar extends StatelessWidget {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
     return CircleAvatar(
       radius: radius,
-      backgroundColor: const Color(0xFFE8F5E9),
-      backgroundImage: hasPhoto ? NetworkImage(photoUrl!) : null,
+      backgroundColor: AppColors.primary.withValues(alpha: 0.14),
+      backgroundImage: hasPhoto ? imagemCacheada(photoUrl!) : null,
       child: hasPhoto
           ? null
           : Text(

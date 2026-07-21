@@ -1,20 +1,22 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../services/auth_service.dart';
+import 'package:go_router/go_router.dart';
+import '../core/router/routes.dart';
+import '../features/auth/providers/auth_providers.dart';
 import '../theme/app_theme.dart';
 
-class LoginPage extends StatefulWidget {
+class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  ConsumerState<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends ConsumerState<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
   bool _isLoading = false;
   bool _isLoadingGoogle = false;
   bool _senhaVisivel = false;
@@ -33,14 +35,14 @@ class _LoginPageState extends State<LoginPage> {
       _errorMessage = null;
     });
 
-    final result = await _authService.loginGoogle();
+    final result = await ref.read(authServiceProvider).loginGoogle();
 
     if (!mounted) return;
     setState(() => _isLoadingGoogle = false);
 
-    if (result.success) {
-      Navigator.of(context).pushReplacementNamed('/home');
-    } else {
+    // Em caso de sucesso, o redirect do router leva para /home (ou para o
+    // gate de consentimento) reagindo à mudança de authState.
+    if (!result.success) {
       setState(() => _errorMessage = result.message);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result.message ?? 'Erro ao entrar com Google')),
@@ -54,18 +56,17 @@ class _LoginPageState extends State<LoginPage> {
       _errorMessage = null;
     });
 
-    final result = await _authService.login(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
+    final result = await ref
+        .read(authServiceProvider)
+        .login(_emailController.text.trim(), _passwordController.text);
 
     if (!mounted) return;
 
     setState(() => _isLoading = false);
 
-    if (result.success) {
-      Navigator.of(context).pushReplacementNamed('/home');
-    } else {
+    // Sucesso → o redirect do router assume a navegação (home / verificação de
+    // e-mail / consentimento, conforme o estado da conta).
+    if (!result.success) {
       setState(() => _errorMessage = result.message);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result.message ?? 'Erro ao fazer login')),
@@ -74,6 +75,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleEsqueceuSenha() async {
+    final pal = context.pal;
     final emailCtrl = TextEditingController(text: _emailController.text.trim());
     bool enviando = false;
 
@@ -83,55 +85,46 @@ class _LoginPageState extends State<LoginPage> {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             return AlertDialog(
-              backgroundColor: Colors.white,
+              backgroundColor: pal.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
-              title: const Text(
+              title: Text(
                 'Recuperar senha',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 18,
-                  color: AppColors.ink,
+                  color: pal.ink,
                 ),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Digite seu email e enviaremos um link para você redefinir sua senha.',
-                    style: TextStyle(fontSize: 14, color: AppColors.muted),
+                    style: TextStyle(fontSize: 14, color: pal.muted),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     autofocus: true,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.ink,
-                    ),
+                    style: TextStyle(fontSize: 14, color: pal.ink),
                     decoration: InputDecoration(
                       hintText: 'Email',
-                      hintStyle: const TextStyle(
-                        color: Color(0xFFBDBDBD),
-                        fontSize: 14,
-                      ),
+                      hintStyle: TextStyle(color: pal.hint, fontSize: 14),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14,
                         vertical: 14,
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+                        borderSide: BorderSide(color: pal.border),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.ink,
-                          width: 1.5,
-                        ),
+                        borderSide: BorderSide(color: pal.ink, width: 1.5),
                       ),
                     ),
                   ),
@@ -151,9 +144,9 @@ class _LoginPageState extends State<LoginPage> {
                       : () async {
                           final email = emailCtrl.text.trim();
                           setDialogState(() => enviando = true);
-                          final result = await _authService.recuperarSenha(
-                            email,
-                          );
+                          final result = await ref
+                              .read(authServiceProvider)
+                              .recuperarSenha(email);
                           if (!ctx.mounted) return;
                           // Fecha o teclado antes de fechar o diálogo: do
                           // contrário o fechamento do teclado (que redimensiona
@@ -168,20 +161,20 @@ class _LoginPageState extends State<LoginPage> {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2C2C2C),
-                    foregroundColor: Colors.white,
+                    backgroundColor: pal.ink,
+                    foregroundColor: pal.surface,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                   child: enviando
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: pal.surface,
                           ),
                         )
                       : const Text('Enviar'),
@@ -200,6 +193,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final double screenWidth = MediaQuery.of(context).size.width;
     final double logoSize = (screenWidth * 0.32).clamp(110.0, 150.0);
     const double baseWidth = 430.0;
@@ -267,9 +261,7 @@ class _LoginPageState extends State<LoginPage> {
                           children: [
                             GestureDetector(
                               onTap: () {
-                                Navigator.of(
-                                  context,
-                                ).pushReplacementNamed('/inicial');
+                                context.go(Routes.inicial);
                               },
                               child: SvgPicture.asset(
                                 'assets/icons/seta.svg',
@@ -295,7 +287,7 @@ class _LoginPageState extends State<LoginPage> {
                             Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: pal.surface,
                                 borderRadius: BorderRadius.circular(28),
                               ),
                               padding: const EdgeInsets.all(24.0),
@@ -318,12 +310,15 @@ class _LoginPageState extends State<LoginPage> {
                                     hint: 'Senha',
                                     obscure: !_senhaVisivel,
                                     suffix: IconButton(
+                                      tooltip: _senhaVisivel
+                                          ? 'Ocultar senha'
+                                          : 'Mostrar senha',
                                       icon: Icon(
                                         _senhaVisivel
                                             ? Icons.visibility_off_outlined
                                             : Icons.visibility_outlined,
                                         size: 18,
-                                        color: const Color(0xFFBDBDBD),
+                                        color: pal.hint,
                                       ),
                                       onPressed: () => setState(
                                         () => _senhaVisivel = !_senhaVisivel,
@@ -350,13 +345,10 @@ class _LoginPageState extends State<LoginPage> {
                                           ? null
                                           : _handleLogin,
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFF2C2C2C,
-                                        ),
-                                        foregroundColor: Colors.white,
-                                        disabledBackgroundColor: const Color(
-                                          0xFF2C2C2C,
-                                        ).withValues(alpha: 0.6),
+                                        backgroundColor: pal.ink,
+                                        foregroundColor: pal.surface,
+                                        disabledBackgroundColor: pal.ink
+                                            .withValues(alpha: 0.6),
                                         elevation: 0,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
@@ -370,11 +362,11 @@ class _LoginPageState extends State<LoginPage> {
                                         ),
                                       ),
                                       child: _isLoading
-                                          ? const SizedBox(
+                                          ? SizedBox(
                                               width: 20,
                                               height: 20,
                                               child: CircularProgressIndicator(
-                                                color: Colors.white,
+                                                color: pal.surface,
                                                 strokeWidth: 2,
                                               ),
                                             )
@@ -384,15 +376,15 @@ class _LoginPageState extends State<LoginPage> {
                                   const SizedBox(height: 16),
                                   GestureDetector(
                                     onTap: _handleEsqueceuSenha,
-                                    child: const Text(
+                                    child: Text(
                                       'Esqueceu a senha?',
                                       style: TextStyle(
                                         fontFamily: 'Roboto',
                                         fontSize: 15,
                                         fontWeight: FontWeight.w400,
-                                        color: AppColors.ink,
+                                        color: pal.ink,
                                         decoration: TextDecoration.underline,
-                                        decorationColor: AppColors.ink,
+                                        decorationColor: pal.ink,
                                       ),
                                     ),
                                   ),
@@ -409,9 +401,9 @@ class _LoginPageState extends State<LoginPage> {
                                             ? null
                                             : _handleLoginGoogle,
                                         style: OutlinedButton.styleFrom(
-                                          backgroundColor: Colors.white,
-                                          side: const BorderSide(
-                                            color: Color(0xFFE0E0E0),
+                                          backgroundColor: pal.surface,
+                                          side: BorderSide(
+                                            color: pal.border,
                                             width: 1,
                                           ),
                                           shape: RoundedRectangleBorder(
@@ -426,13 +418,13 @@ class _LoginPageState extends State<LoginPage> {
                                           elevation: 0,
                                         ),
                                         child: _isLoadingGoogle
-                                            ? const SizedBox(
+                                            ? SizedBox(
                                                 width: 20,
                                                 height: 20,
                                                 child:
                                                     CircularProgressIndicator(
                                                       strokeWidth: 2,
-                                                      color: AppColors.ink,
+                                                      color: pal.ink,
                                                     ),
                                               )
                                             : Row(
@@ -444,14 +436,14 @@ class _LoginPageState extends State<LoginPage> {
                                                     height: 20,
                                                   ),
                                                   const SizedBox(width: 12),
-                                                  const Text(
+                                                  Text(
                                                     'Logar com Google',
                                                     style: TextStyle(
                                                       fontFamily: 'Roboto',
                                                       fontSize: 14,
                                                       fontWeight:
                                                           FontWeight.w500,
-                                                      color: AppColors.ink,
+                                                      color: pal.ink,
                                                     ),
                                                   ),
                                                 ],
@@ -463,29 +455,27 @@ class _LoginPageState extends State<LoginPage> {
                                   Center(
                                     child: GestureDetector(
                                       onTap: () {
-                                        Navigator.of(
-                                          context,
-                                        ).pushNamed('/cadastro');
+                                        context.push(Routes.cadastro);
                                       },
                                       child: RichText(
-                                        text: const TextSpan(
+                                        text: TextSpan(
                                           style: TextStyle(
                                             fontFamily: 'Roboto',
                                             fontSize: 15,
                                             fontWeight: FontWeight.w400,
-                                            color: AppColors.ink,
+                                            color: pal.ink,
                                           ),
                                           children: [
-                                            TextSpan(text: 'Não tem conta? '),
+                                            const TextSpan(
+                                              text: 'Não tem conta? ',
+                                            ),
                                             TextSpan(
                                               text: 'Cadastre-se',
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w600,
                                                 decoration:
                                                     TextDecoration.underline,
-                                                decorationColor: Color(
-                                                  0xFF1A1A1A,
-                                                ),
+                                                decorationColor: pal.ink,
                                               ),
                                             ),
                                           ],
@@ -514,11 +504,11 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Roboto',
         fontSize: 15,
         fontWeight: FontWeight.w500,
-        color: AppColors.ink,
+        color: context.pal.ink,
       ),
     );
   }
@@ -530,21 +520,18 @@ class _LoginPageState extends State<LoginPage> {
     bool obscure = false,
     Widget? suffix,
   }) {
+    final pal = context.pal;
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
-      style: const TextStyle(
-        fontFamily: 'Roboto',
-        fontSize: 14,
-        color: AppColors.ink,
-      ),
+      style: TextStyle(fontFamily: 'Roboto', fontSize: 14, color: pal.ink),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(
+        hintStyle: TextStyle(
           fontFamily: 'Roboto',
           fontSize: 14,
-          color: Color(0xFFBDBDBD),
+          color: pal.hint,
           fontWeight: FontWeight.w400,
         ),
         suffixIcon: suffix,
@@ -554,11 +541,11 @@ class _LoginPageState extends State<LoginPage> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0), width: 1),
+          borderSide: BorderSide(color: pal.border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
+          borderSide: BorderSide(color: pal.ink, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -569,7 +556,7 @@ class _LoginPageState extends State<LoginPage> {
           borderSide: const BorderSide(color: Colors.red, width: 1.5),
         ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: pal.surface,
         isDense: true,
       ),
     );

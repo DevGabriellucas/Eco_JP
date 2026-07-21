@@ -1,5 +1,6 @@
 import 'package:share_plus/share_plus.dart';
 
+import '../core/deep_link.dart';
 import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
 
@@ -15,6 +16,7 @@ Future<void> compartilharOcorrencia(OcorrenciaModel o) async {
   final texto = StringBuffer()
     ..writeln('Denuncia no EcoJP')
     ..writeln('$categoria: $titulo')
+    ..writeln('Abrir no app: ${deepLinkOcorrencia(o.id)}')
     ..writeln('Codigo EcoJP: ${o.id}');
 
   if (o.localizacao.trim().isNotEmpty) {

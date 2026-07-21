@@ -96,19 +96,20 @@ class DocumentoLegalPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: pal.surface,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.ink,
+        backgroundColor: pal.surface,
+        foregroundColor: pal.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
           titulo,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: AppColors.ink,
+            color: pal.ink,
           ),
         ),
       ),
@@ -116,10 +117,10 @@ class DocumentoLegalPage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         child: Text(
           conteudo.trim(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             height: 1.6,
-            color: Color(0xFF374151),
+            color: pal.ink,
           ),
         ),
       ),

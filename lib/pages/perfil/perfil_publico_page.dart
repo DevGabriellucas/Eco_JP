@@ -1,46 +1,50 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/denuncias/providers/denuncia_providers.dart';
 import '../../models/occurrence_types.dart';
 import '../../models/ocorrencia_model.dart';
 import '../../models/usuario_model.dart';
 import '../../services/auth_service.dart';
-import '../../services/ocorrencia_service.dart';
 import '../../services/usuario_service.dart';
+import '../../utils/cloudinary_image.dart';
+import '../../utils/imagem_cacheada.dart';
 import '../../theme/app_theme.dart';
 import '../detalhe_ocorrencia_page.dart';
 
-class PerfilPublicoPage extends StatelessWidget {
+class PerfilPublicoPage extends ConsumerWidget {
   final String userId;
   final String fallbackName;
   final String? fallbackPhotoUrl;
 
-  PerfilPublicoPage({
+  const PerfilPublicoPage({
     super.key,
     required this.userId,
     required this.fallbackName,
     this.fallbackPhotoUrl,
   });
 
-  final UsuarioService _usuarioService = UsuarioService();
-  final OcorrenciaService _ocorrenciaService = OcorrenciaService();
-  final AuthService _authService = AuthService();
+  static final _usuarioService = UsuarioService();
+  static final _authService = AuthService();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ocorrenciaRepository = ref.watch(ocorrenciaRepositoryProvider);
+    final pal = context.pal;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: pal.surface,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF111827),
+        backgroundColor: pal.surface,
+        foregroundColor: pal.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
         title: const Text(
           'Perfil',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: Color(0xFFE5E7EB)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: pal.border),
         ),
       ),
       body: StreamBuilder<UsuarioModel?>(
@@ -55,7 +59,7 @@ class PerfilPublicoPage extends StatelessWidget {
               );
 
           return StreamBuilder<List<OcorrenciaModel>>(
-            stream: _ocorrenciaService.listarPorUsuario(userId),
+            stream: ocorrenciaRepository.listarPorUsuario(userId),
             builder: (context, ocorrenciasSnap) {
               final ocorrencias =
                   (ocorrenciasSnap.data ?? const [])
@@ -83,12 +87,14 @@ class PerfilPublicoPage extends StatelessWidget {
                   const SizedBox(height: 16),
                   _StatsRow(ocorrencias: ocorrencias),
                   const SizedBox(height: 22),
-                  const Text(
+                  _ContribuicaoCard(ocorrencias: ocorrencias),
+                  const SizedBox(height: 22),
+                  Text(
                     'Denúncias públicas',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF111827),
+                      color: pal.ink,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -128,8 +134,10 @@ class _ProfileHeader extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 46,
-          backgroundColor: const Color(0xFFE8F5E9),
-          backgroundImage: hasPhoto ? NetworkImage(perfil.fotoUrl!) : null,
+          backgroundColor: AppColors.primary.withValues(alpha: 0.14),
+          backgroundImage: hasPhoto
+              ? imagemCacheada(cloudinaryAvatar(perfil.fotoUrl!, radius: 46))
+              : null,
           child: hasPhoto
               ? null
               : Text(
@@ -145,8 +153,8 @@ class _ProfileHeader extends StatelessWidget {
         Text(
           perfil.nome.trim().isEmpty ? 'Usuário' : perfil.nome.trim(),
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Color(0xFF111827),
+          style: TextStyle(
+            color: context.pal.ink,
             fontSize: 21,
             fontWeight: FontWeight.w800,
           ),
@@ -156,16 +164,16 @@ class _ProfileHeader extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
+              Icon(
                 Icons.location_on_outlined,
                 size: 15,
-                color: AppColors.muted,
+                color: context.pal.muted,
               ),
               const SizedBox(width: 4),
               Text(
                 perfil.bairro.trim(),
-                style: const TextStyle(
-                  color: AppColors.muted,
+                style: TextStyle(
+                  color: context.pal.muted,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -178,8 +186,8 @@ class _ProfileHeader extends StatelessWidget {
           Text(
             perfil.bio.trim(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.muted,
+            style: TextStyle(
+              color: context.pal.muted,
               fontSize: 13,
               height: 1.35,
             ),
@@ -287,10 +295,10 @@ class _SocialBarState extends State<_SocialBar> {
                         label: Text(seguindo ? 'Seguindo' : 'Seguir'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: seguindo
-                              ? const Color(0xFFF3F4F6)
+                              ? context.pal.surfaceAlt
                               : const Color(0xFF16A34A),
                           foregroundColor: seguindo
-                              ? const Color(0xFF111827)
+                              ? context.pal.ink
                               : Colors.white,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -319,27 +327,28 @@ class _SocialCount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: pal.border),
       ),
       child: Column(
         children: [
           Text(
             '$value',
-            style: const TextStyle(
-              color: Color(0xFF111827),
+            style: TextStyle(
+              color: pal.ink,
               fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
           ),
           Text(
             label,
-            style: const TextStyle(
-              color: AppColors.muted,
+            style: TextStyle(
+              color: pal.muted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -388,19 +397,20 @@ class _StatBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: pal.border),
       ),
       child: Column(
         children: [
           Text(
             '$value',
-            style: const TextStyle(
-              color: Color(0xFF111827),
+            style: TextStyle(
+              color: pal.ink,
               fontSize: 22,
               fontWeight: FontWeight.w900,
             ),
@@ -408,8 +418,8 @@ class _StatBox extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
-              color: AppColors.muted,
+            style: TextStyle(
+              color: pal.muted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -428,6 +438,7 @@ class _PublicOccurrenceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final type = OccurrenceTypeParser.fromString(occurrence.tipoLixo);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -439,9 +450,9 @@ class _PublicOccurrenceTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
+              color: pal.surfaceAlt,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
+              border: Border.all(color: pal.border),
             ),
             child: Row(
               children: [
@@ -455,8 +466,8 @@ class _PublicOccurrenceTile extends StatelessWidget {
                         occurrence.titulo,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF111827),
+                        style: TextStyle(
+                          color: pal.ink,
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
                         ),
@@ -466,10 +477,7 @@ class _PublicOccurrenceTile extends StatelessWidget {
                         occurrence.localizacao,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.muted,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: pal.muted, fontSize: 12),
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -489,11 +497,7 @@ class _PublicOccurrenceTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right,
-                  color: Color(0xFF9CA3AF),
-                  size: 20,
-                ),
+                Icon(Icons.chevron_right, color: pal.hint, size: 20),
               ],
             ),
           ),
@@ -517,8 +521,20 @@ class _Thumb extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: url != null && url.isNotEmpty
-          ? Image.network(
-              url,
+          ? Image(
+              image: imagemCacheada(
+                cloudinaryOtimizada(
+                  url,
+                  larguraLogica: 58,
+                  alturaLogica: 58,
+                  devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+                  crop: 'fill',
+                ),
+                cacheWidth: cacheLarguraPx(
+                  58,
+                  MediaQuery.devicePixelRatioOf(context),
+                ),
+              ),
               width: 58,
               height: 58,
               fit: BoxFit.cover,
@@ -544,19 +560,239 @@ class _EmptyPublicPosts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: pal.border),
       ),
-      child: const Text(
+      child: Text(
         'Nenhuma denúncia pública neste perfil.',
         textAlign: TextAlign.center,
-        style: TextStyle(color: AppColors.muted, fontSize: 13),
+        style: TextStyle(color: pal.muted, fontSize: 13),
       ),
+    );
+  }
+}
+
+/// Card de Contribuição: taxa de resolução + heatmap de categorias.
+class _ContribuicaoCard extends StatelessWidget {
+  final List<OcorrenciaModel> ocorrencias;
+
+  const _ContribuicaoCard({required this.ocorrencias});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+
+    if (ocorrencias.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final resolvidas = ocorrencias
+        .where((o) => o.verificada && o.statusOficial == 'resolvida')
+        .length;
+    final taxaResolucao = ocorrencias.isEmpty
+        ? 0
+        : (resolvidas * 100 / ocorrencias.length).toInt();
+
+    // Conta denúncias por categoria
+    final porCategoria = <OccurrenceType, int>{};
+    for (final o in ocorrencias) {
+      final tipo = OccurrenceTypeParser.fromString(o.tipoLixo);
+      porCategoria[tipo] = (porCategoria[tipo] ?? 0) + 1;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: pal.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: pal.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.trending_up_outlined, size: 18, color: pal.ink),
+              const SizedBox(width: 8),
+              Text(
+                'Impacto & Contribuição',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: pal.ink,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Taxa de Resolução
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Taxa de Resolução',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: pal.muted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '$taxaResolucao%',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 120,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: CircularProgressIndicator(
+                        value: taxaResolucao / 100,
+                        strokeWidth: 4,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.primary,
+                        ),
+                        backgroundColor: pal.border,
+                      ),
+                    ),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$resolvidas',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: pal.ink,
+                          ),
+                        ),
+                        Text(
+                          'resolvidas',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: pal.muted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+
+          // Heatmap de Categorias
+          Text(
+            'Denúncias por tipo',
+            style: TextStyle(
+              fontSize: 12,
+              color: pal.muted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final tipo in porCategoria.keys) ...[
+            _CategoriaBar(
+              label: tipo.label,
+              valor: porCategoria[tipo] ?? 0,
+              total: ocorrencias.length,
+              cor: tipo.color,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Barra de uma categoria mostrando quantidade e progresso visual.
+class _CategoriaBar extends StatelessWidget {
+  final String label;
+  final int valor;
+  final int total;
+  final Color cor;
+
+  const _CategoriaBar({
+    required this.label,
+    required this.valor,
+    required this.total,
+    required this.cor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final percentual = total == 0 ? 0.0 : valor / total;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: pal.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Text(
+              '$valor',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: cor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            minHeight: 6,
+            value: percentual,
+            backgroundColor: pal.border,
+            valueColor: AlwaysStoppedAnimation<Color>(cor),
+          ),
+        ),
+      ],
     );
   }
 }

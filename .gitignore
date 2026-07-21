@@ -38,10 +38,6 @@ credentials/
 lib/firebase_options.dart
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
-macos/Runner/GoogleService-Info.plist
-web/firebase-config.js
-web/firebase-messaging-sw.js
-web/maps_config.js
 
 # Local Flutter/Android configuration
 local.properties

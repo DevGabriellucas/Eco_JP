@@ -13,8 +13,9 @@ class CategoryDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Drawer(
-      backgroundColor: AppColors.surface,
+      backgroundColor: pal.surface,
       child: SafeArea(
         child: ListenableBuilder(
           listenable: controller,
@@ -22,22 +23,22 @@ class CategoryDrawer extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
                   child: Text(
                     'Categorias',
                     style: TextStyle(
-                      color: AppColors.ink,
+                      color: pal.ink,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
                     'Toque para mostrar ou ocultar no mapa.',
-                    style: TextStyle(color: AppColors.hint, fontSize: 13),
+                    style: TextStyle(color: pal.hint, fontSize: 13),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -77,21 +78,22 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final cor = tipo.color;
     return ListTile(
       onTap: onTap,
-      leading: Icon(tipo.icon, color: visivel ? cor : AppColors.hint),
+      leading: Icon(tipo.icon, color: visivel ? cor : pal.hint),
       title: Text(
         tipo.label,
         style: TextStyle(
-          color: visivel ? AppColors.ink : AppColors.hint,
+          color: visivel ? pal.ink : pal.hint,
           fontWeight: FontWeight.w600,
         ),
       ),
       trailing: Icon(
         visivel ? Icons.visibility : Icons.visibility_off_outlined,
         size: 20,
-        color: visivel ? cor : AppColors.hint,
+        color: visivel ? cor : pal.hint,
       ),
     );
   }

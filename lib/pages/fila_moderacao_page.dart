@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/denuncia_moderacao_model.dart';
 import '../services/moderacao_service.dart';
-import '../services/ocorrencia_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/mensagem_erro.dart';
 import 'detalhe_ocorrencia_page.dart';
 
 /// Fila de moderação (autoridade): denúncias de conteúdo abusivo pendentes.
@@ -18,7 +20,7 @@ class FilaModeracaoPage extends StatelessWidget {
     final service = ModeracaoService.instance;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.pal.background,
       appBar: AppBar(
         title: const Text(
           'Fila de moderação',
@@ -76,7 +78,7 @@ class _ContadorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: AppColors.surface,
+      color: context.pal.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
@@ -112,18 +114,17 @@ class _ContadorBanner extends StatelessWidget {
 //  ITEM DA FILA
 // ─────────────────────────────────────────
 
-class _ItemModeracao extends StatefulWidget {
+class _ItemModeracao extends ConsumerStatefulWidget {
   final DenunciaModeracaoModel denuncia;
   final ModeracaoService service;
 
   const _ItemModeracao({required this.denuncia, required this.service});
 
   @override
-  State<_ItemModeracao> createState() => _ItemModeracaoState();
+  ConsumerState<_ItemModeracao> createState() => _ItemModeracaoState();
 }
 
-class _ItemModeracaoState extends State<_ItemModeracao> {
-  final _ocorrenciaService = OcorrenciaService.instance;
+class _ItemModeracaoState extends ConsumerState<_ItemModeracao> {
   bool _processando = false;
 
   String _idade(DateTime? dt) {
@@ -142,19 +143,19 @@ class _ItemModeracaoState extends State<_ItemModeracao> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(sucesso)));
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _processando = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível concluir a ação.')),
+        SnackBar(content: Text(mensagemErro(e, acao: 'concluir a ação'))),
       );
     }
   }
 
   Future<void> _abrirAlvo() async {
-    final ocorrencia = await _ocorrenciaService.buscarPorId(
-      widget.denuncia.ocorrenciaId,
-    );
+    final ocorrencia = await ref
+        .read(ocorrenciaRepositoryProvider)
+        .buscarPorId(widget.denuncia.ocorrenciaId);
     if (!mounted) return;
     if (ocorrencia == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -172,6 +173,7 @@ class _ItemModeracaoState extends State<_ItemModeracao> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final d = widget.denuncia;
     final alvoLabel = d.isComentario ? 'Comentário' : 'Ocorrência';
     final idadeStr = _idade(d.criadoEm);
@@ -181,7 +183,7 @@ class _ItemModeracaoState extends State<_ItemModeracao> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: pal.surface,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
@@ -250,10 +252,10 @@ class _ItemModeracaoState extends State<_ItemModeracao> {
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
             child: Text(
               d.motivo.isEmpty ? 'Sem motivo informado' : d.motivo,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: AppColors.ink,
+                color: pal.ink,
               ),
             ),
           ),
@@ -264,7 +266,7 @@ class _ItemModeracaoState extends State<_ItemModeracao> {
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
               child: Text(
                 d.detalhe!.trim(),
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                style: TextStyle(fontSize: 12, color: pal.muted),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -309,9 +311,9 @@ class _ItemModeracaoState extends State<_ItemModeracao> {
                           ),
                           'Denúncia marcada como improcedente.',
                         ),
-                        child: const Text(
+                        child: Text(
                           'Rejeitar',
-                          style: TextStyle(color: AppColors.muted),
+                          style: TextStyle(color: pal.muted),
                         ),
                       ),
                       TextButton(
@@ -355,24 +357,29 @@ class _FilaVazia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final pal = context.pal;
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.verified_outlined, size: 72, color: AppColors.success),
-          SizedBox(height: 16),
+          const Icon(
+            Icons.verified_outlined,
+            size: 72,
+            color: AppColors.success,
+          ),
+          const SizedBox(height: 16),
           Text(
             'Nada a moderar',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: pal.ink,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Não há denúncias de conteúdo pendentes.',
-            style: TextStyle(fontSize: 14, color: AppColors.hint),
+            style: TextStyle(fontSize: 14, color: pal.hint),
           ),
         ],
       ),
@@ -385,24 +392,25 @@ class _FilaErro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final pal = context.pal;
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 72, color: AppColors.danger),
-          SizedBox(height: 16),
+          const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
+          const SizedBox(height: 16),
           Text(
             'Erro ao carregar',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: pal.ink,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Não foi possível carregar a fila de moderação.',
-            style: TextStyle(fontSize: 14, color: AppColors.hint),
+            style: TextStyle(fontSize: 14, color: pal.hint),
           ),
         ],
       ),

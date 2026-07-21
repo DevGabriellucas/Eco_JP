@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../data/repositories/ocorrencia_repository.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/notificacao_service.dart';
-import '../services/ocorrencia_service.dart';
 
 /// Snapshot do estado de reação de uma ocorrência, usado para reverter uma
 /// atualização otimista se a gravação no servidor falhar.
@@ -89,7 +89,7 @@ Future<void> reagirOcorrencia({
   required OcorrenciaModel ocorrencia,
   required String uid,
   required bool isLike,
-  required OcorrenciaService ocorrenciaService,
+  required OcorrenciaRepository ocorrenciaRepository,
   required NotificacaoService notificacaoService,
   required String? nomeAutor,
   required VoidCallback onMudou,
@@ -110,9 +110,9 @@ Future<void> reagirOcorrencia({
 
   try {
     if (isLike) {
-      await ocorrenciaService.toggleLike(ocorrencia.id, uid);
+      await ocorrenciaRepository.toggleLike(ocorrencia.id, uid);
     } else {
-      await ocorrenciaService.toggleDislike(ocorrencia.id, uid);
+      await ocorrenciaRepository.toggleDislike(ocorrencia.id, uid);
     }
   } catch (_) {
     anterior.restaurarEm(ocorrencia);

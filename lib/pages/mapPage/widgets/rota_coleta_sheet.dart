@@ -12,7 +12,7 @@ Future<void> mostrarAgendaBairroSheet(
 ) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: Colors.white,
+    backgroundColor: context.pal.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -28,6 +28,7 @@ class _AgendaBairroSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final temColetaHoje = agendas.any((a) => a.coletaHoje);
 
     return SafeArea(
@@ -42,7 +43,7 @@ class _AgendaBairroSheet extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.border,
+                  color: pal.border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -50,19 +51,15 @@ class _AgendaBairroSheet extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Icon(
-                  Icons.local_shipping,
-                  color: AppColors.primary,
-                  size: 22,
-                ),
+                Icon(Icons.local_shipping, color: pal.primary, size: 22),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     bairro,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
+                      color: pal.ink,
                     ),
                   ),
                 ),
@@ -71,9 +68,9 @@ class _AgendaBairroSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             if (agendas.isEmpty)
-              const Text(
+              Text(
                 'Sem informação de coleta para este bairro.',
-                style: TextStyle(fontSize: 13, color: AppColors.muted),
+                style: TextStyle(fontSize: 13, color: pal.muted),
               )
             else
               for (var i = 0; i < agendas.length; i++) ...[
@@ -153,11 +150,11 @@ class _AgendaBlock extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            const Icon(Icons.schedule, size: 16, color: AppColors.primary),
+            Icon(Icons.schedule, size: 16, color: context.pal.primary),
             const SizedBox(width: 6),
             Text(
               rota.horario,
-              style: const TextStyle(fontSize: 14, color: AppColors.ink),
+              style: TextStyle(fontSize: 14, color: context.pal.ink),
             ),
           ],
         ),
@@ -204,12 +201,13 @@ class _DiaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: ativo ? cor.withValues(alpha: 0.15) : AppColors.background,
+          color: ativo ? cor.withValues(alpha: 0.15) : pal.surfaceAlt,
           borderRadius: BorderRadius.circular(8),
           border: destaque ? Border.all(color: cor, width: 1.5) : null,
         ),
@@ -218,7 +216,7 @@ class _DiaChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             fontWeight: ativo ? FontWeight.w700 : FontWeight.w400,
-            color: ativo ? cor : AppColors.hint,
+            color: ativo ? cor : pal.hint,
           ),
         ),
       ),

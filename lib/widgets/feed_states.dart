@@ -61,14 +61,17 @@ class _FeedSkeletonState extends State<FeedSkeleton>
 class _SkeletonCard extends StatelessWidget {
   const _SkeletonCard();
 
-  static const _bone = Color(0xFFE5E7EB);
-
-  Widget _bar({required double width, double height = 12, double radius = 6}) {
+  Widget _bar(
+    Color bone, {
+    required double width,
+    double height = 12,
+    double radius = 6,
+  }) {
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: _bone,
+        color: bone,
         borderRadius: BorderRadius.circular(radius),
       ),
     );
@@ -76,9 +79,11 @@ class _SkeletonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
+    final bone = pal.surfaceAlt;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: pal.surface,
         borderRadius: BorderRadius.circular(18),
       ),
       padding: const EdgeInsets.all(14),
@@ -87,14 +92,14 @@ class _SkeletonCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const CircleAvatar(radius: 18, backgroundColor: _bone),
+              CircleAvatar(radius: 18, backgroundColor: bone),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _bar(width: 120),
+                  _bar(bone, width: 120),
                   const SizedBox(height: 6),
-                  _bar(width: 80, height: 10),
+                  _bar(bone, width: 80, height: 10),
                 ],
               ),
             ],
@@ -105,16 +110,16 @@ class _SkeletonCard extends StatelessWidget {
             height: 150,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: _bone,
+              color: bone,
               borderRadius: BorderRadius.circular(12),
             ),
           ),
           const SizedBox(height: 14),
-          _bar(width: 200, height: 14),
+          _bar(bone, width: 200, height: 14),
           const SizedBox(height: 8),
-          _bar(width: double.infinity, height: 10),
+          _bar(bone, width: double.infinity, height: 10),
           const SizedBox(height: 6),
-          _bar(width: 240, height: 10),
+          _bar(bone, width: 240, height: 10),
         ],
       ),
     );
@@ -135,6 +140,7 @@ class FeedEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final title = hasActiveFilters
         ? 'Nenhum resultado encontrado'
         : 'Nenhuma denúncia por aqui ainda';
@@ -150,31 +156,31 @@ class FeedEmptyState extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Color(0xFFE8F5E9),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 hasActiveFilters ? Icons.search_off : Icons.eco_outlined,
                 size: 40,
-                color: AppColors.primary,
+                color: pal.primary,
               ),
             ),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.ink,
+                color: pal.ink,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: AppColors.hint),
+              style: TextStyle(fontSize: 13, color: pal.hint),
             ),
             if (hasActiveFilters && onClearFilters != null) ...[
               const SizedBox(height: 16),
@@ -182,7 +188,7 @@ class FeedEmptyState extends StatelessWidget {
                 onPressed: onClearFilters,
                 icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
                 label: const Text('Limpar filtros'),
-                style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                style: TextButton.styleFrom(foregroundColor: pal.primary),
               ),
             ],
           ],
@@ -200,6 +206,7 @@ class FeedErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -208,8 +215,8 @@ class FeedErrorState extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFEE2E2),
+              decoration: BoxDecoration(
+                color: AppColors.danger.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -219,20 +226,20 @@ class FeedErrorState extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Não foi possível carregar o feed',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.ink,
+                color: pal.ink,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Verifique sua conexão com a internet e tente novamente.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: AppColors.hint),
+              style: TextStyle(fontSize: 13, color: pal.hint),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(

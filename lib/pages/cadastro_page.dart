@@ -1,27 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
+import '../core/router/routes.dart';
+import '../features/auth/providers/auth_providers.dart';
 import '../models/usuario_model.dart';
-import '../services/auth_service.dart';
-import '../services/consent_service.dart';
 import '../services/usuario_service.dart';
 import 'legal/documentos_legais.dart';
 import '../theme/app_theme.dart';
 
-class CadastroPage extends StatefulWidget {
+class CadastroPage extends ConsumerStatefulWidget {
   const CadastroPage({super.key});
 
   @override
-  State<CadastroPage> createState() => _CadastroPageState();
+  ConsumerState<CadastroPage> createState() => _CadastroPageState();
 }
 
-class _CadastroPageState extends State<CadastroPage> {
+class _CadastroPageState extends ConsumerState<CadastroPage> {
   final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _authService = AuthService();
   final _usuarioService = UsuarioService();
-  final _consentService = ConsentService();
   bool _isLoading = false;
   bool _senhaVisivel = false;
   bool _confirmarSenhaVisivel = false;
@@ -92,7 +92,8 @@ class _CadastroPageState extends State<CadastroPage> {
     // Exige pelo menos "razoável" no medidor (score 2 de 4) — o mínimo do
     // próprio Firebase é só 6 caracteres, insuficiente contra senhas comuns.
     if (_forcaSenha(_passwordController.text) < 2) {
-      const msg = 'Escolha uma senha mais forte: use letras maiúsculas e '
+      const msg =
+          'Escolha uma senha mais forte: use letras maiúsculas e '
           'minúsculas, números ou símbolos.';
       setState(() => _errorMessage = msg);
       ScaffoldMessenger.of(
@@ -106,14 +107,23 @@ class _CadastroPageState extends State<CadastroPage> {
       _errorMessage = null;
     });
 
-    final result = await _authService.cadastrar(
+    // Captura os serviços enquanto o widget está montado: as escritas abaixo
+    // seguem mesmo depois que o redirect do router troca a tela para a
+    // verificação de e-mail (senão o `ref` ficaria inválido).
+    final authService = ref.read(authServiceProvider);
+    final consentService = ref.read(consentServiceProvider);
+    final nome = _nomeController.text.trim();
+
+    // Cria a conta PRIMEIRO: a checagem de nome único lê a coleção `usuarios`,
+    // que as Firestore Rules só liberam para usuários autenticados. Por isso a
+    // validação de nome vem depois da criação (com rollback se o nome colidir).
+    final result = await authService.cadastrar(
       _emailController.text.trim(),
       _passwordController.text,
     );
 
-    if (!mounted) return;
-
     if (!result.success) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _errorMessage = result.message;
@@ -125,38 +135,39 @@ class _CadastroPageState extends State<CadastroPage> {
     }
 
     final uid = result.user?.uid;
-    final nome = _nomeController.text.trim();
+    if (uid == null) return;
 
-    // Garante que o nome ainda não está sendo usado por outra conta. A conta de
-    // login (email/senha) já foi criada acima; se o nome estiver em uso,
-    // desfazemos esse cadastro para não deixar uma conta "órfã".
-    if (uid != null && await _usuarioService.nomeEmUso(nome, ignorarUid: uid)) {
-      await result.user?.delete();
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Esse nome já está em uso. Escolha outro.';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Esse nome já está em uso. Escolha outro.'),
-        ),
-      );
-      return;
-    }
+    try {
+      // Nome já em uso por outra conta: desfaz este cadastro para não deixar
+      // conta órfã. O redirect reage ao delete voltando à tela inicial.
+      if (await _usuarioService.nomeEmUso(nome, ignorarUid: uid)) {
+        await result.user?.delete();
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Esse nome já está em uso. Escolha outro.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Esse nome já está em uso. Escolha outro.'),
+          ),
+        );
+        return;
+      }
 
-    // Cria o perfil já com o nome informado no cadastro.
-    if (uid != null) {
+      // Cria o perfil com o nome, salva o nome no Auth (usado em notificações)
+      // e registra o consentimento aceito (LGPD art. 8 §1). O redirect leva à
+      // verificação de e-mail automaticamente.
       await _usuarioService.salvarPerfil(UsuarioModel(uid: uid, nome: nome));
-      // Guarda o nome também no Auth (útil para exibir em notificações).
       await result.user?.updateDisplayName(nome);
-      // Registra o consentimento aceito no checkbox (LGPD art. 8 §1),
-      // para o usuário não ser barrado de novo pela trava de consentimento.
-      await _consentService.registrar(uid);
+      await consentService.registrar(uid);
+    } catch (e) {
+      // Falha pós-criação (rede/permissão): NÃO deixa a UI travada no loading
+      // (bug que a reordenação anterior causava). O redirect já levou o usuário
+      // à verificação de e-mail; a conta existe e o perfil pode ser completado.
+      debugPrint('Erro pós-cadastro: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
   }
 
   void _abrirDocumento(String titulo, String conteudo) {
@@ -168,17 +179,18 @@ class _CadastroPageState extends State<CadastroPage> {
   }
 
   Widget _buildAceiteTermos() {
-    const linkStyle = TextStyle(
+    final pal = context.pal;
+    final linkStyle = TextStyle(
       fontFamily: 'Roboto',
       fontSize: 13,
       fontWeight: FontWeight.w600,
-      color: AppColors.ink,
+      color: pal.ink,
       decoration: TextDecoration.underline,
     );
-    const textStyle = TextStyle(
+    final textStyle = TextStyle(
       fontFamily: 'Roboto',
       fontSize: 13,
-      color: AppColors.muted,
+      color: pal.muted,
     );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,7 +203,7 @@ class _CadastroPageState extends State<CadastroPage> {
             onChanged: _isLoading
                 ? null
                 : (v) => setState(() => _aceitouTermos = v ?? false),
-            activeColor: const Color(0xFF2C2C2C),
+            activeColor: pal.ink,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
@@ -200,18 +212,18 @@ class _CadastroPageState extends State<CadastroPage> {
           child: Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text('Li e aceito a ', style: textStyle),
+              Text('Li e aceito a ', style: textStyle),
               GestureDetector(
                 onTap: () => _abrirDocumento(
                   'Política de Privacidade',
                   kPoliticaPrivacidade,
                 ),
-                child: const Text('Política de Privacidade', style: linkStyle),
+                child: Text('Política de Privacidade', style: linkStyle),
               ),
-              const Text(' e os ', style: textStyle),
+              Text(' e os ', style: textStyle),
               GestureDetector(
                 onTap: () => _abrirDocumento('Termos de Uso', kTermosDeUso),
-                child: const Text('Termos de Uso', style: linkStyle),
+                child: Text('Termos de Uso', style: linkStyle),
               ),
             ],
           ),
@@ -222,6 +234,7 @@ class _CadastroPageState extends State<CadastroPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final double screenWidth = MediaQuery.of(context).size.width;
     final double logoSize = (screenWidth * 0.32).clamp(110.0, 150.0);
     const double baseWidth = 430.0;
@@ -289,9 +302,7 @@ class _CadastroPageState extends State<CadastroPage> {
                           children: [
                             GestureDetector(
                               onTap: () {
-                                Navigator.of(
-                                  context,
-                                ).pushReplacementNamed('/inicial');
+                                context.go(Routes.inicial);
                               },
                               child: SvgPicture.asset(
                                 'assets/icons/seta.svg',
@@ -317,7 +328,7 @@ class _CadastroPageState extends State<CadastroPage> {
                             Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: pal.surface,
                                 borderRadius: BorderRadius.circular(28),
                               ),
                               padding: const EdgeInsets.all(24.0),
@@ -347,12 +358,15 @@ class _CadastroPageState extends State<CadastroPage> {
                                     hint: 'Senha',
                                     obscure: !_senhaVisivel,
                                     suffix: IconButton(
+                                      tooltip: _senhaVisivel
+                                          ? 'Ocultar senha'
+                                          : 'Mostrar senha',
                                       icon: Icon(
                                         _senhaVisivel
                                             ? Icons.visibility_off_outlined
                                             : Icons.visibility_outlined,
                                         size: 18,
-                                        color: const Color(0xFFBDBDBD),
+                                        color: pal.hint,
                                       ),
                                       onPressed: () => setState(
                                         () => _senhaVisivel = !_senhaVisivel,
@@ -375,12 +389,15 @@ class _CadastroPageState extends State<CadastroPage> {
                                     hint: 'Senha',
                                     obscure: !_confirmarSenhaVisivel,
                                     suffix: IconButton(
+                                      tooltip: _confirmarSenhaVisivel
+                                          ? 'Ocultar senha'
+                                          : 'Mostrar senha',
                                       icon: Icon(
                                         _confirmarSenhaVisivel
                                             ? Icons.visibility_off_outlined
                                             : Icons.visibility_outlined,
                                         size: 18,
-                                        color: const Color(0xFFBDBDBD),
+                                        color: pal.hint,
                                       ),
                                       onPressed: () => setState(
                                         () => _confirmarSenhaVisivel =
@@ -410,13 +427,10 @@ class _CadastroPageState extends State<CadastroPage> {
                                           ? null
                                           : _handleCadastro,
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFF2C2C2C,
-                                        ),
-                                        foregroundColor: Colors.white,
-                                        disabledBackgroundColor: const Color(
-                                          0xFF2C2C2C,
-                                        ).withValues(alpha: 0.6),
+                                        backgroundColor: pal.ink,
+                                        foregroundColor: pal.surface,
+                                        disabledBackgroundColor: pal.ink
+                                            .withValues(alpha: 0.6),
                                         elevation: 0,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
@@ -430,11 +444,11 @@ class _CadastroPageState extends State<CadastroPage> {
                                         ),
                                       ),
                                       child: _isLoading
-                                          ? const SizedBox(
+                                          ? SizedBox(
                                               width: 20,
                                               height: 20,
                                               child: CircularProgressIndicator(
-                                                color: Colors.white,
+                                                color: pal.surface,
                                                 strokeWidth: 2,
                                               ),
                                             )
@@ -444,19 +458,17 @@ class _CadastroPageState extends State<CadastroPage> {
                                   const SizedBox(height: 16),
                                   GestureDetector(
                                     onTap: () {
-                                      Navigator.of(
-                                        context,
-                                      ).pushReplacementNamed('/login');
+                                      context.go(Routes.login);
                                     },
-                                    child: const Text(
+                                    child: Text(
                                       'Já tem conta? Faça login',
                                       style: TextStyle(
                                         fontFamily: 'Roboto',
                                         fontSize: 15,
                                         fontWeight: FontWeight.w400,
-                                        color: AppColors.ink,
+                                        color: pal.ink,
                                         decoration: TextDecoration.underline,
-                                        decorationColor: AppColors.ink,
+                                        decorationColor: pal.ink,
                                       ),
                                     ),
                                   ),
@@ -481,11 +493,11 @@ class _CadastroPageState extends State<CadastroPage> {
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Roboto',
         fontSize: 15,
         fontWeight: FontWeight.w500,
-        color: AppColors.ink,
+        color: context.pal.ink,
       ),
     );
   }
@@ -497,21 +509,18 @@ class _CadastroPageState extends State<CadastroPage> {
     bool obscure = false,
     Widget? suffix,
   }) {
+    final pal = context.pal;
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
-      style: const TextStyle(
-        fontFamily: 'Roboto',
-        fontSize: 14,
-        color: AppColors.ink,
-      ),
+      style: TextStyle(fontFamily: 'Roboto', fontSize: 14, color: pal.ink),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(
+        hintStyle: TextStyle(
           fontFamily: 'Roboto',
           fontSize: 14,
-          color: Color(0xFFBDBDBD),
+          color: pal.hint,
           fontWeight: FontWeight.w400,
         ),
         suffixIcon: suffix,
@@ -521,11 +530,11 @@ class _CadastroPageState extends State<CadastroPage> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0), width: 1),
+          borderSide: BorderSide(color: pal.border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.ink, width: 1.5),
+          borderSide: BorderSide(color: pal.ink, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -536,7 +545,7 @@ class _CadastroPageState extends State<CadastroPage> {
           borderSide: const BorderSide(color: Colors.red, width: 1.5),
         ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: pal.surface,
         isDense: true,
       ),
     );
@@ -578,7 +587,7 @@ class _MedidorForcaSenha extends StatelessWidget {
                   duration: const Duration(milliseconds: 200),
                   height: 5,
                   decoration: BoxDecoration(
-                    color: aceso ? cor : const Color(0xFFE0E0E0),
+                    color: aceso ? cor : context.pal.border,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),

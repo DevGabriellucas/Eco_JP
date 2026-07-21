@@ -1,32 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../data/repositories/ocorrencia_repository.dart';
+import '../../features/denuncias/providers/denuncia_providers.dart';
 import '../../models/usuario_model.dart';
 import '../../services/cloudinary_service.dart';
-import '../../services/ocorrencia_service.dart';
 import '../../services/usuario_service.dart';
+import '../../utils/cloudinary_image.dart';
+import '../../utils/imagem_cacheada.dart';
 import '../../theme/app_theme.dart';
 
 class _C {
-  static const bg = Colors.white;
-  static const text = AppColors.ink;
-  static const hint = AppColors.hint;
+  // Cinza do avatar e vermelho de erro — iguais nos dois temas. Os neutros
+  // (fundo/texto/borda/dica) vêm de `context.pal`.
   static const avatarBg = Color(0xFF9E9E9E);
-  static const border = AppColors.ink;
   static const error = Color(0xFFB00020);
 }
 
-class EditarPerfilPage extends StatefulWidget {
+class EditarPerfilPage extends ConsumerStatefulWidget {
   final UsuarioModel perfilAtual;
 
   const EditarPerfilPage({super.key, required this.perfilAtual});
 
   @override
-  State<EditarPerfilPage> createState() => _EditarPerfilPageState();
+  ConsumerState<EditarPerfilPage> createState() => _EditarPerfilPageState();
 }
 
-class _EditarPerfilPageState extends State<EditarPerfilPage> {
+class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
   final _formKey = GlobalKey<FormState>();
   final _nomeCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
@@ -34,7 +36,9 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
   final _picker = ImagePicker();
   final _cloudinaryService = CloudinaryService();
   final _usuarioService = UsuarioService();
-  final _ocorrenciaService = OcorrenciaService();
+
+  OcorrenciaRepository get _ocorrenciaRepository =>
+      ref.read(ocorrenciaRepositoryProvider);
 
   XFile? _novaFoto;
   Uint8List? _novaFotoBytes;
@@ -72,9 +76,10 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
   }
 
   void _opcoesFoto() {
+    final pal = context.pal;
     showModalBottomSheet(
       context: context,
-      backgroundColor: _C.bg,
+      backgroundColor: pal.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -84,7 +89,7 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
           children: [
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.camera_alt_outlined, color: _C.text),
+              leading: Icon(Icons.camera_alt_outlined, color: pal.ink),
               title: const Text('Tirar foto'),
               onTap: () {
                 Navigator.pop(context);
@@ -92,7 +97,7 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined, color: _C.text),
+              leading: Icon(Icons.photo_library_outlined, color: pal.ink),
               title: const Text('Escolher da galeria'),
               onTap: () {
                 Navigator.pop(context);
@@ -109,29 +114,30 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
   Future<void> _confirmarSalvar() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final pal = context.pal;
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _C.bg,
+        backgroundColor: pal.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Salvar alterações',
-          style: TextStyle(fontWeight: FontWeight.w700, color: _C.text),
+          style: TextStyle(fontWeight: FontWeight.w700, color: pal.ink),
         ),
-        content: const Text(
+        content: Text(
           'Tem certeza que deseja alterar o seu perfil?',
-          style: TextStyle(color: _C.text),
+          style: TextStyle(color: pal.ink),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: _C.hint)),
+            child: Text('Cancelar', style: TextStyle(color: pal.hint)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _C.text,
-              foregroundColor: Colors.white,
+              backgroundColor: pal.ink,
+              foregroundColor: pal.surface,
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -168,7 +174,7 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
       );
 
       await _usuarioService.salvarPerfil(atualizado);
-      await _ocorrenciaService.atualizarPerfilNasOcorrencias(
+      await _ocorrenciaRepository.atualizarPerfilNasOcorrencias(
         atualizado.uid,
         atualizado.nome,
         atualizado.fotoUrl,
@@ -195,20 +201,21 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Scaffold(
-      backgroundColor: _C.bg,
+      backgroundColor: pal.surface,
       appBar: AppBar(
-        backgroundColor: _C.bg,
-        foregroundColor: _C.text,
+        backgroundColor: pal.surface,
+        foregroundColor: pal.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
         systemOverlayStyle: SystemUiOverlayStyle.dark,
-        title: const Text(
+        title: Text(
           'Editar perfil',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: _C.text,
+            color: pal.ink,
           ),
         ),
       ),
@@ -254,8 +261,8 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
               child: ElevatedButton(
                 onPressed: _salvando ? null : _confirmarSalvar,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _C.text,
-                  foregroundColor: Colors.white,
+                  backgroundColor: pal.ink,
+                  foregroundColor: pal.surface,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -263,12 +270,12 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
                   elevation: 0,
                 ),
                 child: _salvando
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: pal.surface,
                         ),
                       )
                     : const Text(
@@ -287,6 +294,7 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
   }
 
   Widget _avatarEditavel() {
+    final pal = context.pal;
     final temFotoNova = _novaFotoBytes != null;
     final temFotoAtual =
         widget.perfilAtual.fotoUrl != null &&
@@ -302,7 +310,9 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
             backgroundImage: temFotoNova
                 ? MemoryImage(_novaFotoBytes!)
                 : temFotoAtual
-                ? NetworkImage(widget.perfilAtual.fotoUrl!) as ImageProvider
+                ? imagemCacheada(
+                    cloudinaryAvatar(widget.perfilAtual.fotoUrl!, radius: 52),
+                  )
                 : null,
             child: (!temFotoNova && !temFotoAtual)
                 ? Text(
@@ -320,15 +330,8 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
             right: 0,
             child: Container(
               padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                color: _C.text,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.camera_alt,
-                size: 16,
-                color: Colors.white,
-              ),
+              decoration: BoxDecoration(color: pal.ink, shape: BoxShape.circle),
+              child: Icon(Icons.camera_alt, size: 16, color: pal.surface),
             ),
           ),
         ],
@@ -338,10 +341,10 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
 
   Widget _label(String text) => Text(
     text,
-    style: const TextStyle(
+    style: TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.w600,
-      color: _C.text,
+      color: context.pal.ink,
     ),
   );
 
@@ -352,16 +355,17 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
     int? maxLength,
     String? Function(String?)? validator,
   }) {
+    final pal = context.pal;
     return TextFormField(
       controller: controller,
       enabled: !_salvando,
       maxLines: maxLines,
       maxLength: maxLength,
       validator: validator,
-      style: const TextStyle(color: _C.text, fontSize: 14),
+      style: TextStyle(color: pal.ink, fontSize: 14),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: _C.hint, fontSize: 14),
+        hintStyle: TextStyle(color: pal.hint, fontSize: 14),
         counterText: '',
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
@@ -369,11 +373,11 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+          borderSide: BorderSide(color: pal.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _C.border, width: 1.5),
+          borderSide: BorderSide(color: pal.ink, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),

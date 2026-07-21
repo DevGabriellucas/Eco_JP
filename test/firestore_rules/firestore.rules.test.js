@@ -161,6 +161,25 @@ describe('ocorrencias', () => {
       ),
     );
   });
+
+  test('NAO cria ocorrencia com titulo em branco (so espacos)', async () => {
+    // titulo '     ' passa no size() >= 3 mas deve falhar em naoEmBranco.
+    const db = verifiedContext(testEnv, 'alice');
+    await assertFails(
+      db.collection('ocorrencias').add(
+        ocorrenciaValida('alice', { titulo: '     ' }),
+      ),
+    );
+  });
+
+  test('NAO cria ocorrencia com descricao em branco (so espacos)', async () => {
+    const db = verifiedContext(testEnv, 'alice');
+    await assertFails(
+      db.collection('ocorrencias').add(
+        ocorrenciaValida('alice', { descricao: '            ' }),
+      ),
+    );
+  });
 });
 
 describe('moderacao e papeis', () => {
@@ -218,6 +237,131 @@ describe('moderacao e papeis', () => {
   });
 });
 
+describe('comentarios', () => {
+  async function seedOcorrencia() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx
+        .firestore()
+        .collection('ocorrencias')
+        .doc('occC')
+        .set(ocorrenciaValida('alice'));
+    });
+  }
+
+  function comentarioValido(uid, extra = {}) {
+    return {
+      texto: 'Comentario util e construtivo',
+      userId: uid,
+      userName: 'Alice',
+      userPhotoUrl: null,
+      dataCriacao: serverTimestamp(),
+      parentId: null,
+      likedBy: [],
+      likes: 0,
+      ...extra,
+    };
+  }
+
+  test('cria comentario valido', async () => {
+    await seedOcorrencia();
+    const db = verifiedContext(testEnv, 'alice');
+    await assertSucceeds(
+      db
+        .collection('ocorrencias')
+        .doc('occC')
+        .collection('comentarios')
+        .add(comentarioValido('alice')),
+    );
+  });
+
+  test('NAO cria comentario em branco (so espacos)', async () => {
+    await seedOcorrencia();
+    // texto '   ' passa no size() >= 1 mas deve falhar em naoEmBranco.
+    const db = verifiedContext(testEnv, 'alice');
+    await assertFails(
+      db
+        .collection('ocorrencias')
+        .doc('occC')
+        .collection('comentarios')
+        .add(comentarioValido('alice', { texto: '   ' })),
+    );
+  });
+});
+
+describe('linha do tempo (auditoria)', () => {
+  async function seed() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db
+        .collection('ocorrencias')
+        .doc('occH')
+        .set(ocorrenciaValida('alice'));
+      await db.collection('roles').doc('gov').set({ role: 'autoridade' });
+    });
+  }
+
+  function evento(extra = {}) {
+    return { status: 'verificada', por: 'Órgão X', data: serverTimestamp(), ...extra };
+  }
+
+  test('autoridade registra evento de auditoria', async () => {
+    await seed();
+    const db = verifiedContext(testEnv, 'gov');
+    await assertSucceeds(
+      db
+        .collection('ocorrencias')
+        .doc('occH')
+        .collection('historico')
+        .add(evento()),
+    );
+  });
+
+  test('usuario comum NAO registra evento de auditoria', async () => {
+    await seed();
+    const db = verifiedContext(testEnv, 'bob');
+    await assertFails(
+      db
+        .collection('ocorrencias')
+        .doc('occH')
+        .collection('historico')
+        .add(evento()),
+    );
+  });
+
+  test('evento com status invalido e rejeitado', async () => {
+    await seed();
+    const db = verifiedContext(testEnv, 'gov');
+    await assertFails(
+      db
+        .collection('ocorrencias')
+        .doc('occH')
+        .collection('historico')
+        .add(evento({ status: 'qualquer_coisa' })),
+    );
+  });
+
+  test('evento de auditoria e imutavel (sem update/delete)', async () => {
+    await seed();
+    let ref;
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      ref = await ctx
+        .firestore()
+        .collection('ocorrencias')
+        .doc('occH')
+        .collection('historico')
+        .add({ status: 'verificada', data: new Date() });
+    });
+    const db = verifiedContext(testEnv, 'gov');
+    const doc = db
+      .collection('ocorrencias')
+      .doc('occH')
+      .collection('historico')
+      .doc(ref.id);
+    await assertFails(doc.update({ status: 'resolvida' }));
+    await assertFails(doc.delete());
+  });
+});
+
 describe('perfis de usuario', () => {
   test('usuario edita o proprio perfil', async () => {
     const db = verifiedContext(testEnv, 'alice');
@@ -235,6 +379,18 @@ describe('perfis de usuario', () => {
     await assertFails(
       db.collection('usuarios').doc('bob').set({
         nome: 'Bob falsificado',
+        bio: '',
+        bairro: '',
+      }),
+    );
+  });
+
+  test('NAO salva perfil com nome em branco (so espacos)', async () => {
+    // nome '   ' passa no size() >= 1 mas deve falhar em naoEmBranco.
+    const db = verifiedContext(testEnv, 'alice');
+    await assertFails(
+      db.collection('usuarios').doc('alice').set({
+        nome: '   ',
         bio: '',
         bairro: '',
       }),

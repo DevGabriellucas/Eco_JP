@@ -1,18 +1,21 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geocoding/geocoding.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 
+import '../data/repositories/ocorrencia_repository.dart';
+import '../features/denuncias/providers/denuncia_providers.dart';
+import '../features/denuncias/providers/geocoding_provider.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/auth_service.dart';
 import '../services/classificacao_ia_service.dart';
 import '../services/cloudinary_service.dart';
-import '../services/ocorrencia_service.dart';
+import '../services/geolocation/geocoding_service.dart';
 import '../services/rate_limiter.dart';
 import '../services/usuario_service.dart';
 import '../theme/app_theme.dart';
@@ -21,26 +24,23 @@ import '../utils/imagem_privacidade.dart';
 // ─── Paleta ────────────────────────────────────────────────────────────────
 
 class _C {
-  static const primary = AppColors.ink;
-  static const bg = AppColors.surface;
+  // Cinza-médio (dica) e vermelho de erro — ok nos dois temas. Os neutros
+  // (texto/fundo/borda/superfície) vêm de `context.pal`.
   static const hint = AppColors.hint;
   static const error = AppColors.danger;
   static const disabled = AppColors.hint;
-  static const slotBg = Color(0xFFF8F8F8);
-  static const slotBorder = Color(0xFFBBBBBB);
-  static const divider = AppColors.border;
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
 
-class FormOcorrenciaPage extends StatefulWidget {
+class FormOcorrenciaPage extends ConsumerStatefulWidget {
   const FormOcorrenciaPage({super.key});
 
   @override
-  State<FormOcorrenciaPage> createState() => _FormOcorrenciaPageState();
+  ConsumerState<FormOcorrenciaPage> createState() => _FormOcorrenciaPageState();
 }
 
-class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
+class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
   final _formKey = GlobalKey<FormState>();
   final _tituloCtrl = TextEditingController();
   final _descricaoCtrl = TextEditingController();
@@ -49,8 +49,11 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   final _authService = AuthService();
   final _usuarioService = UsuarioService();
   final _cloudinaryService = CloudinaryService();
-  final _ocorrenciaService = OcorrenciaService();
   final _picker = ImagePicker();
+
+  OcorrenciaRepository get _ocorrenciaRepository =>
+      ref.read(ocorrenciaRepositoryProvider);
+  GeocodingService get _geo => ref.read(geocodingServiceProvider);
 
   // Até 3 fotos
   final List<XFile?> _imagens = List.filled(3, null, growable: false);
@@ -59,6 +62,8 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   // Vídeo opcional (até 30s)
   XFile? _video;
   Uint8List? _videoBytes;
+  // Controlador só para exibir o primeiro quadro do vídeo como preview.
+  VideoPlayerController? _videoController;
 
   final _classificacaoService = ClassificacaoIaService();
   String? _categoria;
@@ -76,13 +81,10 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   int _fotoAtivaIdx = 0; // qual foto aparece na área principal
 
   // Autocomplete
-  List<_EnderecoSugestao> _sugestoes = [];
+  List<EnderecoSugestao> _sugestoes = [];
   bool _buscandoSug = false;
   bool _mostrarSug = false;
   Timer? _debounce;
-
-  // Passe a key via: flutter run --dart-define=GOOGLE_MAPS_API_KEY=SUA_KEY
-  static const _googleKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 
   static const _categorias = [
     'Lixo',
@@ -111,6 +113,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     _enderecoCtrl.dispose();
     _enderecoFocus.dispose();
     _debounce?.cancel();
+    _videoController?.dispose();
     super.dispose();
   }
 
@@ -175,7 +178,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   void _abrirPicker(int slot) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: _C.bg,
+      backgroundColor: context.pal.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -187,7 +190,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
             _pill(),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.camera_alt_outlined, color: _C.primary),
+              leading: Icon(Icons.camera_alt_outlined, color: context.pal.ink),
               title: const Text('Tirar foto'),
               onTap: () {
                 Navigator.pop(context);
@@ -195,9 +198,9 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
               },
             ),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.photo_library_outlined,
-                color: _C.primary,
+                color: context.pal.ink,
               ),
               title: const Text('Escolher da galeria'),
               onTap: () {
@@ -230,19 +233,51 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       _video = video;
       _videoBytes = bytes;
     });
+    await _prepararPreviewVideo(video);
   }
 
   void _removerVideo() {
+    _videoController?.dispose();
+    _videoController = null;
     setState(() {
       _video = null;
       _videoBytes = null;
     });
   }
 
+  // Prepara um controlador só para exibir o primeiro quadro como preview no
+  // formulário; a reprodução em si acontece em tela cheia (_VisualizadorVideo).
+  Future<void> _prepararPreviewVideo(XFile video) async {
+    await _videoController?.dispose();
+    final controller = VideoPlayerController.file(File(video.path));
+    _videoController = controller;
+    try {
+      await controller.initialize();
+      // Se o widget saiu de tela ou o usuário já trocou/removeu o vídeo,
+      // descartamos silenciosamente (o novo controlador cuida do resto).
+      if (!mounted || _videoController != controller) return;
+      setState(() {});
+    } catch (e) {
+      debugPrint('Preview de vídeo indisponível: $e');
+    }
+  }
+
+  void _abrirVisualizadorVideo() {
+    final video = _video;
+    if (video == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) =>
+            _VisualizadorVideo(path: video.path, titulo: video.name),
+      ),
+    );
+  }
+
   void _abrirPickerVideo() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: _C.bg,
+      backgroundColor: context.pal.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -254,7 +289,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
             _pill(),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.videocam_outlined, color: _C.primary),
+              leading: Icon(Icons.videocam_outlined, color: context.pal.ink),
               title: const Text('Gravar vídeo'),
               onTap: () {
                 Navigator.pop(context);
@@ -262,9 +297,9 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
               },
             ),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.video_library_outlined,
-                color: _C.primary,
+                color: context.pal.ink,
               ),
               title: const Text('Escolher da galeria'),
               onTap: () {
@@ -291,12 +326,13 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     }
     _debounce?.cancel();
     final texto = v.trim();
-    if (texto.length < 3) {
+    // Autocomplete com 2+ caracteres (CEP, bairro, rua): mais rápido e útil
+    if (texto.length < 2) {
       setState(() => _sugestoes = []);
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      if (_pareceCep(texto)) {
+      if (_geo.pareceCep(texto)) {
         _buscarPorCep(texto);
       } else {
         _buscarSugestoes(texto);
@@ -304,217 +340,31 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     });
   }
 
-  // Detecta se o texto digitado é um CEP (8 dígitos, com ou sem hífen).
-  bool _pareceCep(String texto) {
-    return RegExp(r'^\d{5}-?\d{3}$').hasMatch(texto.trim());
-  }
-
   Future<void> _buscarSugestoes(String q) async {
     setState(() => _buscandoSug = true);
     try {
-      _googleKey.isNotEmpty
-          ? await _buscarGooglePlaces(q)
-          : await _buscarNominatim(q);
+      final list = await _geo.autocomplete(q);
+      if (!mounted) return;
+      setState(() {
+        _sugestoes = list;
+        _mostrarSug = list.isNotEmpty;
+      });
     } finally {
       if (mounted) setState(() => _buscandoSug = false);
     }
   }
 
-  Future<void> _buscarGooglePlaces(String q) async {
-    try {
-      final uri = Uri.https(
-        'maps.googleapis.com',
-        '/maps/api/place/autocomplete/json',
-        {
-          'input': '$q, João Pessoa',
-          'components': 'country:br',
-          'location': '-7.1153,-34.8641',
-          'radius': '50000',
-          'language': 'pt-BR',
-          'key': _googleKey,
-        },
-      );
-      final res = await http.get(uri).timeout(const Duration(seconds: 8));
-      if (!mounted || res.statusCode != 200) return;
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      // O autocomplete do Google não retorna lat/lon (só a descrição);
-      // as coordenadas são resolvidas por geocodificação ao enviar.
-      final list = (data['predictions'] as List<dynamic>? ?? [])
-          .take(8)
-          .map((p) => p['description']?.toString() ?? '')
-          .where((s) => s.isNotEmpty)
-          .map((desc) => _EnderecoSugestao(descricao: desc))
-          .toList();
-      setState(() {
-        _sugestoes = list;
-        _mostrarSug = list.isNotEmpty;
-      });
-    } catch (e) {
-      debugPrint('Google Places: $e');
-      await _buscarNominatim(q);
-    }
-  }
-
-  Future<void> _buscarNominatim(String q) async {
-    try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': '$q, João Pessoa',
-        'countrycodes': 'br',
-        'limit': '15',
-        'format': 'jsonv2',
-        'accept-language': 'pt-BR',
-        'addressdetails': '1',
-        // bounding box de João Pessoa para priorizar resultados locais
-        'viewbox': '-34.98,-6.97,-34.78,-7.29',
-        'bounded': '0',
-      });
-      final res = await http
-          .get(uri, headers: {'User-Agent': 'EcoJP/1.0'})
-          .timeout(const Duration(seconds: 8));
-      if (!mounted || res.statusCode != 200) return;
-
-      final data = jsonDecode(res.body) as List<dynamic>;
-      final seen = <String>{};
-      final list = <_EnderecoSugestao>[];
-      for (final raw in data) {
-        final item = raw as Map<String, dynamic>;
-        final desc = _formatarEnderecoNominatim(item);
-        if (desc.isEmpty || !seen.add(desc)) continue;
-        list.add(
-          _EnderecoSugestao(
-            descricao: desc,
-            lat: double.tryParse(item['lat']?.toString() ?? ''),
-            lon: double.tryParse(item['lon']?.toString() ?? ''),
-          ),
-        );
-        if (list.length >= 8) break;
-      }
-
-      setState(() {
-        _sugestoes = list;
-        _mostrarSug = list.isNotEmpty;
-      });
-    } catch (e) {
-      debugPrint('Nominatim: $e');
-    }
-  }
-
   // Busca um endereço pelo CEP (ViaCEP) e resolve as coordenadas no Nominatim.
-  Future<void> _buscarPorCep(String cepRaw) async {
-    final cep = cepRaw.replaceAll(RegExp(r'\D'), '');
-    if (cep.length != 8) return;
-    try {
-      final res = await http
-          .get(Uri.https('viacep.com.br', '/ws/$cep/json/'))
-          .timeout(const Duration(seconds: 8));
-      if (!mounted || res.statusCode != 200) return;
-
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['erro'] == true || data['erro'] == 'true') {
-        setState(() {
-          _sugestoes = [];
-          _mostrarSug = false;
-        });
-        return;
-      }
-
-      final logradouro = data['logradouro']?.toString() ?? '';
-      final bairro = data['bairro']?.toString() ?? '';
-      final cidade = data['localidade']?.toString() ?? '';
-      final uf = data['uf']?.toString() ?? '';
-
-      final desc = [
-        logradouro,
-        bairro,
-        cidade,
-      ].where((s) => s.isNotEmpty).join(', ');
-      final descricao = desc.isEmpty ? '$cidade - $uf' : desc;
-
-      // Resolve lat/lon do endereço retornado pelo CEP.
-      final coord = await _geocodificar('$descricao, $uf');
-      if (!mounted) return;
-
-      setState(() {
-        _sugestoes = [
-          _EnderecoSugestao(
-            descricao: descricao,
-            lat: coord?.$1,
-            lon: coord?.$2,
-          ),
-        ];
-        _mostrarSug = true;
-      });
-    } catch (e) {
-      debugPrint('ViaCEP: $e');
-    }
+  Future<void> _buscarPorCep(String cep) async {
+    final list = await _geo.buscarPorCep(cep);
+    if (!mounted) return;
+    setState(() {
+      _sugestoes = list;
+      _mostrarSug = list.isNotEmpty;
+    });
   }
 
-  // Geocodifica um endereço em texto para coordenadas (lat, lon).
-  Future<(double, double)?> _geocodificar(String endereco) async {
-    if (endereco.trim().isEmpty) return null;
-    try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': endereco,
-        'countrycodes': 'br',
-        'limit': '1',
-        'format': 'jsonv2',
-        'accept-language': 'pt-BR',
-      });
-      final res = await http
-          .get(uri, headers: {'User-Agent': 'EcoJP/1.0'})
-          .timeout(const Duration(seconds: 8));
-      if (res.statusCode != 200) return null;
-      final data = jsonDecode(res.body) as List<dynamic>;
-      if (data.isEmpty) return null;
-      final item = data.first as Map<String, dynamic>;
-      final lat = double.tryParse(item['lat']?.toString() ?? '');
-      final lon = double.tryParse(item['lon']?.toString() ?? '');
-      if (lat == null || lon == null) return null;
-      return (lat, lon);
-    } catch (e) {
-      debugPrint('Geocodificar: $e');
-      return null;
-    }
-  }
-
-  String _formatarEnderecoNominatim(Map<String, dynamic> item) {
-    final addr = item['address'] as Map<String, dynamic>?;
-    if (addr == null) {
-      final display = item['display_name']?.toString() ?? '';
-      return display.split(',').take(3).join(',').trim();
-    }
-
-    final road =
-        addr['road']?.toString() ??
-        addr['pedestrian']?.toString() ??
-        addr['footway']?.toString() ??
-        addr['path']?.toString() ??
-        '';
-    final bairro =
-        addr['neighbourhood']?.toString() ??
-        addr['suburb']?.toString() ??
-        addr['quarter']?.toString() ??
-        addr['city_district']?.toString() ??
-        '';
-    final cidade =
-        addr['city']?.toString() ??
-        addr['town']?.toString() ??
-        addr['municipality']?.toString() ??
-        '';
-
-    final parts = <String>[];
-    if (road.isNotEmpty) parts.add(road);
-    if (bairro.isNotEmpty) parts.add(bairro);
-    if (cidade.isNotEmpty && cidade != road) parts.add(cidade);
-
-    if (parts.isEmpty) {
-      final display = item['display_name']?.toString() ?? '';
-      return display.split(',').take(2).join(',').trim();
-    }
-    return parts.join(', ');
-  }
-
-  void _selecionarSugestao(_EnderecoSugestao s) {
+  void _selecionarSugestao(EnderecoSugestao s) {
     _enderecoCtrl.text = s.descricao;
     setState(() {
       _latitude = s.lat;
@@ -553,7 +403,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       );
       if (!mounted) return;
 
-      final addr = await _reverseGeocode(pos.latitude, pos.longitude);
+      final addr = await _geo.reverseGeocode(pos.latitude, pos.longitude);
       setState(() {
         _latitude = pos.latitude;
         _longitude = pos.longitude;
@@ -566,52 +416,6 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     } finally {
       if (mounted) setState(() => _loadingLoc = false);
     }
-  }
-
-  Future<String> _reverseGeocode(double lat, double lng) async {
-    try {
-      final marks = await placemarkFromCoordinates(lat, lng);
-      if (marks.isNotEmpty) {
-        final p = marks.first;
-        final parts = [
-          p.street,
-          p.subLocality,
-          p.locality,
-        ].where((s) => s != null && s.trim().isNotEmpty).take(3).join(', ');
-        if (parts.isNotEmpty) return parts;
-      }
-    } catch (_) {}
-
-    try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
-        'format': 'jsonv2',
-        'lat': '$lat',
-        'lon': '$lng',
-        'addressdetails': '1',
-        'accept-language': 'pt-BR',
-      });
-      final res = await http.get(uri);
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final addr = data['address'];
-        if (addr is Map<String, dynamic>) {
-          final parts =
-              [
-                    addr['road'],
-                    addr['neighbourhood'],
-                    addr['suburb'],
-                    addr['city'],
-                  ]
-                  .where((s) => s is String && s.trim().isNotEmpty)
-                  .take(3)
-                  .map((s) => s.toString())
-                  .join(', ');
-          if (parts.isNotEmpty) return parts;
-        }
-      }
-    } catch (_) {}
-
-    return 'Endereço não encontrado';
   }
 
   // ── Envio ────────────────────────────────────────────────────────────────
@@ -636,7 +440,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     final ok = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _C.bg,
+      backgroundColor: context.pal.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -647,6 +451,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   }
 
   Widget _buildModalConfirmacao(BuildContext ctx) {
+    final pal = ctx.pal;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
@@ -669,7 +474,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8F8F8),
+                color: pal.surfaceAlt,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -704,8 +509,8 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(ctx, false),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: _C.primary,
-                      side: const BorderSide(color: _C.primary),
+                      foregroundColor: pal.ink,
+                      side: BorderSide(color: pal.ink),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -722,8 +527,8 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(ctx, true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _C.primary,
-                      foregroundColor: _C.bg,
+                      backgroundColor: pal.ink,
+                      foregroundColor: pal.surface,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -769,7 +574,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       var lat = _latitude;
       var lon = _longitude;
       if (lat == null || lon == null) {
-        final coord = await _geocodificar(_enderecoCtrl.text.trim());
+        final coord = await _geo.geocodificar(_enderecoCtrl.text.trim());
         if (!mounted) return;
         lat = coord?.$1;
         lon = coord?.$2;
@@ -847,7 +652,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
         anonima: _anonima,
       );
 
-      await _ocorrenciaService.cadastrarOcorrencia(ocorrencia);
+      await _ocorrenciaRepository.cadastrarOcorrencia(ocorrencia);
       if (!mounted) return;
 
       setState(() {
@@ -861,8 +666,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
       debugPrint('Envio error: $e');
       final String msg;
       if (e is RateLimitException) {
-        msg =
-            'Aguarde ${e.segundosRestantes}s antes de enviar outra denúncia.';
+        msg = 'Aguarde ${e.segundosRestantes}s antes de enviar outra denúncia.';
       } else if (e is CloudinaryConfigException) {
         msg = 'Cloudinary não configurado: ${e.message}';
       } else if (e is CloudinaryUploadException) {
@@ -891,7 +695,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor: error ? _C.error : _C.primary,
+        backgroundColor: error ? _C.error : AppColors.ink,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -901,29 +705,31 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Scaffold(
-      backgroundColor: _C.bg,
+      backgroundColor: pal.surface,
       appBar: AppBar(
-        backgroundColor: _C.bg,
-        foregroundColor: _C.primary,
+        backgroundColor: pal.surface,
+        foregroundColor: pal.ink,
         elevation: 0,
         centerTitle: true,
         systemOverlayStyle: SystemUiOverlayStyle.dark,
         leading: IconButton(
+          tooltip: 'Voltar',
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Nova denúncia',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: _C.primary,
+            color: pal.ink,
           ),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: _C.divider, height: 1),
+          child: Container(color: pal.border, height: 1),
         ),
       ),
       body: Form(
@@ -976,6 +782,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   // ── Seção vídeo (opcional) ───────────────────────────────────────────────
 
   Widget _videoSection() {
+    final pal = context.pal;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -986,9 +793,9 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
             child: Container(
               height: 56,
               decoration: BoxDecoration(
-                color: _C.slotBg,
+                color: pal.surfaceAlt,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _C.slotBorder),
+                border: Border.all(color: pal.border),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1008,59 +815,125 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
             ),
           )
         else
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(
-              color: _C.slotBg,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _C.slotBorder),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.videocam, color: _C.primary, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _video!.name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: _C.primary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: _enviando ? null : _removerVideo,
-                  child: const Icon(Icons.close, size: 18, color: _C.hint),
-                ),
-              ],
-            ),
-          ),
+          _videoPreviewCard(),
       ],
     );
   }
 
+  // Card de preview do vídeo: mostra o primeiro quadro (quando o controlador
+  // fica pronto) com um botão de play; tocar abre a reprodução em tela cheia.
+  Widget _videoPreviewCard() {
+    final pal = context.pal;
+    final controller = _videoController;
+    final Widget media;
+    if (controller != null && controller.value.isInitialized) {
+      media = FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: controller.value.size.width,
+          height: controller.value.size.height,
+          child: VideoPlayer(controller),
+        ),
+      );
+    } else {
+      media = const Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        ),
+      );
+    }
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: pal.surfaceAlt,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: pal.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: _enviando ? null : _abrirVisualizadorVideo,
+            child: SizedBox(
+              height: 180,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  const ColoredBox(color: Colors.black),
+                  media,
+                  Center(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        shape: BoxShape.circle,
+                      ),
+                      padding: const EdgeInsets.all(10),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 34,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.videocam, color: pal.ink, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _video?.name ?? 'Vídeo',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: pal.ink,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Semantics(
+                  button: true,
+                  label: 'Remover vídeo',
+                  child: GestureDetector(
+                    onTap: _enviando ? null : _removerVideo,
+                    child: const Icon(Icons.close, size: 18, color: _C.hint),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _mainPhotoArea() {
+    final pal = context.pal;
     final bytes = _totalFotos > 0 ? _imagensBytes[_fotoAtivaIdx] : null;
     return GestureDetector(
       onTap: _enviando
           ? null
           : bytes == null
           ? _adicionarFoto
-          : () => _abrirPicker(_fotoAtivaIdx),
+          : () => _abrirVisualizadorFotos(_fotoAtivaIdx),
       child: SizedBox(
         height: 190,
         width: double.infinity,
         child: bytes == null
             ? CustomPaint(
-                foregroundPainter: _DashedPainter(
-                  color: _C.slotBorder,
-                  radius: 8,
-                ),
+                foregroundPainter: _DashedPainter(color: pal.border, radius: 8),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: _C.slotBg,
+                    color: pal.surfaceAlt,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Column(
@@ -1092,38 +965,66 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                     child: Container(
                       width: double.infinity,
                       height: double.infinity,
-                      color: _C.slotBg,
-                      child: Image.memory(
-                        bytes,
-                        width: double.infinity,
-                        height: double.infinity,
-                        fit: BoxFit.contain,
+                      color: pal.surfaceAlt,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        switchInCurve: Curves.easeOut,
+                        child: Image.memory(
+                          bytes,
+                          key: ValueKey<int>(_fotoAtivaIdx),
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 8,
+                    bottom: 8,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.fullscreen, size: 14, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text(
+                            'Ampliar',
+                            style: TextStyle(color: Colors.white, fontSize: 11),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: Semantics(
-                      button: true,
-                      label: 'Remover foto',
-                      child: GestureDetector(
-                        onTap: _enviando
-                            ? null
-                            : () => _removerFoto(_fotoAtivaIdx),
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          padding: const EdgeInsets.all(4),
-                          child: const Icon(
-                            Icons.close,
-                            size: 16,
-                            color: _C.primary,
-                          ),
+                    child: Row(
+                      children: [
+                        _fotoAcaoBtn(
+                          icon: Icons.swap_horiz,
+                          label: 'Trocar foto',
+                          onTap: _enviando
+                              ? null
+                              : () => _abrirPicker(_fotoAtivaIdx),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        _fotoAcaoBtn(
+                          icon: Icons.close,
+                          label: 'Remover foto',
+                          onTap: _enviando
+                              ? null
+                              : () => _removerFoto(_fotoAtivaIdx),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1133,6 +1034,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   }
 
   Widget _thumbnailStrip() {
+    final pal = context.pal;
     return Row(
       children: [
         for (int i = 0; i < 3; i++)
@@ -1146,7 +1048,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: _fotoAtivaIdx == i ? _C.primary : Colors.transparent,
+                    color: _fotoAtivaIdx == i ? pal.ink : Colors.transparent,
                     width: 2,
                   ),
                 ),
@@ -1166,15 +1068,61 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: _C.slotBg,
+                  color: pal.surfaceAlt,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _C.slotBorder),
+                  border: Border.all(color: pal.border),
                 ),
                 child: const Icon(Icons.add, color: _C.hint, size: 22),
               ),
             ),
           ),
       ],
+    );
+  }
+
+  // Botão circular sobre a foto (trocar / remover).
+  Widget _fotoAcaoBtn({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+  }) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, size: 16, color: AppColors.ink),
+        ),
+      ),
+    );
+  }
+
+  // Abre o visualizador em tela cheia com todas as fotos anexadas, começando
+  // na foto tocada. Permite dar zoom (InteractiveViewer) e navegar entre elas.
+  void _abrirVisualizadorFotos(int slotInicial) {
+    final fotos = <Uint8List>[];
+    final slots = <int>[];
+    for (int i = 0; i < 3; i++) {
+      final b = _imagensBytes[i];
+      if (b != null) {
+        fotos.add(b);
+        slots.add(i);
+      }
+    }
+    if (fotos.isEmpty) return;
+    final inicial = slots.indexOf(slotInicial).clamp(0, fotos.length - 1);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) =>
+            _VisualizadorFotos(fotos: fotos, indiceInicial: inicial),
+      ),
     );
   }
 
@@ -1202,6 +1150,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   }
 
   Widget _categoriaSection() {
+    final pal = context.pal;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1225,7 +1174,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                 style: TextStyle(fontSize: 12),
               ),
               style: TextButton.styleFrom(
-                foregroundColor: _C.primary,
+                foregroundColor: pal.ink,
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(0, 32),
               ),
@@ -1235,12 +1184,12 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
         DropdownButtonFormField<String>(
           initialValue: _categoria,
           decoration: _dec(''),
-          dropdownColor: _C.bg,
-          style: const TextStyle(color: _C.primary, fontSize: 14),
-          icon: const Icon(Icons.add, color: _C.primary, size: 20),
-          hint: const Text(
+          dropdownColor: pal.surface,
+          style: TextStyle(color: pal.ink, fontSize: 14),
+          icon: Icon(Icons.add, color: pal.ink, size: 20),
+          hint: Text(
             'Selecione categoria',
-            style: TextStyle(color: _C.hint, fontSize: 14),
+            style: TextStyle(color: pal.hint, fontSize: 14),
           ),
           items: _categorias
               .map((c) => DropdownMenuItem(value: c, child: Text(c)))
@@ -1264,7 +1213,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
           enabled: !_enviando,
           maxLength: 80,
           textInputAction: TextInputAction.next,
-          style: const TextStyle(color: _C.primary, fontSize: 14),
+          style: TextStyle(color: context.pal.ink, fontSize: 14),
           decoration: _dec('Digite o título').copyWith(counterText: ''),
           validator: (v) {
             final s = v?.trim() ?? '';
@@ -1289,7 +1238,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
           enabled: !_enviando,
           maxLines: 4,
           textInputAction: TextInputAction.newline,
-          style: const TextStyle(color: _C.primary, fontSize: 14),
+          style: TextStyle(color: context.pal.ink, fontSize: 14),
           decoration: _dec(
             'Descreva o problema ...',
           ).copyWith(alignLabelWithHint: true),
@@ -1307,6 +1256,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   // ── Seção localização + autocomplete ─────────────────────────────────────
 
   Widget _localizacaoSection() {
+    final pal = context.pal;
     return TapRegion(
       onTapOutside: (_) {
         // Só fecha o teclado ao tocar fora. As sugestões continuam visíveis
@@ -1322,14 +1272,14 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
             controller: _enderecoCtrl,
             focusNode: _enderecoFocus,
             enabled: !_enviando,
-            style: const TextStyle(color: _C.primary, fontSize: 14),
+            style: TextStyle(color: pal.ink, fontSize: 14),
             onChanged: _onEnderecoChanged,
             decoration: _dec('Pesquise localização').copyWith(
-              prefixIcon: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
+              prefixIcon: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Icon(
                   Icons.location_on_outlined,
-                  color: _C.primary,
+                  color: pal.ink,
                   size: 20,
                 ),
               ),
@@ -1338,18 +1288,18 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                 minHeight: 0,
               ),
               suffixIcon: _buscandoSug
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
+                  ? Padding(
+                      padding: const EdgeInsets.all(12),
                       child: SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: _C.primary,
+                          color: pal.ink,
                         ),
                       ),
                     )
-                  : const Icon(Icons.search, color: _C.primary, size: 20),
+                  : Icon(Icons.search, color: pal.ink, size: 20),
             ),
             validator: (v) =>
                 (v?.trim() ?? '').isEmpty ? 'Informe a localização' : null,
@@ -1373,7 +1323,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
           Icon(
             confirmada ? Icons.check_circle : Icons.info_outline,
             size: 16,
-            color: confirmada ? AppColors.primary : _C.hint,
+            color: confirmada ? context.pal.primary : _C.hint,
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -1383,7 +1333,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                   : 'As coordenadas serão validadas antes do envio.',
               style: TextStyle(
                 fontSize: 12,
-                color: confirmada ? AppColors.primary : _C.hint,
+                color: confirmada ? context.pal.primary : _C.hint,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1394,11 +1344,12 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   }
 
   Widget _sugestoesDropdown() {
+    final pal = context.pal;
     return Container(
       margin: const EdgeInsets.only(top: 2),
       decoration: BoxDecoration(
-        color: _C.bg,
-        border: Border.all(color: _C.primary),
+        color: pal.surface,
+        border: Border.all(color: pal.ink),
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -1434,10 +1385,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                       Expanded(
                         child: Text(
                           e.value.descricao,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: _C.primary,
-                          ),
+                          style: TextStyle(fontSize: 13, color: pal.ink),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1446,8 +1394,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
                   ),
                 ),
               ),
-              if (!isLast)
-                const Divider(height: 1, color: _C.divider, indent: 40),
+              if (!isLast) Divider(height: 1, color: pal.border, indent: 40),
             ],
           );
         }).toList(),
@@ -1456,23 +1403,24 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   }
 
   Widget _botaoLocalizacao() {
+    final pal = context.pal;
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: (_loadingLoc || _enviando) ? null : _usarLocalizacaoAtual,
         style: OutlinedButton.styleFrom(
-          foregroundColor: _C.primary,
-          side: const BorderSide(color: _C.primary),
+          foregroundColor: pal.ink,
+          side: BorderSide(color: pal.ink),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         icon: _loadingLoc
-            ? const SizedBox(
+            ? SizedBox(
                 width: 16,
                 height: 16,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: _C.primary,
+                  color: pal.ink,
                 ),
               )
             : const Icon(Icons.my_location, size: 18),
@@ -1485,6 +1433,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   }
 
   Widget _envioStatus() {
+    final pal = context.pal;
     final progress = _uploadTotal == 0 ? null : _uploadAtual / _uploadTotal;
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1507,8 +1456,8 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
               Expanded(
                 child: Text(
                   _statusEnvio ?? 'Enviando denúncia...',
-                  style: const TextStyle(
-                    color: AppColors.ink,
+                  style: TextStyle(
+                    color: pal.ink,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1523,7 +1472,7 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
               child: LinearProgressIndicator(
                 minHeight: 6,
                 value: progress.clamp(0, 1).toDouble(),
-                backgroundColor: AppColors.border,
+                backgroundColor: pal.border,
               ),
             ),
           ],
@@ -1535,20 +1484,19 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   // ── Bottom bar ────────────────────────────────────────────────────────────
 
   Widget _anonimaSection() {
+    final pal = context.pal;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       decoration: BoxDecoration(
-        color: _C.slotBg,
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _C.slotBorder),
+        border: Border.all(color: pal.border),
       ),
       child: SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: _anonima,
-        onChanged: _enviando
-            ? null
-            : (v) => setState(() => _anonima = v),
-        activeThumbColor: _C.primary,
+        onChanged: _enviando ? null : (v) => setState(() => _anonima = v),
+        activeThumbColor: pal.ink,
         title: const Text(
           'Denunciar anonimamente',
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
@@ -1562,14 +1510,15 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
   }
 
   Widget _botaoEnviar() {
+    final pal = context.pal;
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: (_enviando || _enviado) ? null : _confirmarEnvio,
         style: ElevatedButton.styleFrom(
-          backgroundColor: _C.primary,
+          backgroundColor: pal.ink,
           disabledBackgroundColor: _C.disabled,
-          foregroundColor: _C.bg,
+          foregroundColor: pal.surface,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(30),
@@ -1577,12 +1526,12 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
           elevation: 0,
         ),
         icon: _enviando
-            ? const SizedBox(
+            ? SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: pal.surface,
                 ),
               )
             : const Icon(Icons.send_outlined, size: 20),
@@ -1600,11 +1549,11 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     padding: const EdgeInsets.only(bottom: 8),
     child: Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.2,
-        color: _C.primary,
+        color: context.pal.ink,
       ),
     ),
   );
@@ -1615,11 +1564,11 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
     filled: false,
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: _C.primary),
+      borderSide: BorderSide(color: context.pal.ink),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: _C.primary, width: 1.5),
+      borderSide: BorderSide(color: context.pal.ink, width: 1.5),
     ),
     errorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
@@ -1661,9 +1610,9 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: _C.primary,
+                color: context.pal.ink,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1678,14 +1627,6 @@ class _FormOcorrenciaPageState extends State<FormOcorrenciaPage> {
 }
 
 // ─── Sugestão de endereço (descrição + coordenadas) ─────────────────────────
-
-class _EnderecoSugestao {
-  final String descricao;
-  final double? lat;
-  final double? lon;
-
-  const _EnderecoSugestao({required this.descricao, this.lat, this.lon});
-}
 
 // ─── Dashed border painter ─────────────────────────────────────────────────
 
@@ -1723,4 +1664,207 @@ class _DashedPainter extends CustomPainter {
   @override
   bool shouldRepaint(_DashedPainter old) =>
       old.color != color || old.radius != radius;
+}
+
+// ─── Visualizador de fotos em tela cheia ────────────────────────────────────
+
+class _VisualizadorFotos extends StatefulWidget {
+  final List<Uint8List> fotos;
+  final int indiceInicial;
+
+  const _VisualizadorFotos({required this.fotos, required this.indiceInicial});
+
+  @override
+  State<_VisualizadorFotos> createState() => _VisualizadorFotosState();
+}
+
+class _VisualizadorFotosState extends State<_VisualizadorFotos> {
+  late final PageController _pageCtrl;
+  late int _atual;
+
+  @override
+  void initState() {
+    super.initState();
+    _atual = widget.indiceInicial;
+    _pageCtrl = PageController(initialPage: widget.indiceInicial);
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        leading: IconButton(
+          tooltip: 'Fechar',
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: widget.fotos.length > 1
+            ? Text(
+                '${_atual + 1} / ${widget.fotos.length}',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            : null,
+      ),
+      body: PageView.builder(
+        controller: _pageCtrl,
+        itemCount: widget.fotos.length,
+        onPageChanged: (i) => setState(() => _atual = i),
+        itemBuilder: (_, i) => InteractiveViewer(
+          minScale: 1,
+          maxScale: 4,
+          child: Center(
+            child: Image.memory(widget.fotos[i], fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Visualizador de vídeo em tela cheia ────────────────────────────────────
+
+class _VisualizadorVideo extends StatefulWidget {
+  final String path;
+  final String titulo;
+
+  const _VisualizadorVideo({required this.path, required this.titulo});
+
+  @override
+  State<_VisualizadorVideo> createState() => _VisualizadorVideoState();
+}
+
+class _VisualizadorVideoState extends State<_VisualizadorVideo> {
+  VideoPlayerController? _ctrl;
+  bool _erro = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciar();
+  }
+
+  Future<void> _iniciar() async {
+    final ctrl = VideoPlayerController.file(File(widget.path));
+    _ctrl = ctrl;
+    try {
+      await ctrl.initialize();
+      if (!mounted) {
+        await ctrl.dispose();
+        return;
+      }
+      await ctrl.setLooping(true);
+      await ctrl.play();
+      setState(() {});
+    } catch (e) {
+      debugPrint('Não foi possível reproduzir o vídeo: $e');
+      if (mounted) setState(() => _erro = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl?.dispose();
+    super.dispose();
+  }
+
+  void _alternarPlayPause() {
+    final ctrl = _ctrl;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    setState(() {
+      if (ctrl.value.isPlaying) {
+        unawaited(ctrl.pause());
+      } else {
+        unawaited(ctrl.play());
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = _ctrl;
+    final Widget body;
+    if (_erro) {
+      body = const Text(
+        'Não foi possível reproduzir o vídeo.',
+        style: TextStyle(color: Colors.white70),
+      );
+    } else if (ctrl == null || !ctrl.value.isInitialized) {
+      body = const CircularProgressIndicator(color: Colors.white);
+    } else {
+      body = GestureDetector(
+        onTap: _alternarPlayPause,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            AspectRatio(
+              aspectRatio: ctrl.value.aspectRatio,
+              child: VideoPlayer(ctrl),
+            ),
+            if (!ctrl.value.isPlaying)
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(12),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 44,
+                ),
+              ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: VideoProgressIndicator(
+                ctrl,
+                allowScrubbing: true,
+                colors: const VideoProgressColors(
+                  playedColor: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        leading: IconButton(
+          tooltip: 'Fechar',
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          widget.titulo,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      body: Center(child: body),
+    );
+  }
 }

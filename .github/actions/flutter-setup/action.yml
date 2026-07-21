@@ -1,0 +1,147 @@
+name: Configurar Flutter (EcoJP)
+description: >
+  Setup reutilizável para os jobs Flutter: instala o Flutter (com cache),
+  baixa dependências, injeta a MAPS_API_KEY e gera um firebase_options.dart
+  sintético (o real é gitignored por conter chaves do projeto).
+
+inputs:
+  maps-api-key:
+    description: Valor de secrets.MAPS_API_KEY (pode ficar vazio em PRs de fork).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Configurar Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        cache: true
+
+    - name: Versões instaladas
+      shell: bash
+      run: flutter --version
+
+    - name: Instalar dependências
+      shell: bash
+      run: flutter pub get
+
+    - name: Injetar MAPS_API_KEY
+      shell: bash
+      run: echo "MAPS_API_KEY=${{ inputs.maps-api-key }}" >> android/local.properties
+
+    # Placeholder do google-services.json: o plugin gms é aplicado no Gradle e
+    # falha o build Android sem esse arquivo (que é gitignored). Só é criado se
+    # não existir — assim um release pode pré-injetar o real via secret.
+    - name: Gerar google-services.json de CI
+      shell: bash
+      run: |
+        if [ ! -f android/app/google-services.json ]; then
+          cat > android/app/google-services.json <<'JSON'
+        {
+          "project_info": {
+            "project_number": "435003677712",
+            "project_id": "ecojp-ci",
+            "storage_bucket": "ecojp-ci.appspot.com"
+          },
+          "client": [
+            {
+              "client_info": {
+                "mobilesdk_app_id": "1:435003677712:android:0000000000000000000000",
+                "android_client_info": { "package_name": "com.example.eco_jp" }
+              },
+              "oauth_client": [],
+              "api_key": [{ "current_key": "ci-placeholder-key" }],
+              "services": {
+                "appinvite_service": { "other_platform_oauth_client": [] }
+              }
+            }
+          ],
+          "configuration_version": "1"
+        }
+        JSON
+        fi
+
+    # firebase_options.dart também é gitignored. Gera o sintético só se não
+    # existir — um release pode pré-injetar o real via secret antes deste setup.
+    - name: Gerar FirebaseOptions de CI
+      shell: bash
+      run: |
+        if [ -f lib/firebase_options.dart ]; then
+          echo "firebase_options.dart já existe — mantendo."
+          exit 0
+        fi
+        cat > lib/firebase_options.dart <<'DART'
+        import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+        import 'package:flutter/foundation.dart'
+            show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+        class DefaultFirebaseOptions {
+          static FirebaseOptions get currentPlatform {
+            if (kIsWeb) return web;
+            switch (defaultTargetPlatform) {
+              case TargetPlatform.android:
+                return android;
+              case TargetPlatform.iOS:
+                return ios;
+              case TargetPlatform.macOS:
+                return macos;
+              case TargetPlatform.windows:
+                return windows;
+              case TargetPlatform.linux:
+                throw UnsupportedError(
+                  'DefaultFirebaseOptions are not configured for linux.',
+                );
+              case TargetPlatform.fuchsia:
+                throw UnsupportedError(
+                  'DefaultFirebaseOptions are not configured for fuchsia.',
+                );
+            }
+          }
+
+          static const FirebaseOptions web = FirebaseOptions(
+            apiKey: 'ci-placeholder',
+            appId: '1:000000000000:web:0000000000000000000000',
+            messagingSenderId: '000000000000',
+            projectId: 'ecojp-ci',
+            authDomain: 'ecojp-ci.firebaseapp.com',
+            storageBucket: 'ecojp-ci.appspot.com',
+          );
+
+          static const FirebaseOptions android = FirebaseOptions(
+            apiKey: 'ci-placeholder',
+            appId: '1:000000000000:android:0000000000000000000000',
+            messagingSenderId: '000000000000',
+            projectId: 'ecojp-ci',
+            storageBucket: 'ecojp-ci.appspot.com',
+          );
+
+          static const FirebaseOptions ios = FirebaseOptions(
+            apiKey: 'ci-placeholder',
+            appId: '1:000000000000:ios:0000000000000000000000',
+            messagingSenderId: '000000000000',
+            projectId: 'ecojp-ci',
+            storageBucket: 'ecojp-ci.appspot.com',
+            iosBundleId: 'com.example.ecoJp',
+          );
+
+          static const FirebaseOptions macos = FirebaseOptions(
+            apiKey: 'ci-placeholder',
+            appId: '1:000000000000:ios:0000000000000000000000',
+            messagingSenderId: '000000000000',
+            projectId: 'ecojp-ci',
+            storageBucket: 'ecojp-ci.appspot.com',
+            iosBundleId: 'com.example.ecoJp',
+          );
+
+          static const FirebaseOptions windows = FirebaseOptions(
+            apiKey: 'ci-placeholder',
+            appId: '1:000000000000:web:0000000000000000000000',
+            messagingSenderId: '000000000000',
+            projectId: 'ecojp-ci',
+            authDomain: 'ecojp-ci.firebaseapp.com',
+            storageBucket: 'ecojp-ci.appspot.com',
+          );
+        }
+        DART

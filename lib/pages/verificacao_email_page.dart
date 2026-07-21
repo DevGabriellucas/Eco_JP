@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../services/auth_service.dart';
+import '../features/auth/providers/auth_providers.dart';
 import '../theme/app_theme.dart';
 
 /// Tela exibida quando o usuário entrou com e-mail/senha mas ainda não
@@ -10,15 +11,16 @@ import '../theme/app_theme.dart';
 ///
 /// Envia o link automaticamente ao abrir, checa a confirmação em segundo plano
 /// e oferece reenvio (com tempo de espera) e troca de conta.
-class VerificacaoEmailPage extends StatefulWidget {
+class VerificacaoEmailPage extends ConsumerStatefulWidget {
   const VerificacaoEmailPage({super.key});
 
   @override
-  State<VerificacaoEmailPage> createState() => _VerificacaoEmailPageState();
+  ConsumerState<VerificacaoEmailPage> createState() =>
+      _VerificacaoEmailPageState();
 }
 
-class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
-  final _authService = AuthService();
+class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
+  late final _authService = ref.read(authServiceProvider);
 
   Timer? _poll;
   Timer? _cooldownTimer;
@@ -84,7 +86,10 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
     if (!silencioso) setState(() => _verificando = false);
     if (ok) {
       _poll?.cancel();
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+      // O e-mail confirmado não chega pelo authStateChanges; invalidar o
+      // provider força uma nova emissão com emailVerified=true e o redirect
+      // do router libera o acesso (home ou consentimento).
+      ref.invalidate(authStateChangesProvider);
     } else if (!silencioso) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -98,13 +103,13 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
 
   Future<void> _sair() async {
     _poll?.cancel();
+    // O logout emite null no authStateChanges e o redirect leva à tela inicial.
     await _authService.sair();
-    if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/inicial', (_) => false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final email = _authService.emailAtual ?? 'seu e-mail';
 
     return Scaffold(
@@ -117,7 +122,7 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
               width: double.infinity,
               constraints: const BoxConstraints(maxWidth: 420),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: pal.surface,
                 borderRadius: BorderRadius.circular(28),
               ),
               padding: const EdgeInsets.all(28),
@@ -125,28 +130,28 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.mark_email_unread_outlined,
                     size: 64,
-                    color: Color(0xFF2C2C2C),
+                    color: pal.ink,
                   ),
                   const SizedBox(height: 20),
-                  const Text(
+                  Text(
                     'Confirme seu e-mail',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
+                      color: pal.ink,
                     ),
                   ),
                   const SizedBox(height: 12),
                   Text.rich(
                     TextSpan(
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         height: 1.5,
-                        color: AppColors.muted,
+                        color: pal.muted,
                       ),
                       children: [
                         const TextSpan(
@@ -154,9 +159,9 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                         ),
                         TextSpan(
                           text: email,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: AppColors.ink,
+                            color: pal.ink,
                           ),
                         ),
                         const TextSpan(
@@ -176,11 +181,9 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                           ? null
                           : () => _checarVerificacao(),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2C2C2C),
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: const Color(
-                          0xFF2C2C2C,
-                        ).withValues(alpha: 0.6),
+                        backgroundColor: pal.ink,
+                        foregroundColor: pal.surface,
+                        disabledBackgroundColor: pal.ink.withValues(alpha: 0.6),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -191,11 +194,11 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                         ),
                       ),
                       child: _verificando
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
-                                color: Colors.white,
+                                color: pal.surface,
                                 strokeWidth: 2,
                               ),
                             )
@@ -212,18 +215,16 @@ class _VerificacaoEmailPageState extends State<VerificacaoEmailPage> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: _cooldown > 0
-                            ? const Color(0xFFBDBDBD)
-                            : AppColors.ink,
+                        color: _cooldown > 0 ? pal.hint : pal.ink,
                       ),
                     ),
                   ),
-                  const Divider(height: 24, color: Color(0xFFEEEEEE)),
+                  Divider(height: 24, color: pal.border),
                   TextButton(
                     onPressed: _sair,
-                    child: const Text(
+                    child: Text(
                       'Usar outra conta',
-                      style: TextStyle(fontSize: 14, color: AppColors.muted),
+                      style: TextStyle(fontSize: 14, color: pal.muted),
                     ),
                   ),
                 ],

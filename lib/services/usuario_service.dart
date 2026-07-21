@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/usuario_model.dart';
+import '../utils/texto.dart';
 
 class UsuarioService {
   static final UsuarioService instance = UsuarioService();
@@ -30,7 +31,20 @@ class UsuarioService {
   // Cria ou atualiza o perfil
   Future<void> salvarPerfil(UsuarioModel usuario) async {
     try {
-      await _ref.doc(usuario.uid).set(usuario.toMap());
+      // Nome/bio/bairro são exibidos publicamente — higieniza no choke point
+      // (nome e bairro em linha única; bio pode ter quebras). Remove
+      // zero-width/bidi usados para spoofing de nome.
+      final dados = usuario.toMap();
+      if (dados['nome'] is String) {
+        dados['nome'] = sanitizarLinhaUnica(dados['nome'] as String);
+      }
+      if (dados['bairro'] is String) {
+        dados['bairro'] = sanitizarLinhaUnica(dados['bairro'] as String);
+      }
+      if (dados['bio'] is String) {
+        dados['bio'] = sanitizarTexto(dados['bio'] as String);
+      }
+      await _ref.doc(usuario.uid).set(dados);
     } catch (e) {
       debugPrint('Erro ao salvar perfil: $e');
       rethrow;
@@ -46,10 +60,16 @@ class UsuarioService {
   CollectionReference<Map<String, dynamic>> _seguidoresRef(String uid) =>
       _ref.doc(uid).collection('seguidores');
 
+  // Teto de favoritos observados por vez — evita baixar a subcoleção inteira
+  // de um usuário que salvou muitas denúncias a cada emissão do stream.
+  static const int _tetoFavoritos = 300;
+
   Stream<Set<String>> observarFavoritosIds(String uid) {
-    return _favoritosRef(
-      uid,
-    ).snapshots().map((snap) => snap.docs.map((d) => d.id).toSet());
+    return _favoritosRef(uid)
+        .orderBy('salvoEm', descending: true)
+        .limit(_tetoFavoritos)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.id).toSet());
   }
 
   Future<void> salvarFavorito(String uid, String ocorrenciaId) async {

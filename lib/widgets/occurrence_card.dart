@@ -4,6 +4,8 @@ import 'package:video_player/video_player.dart';
 import '../models/comentario_model.dart';
 import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
+import '../utils/cloudinary_image.dart';
+import '../utils/imagem_cacheada.dart';
 import '../utils/compartilhamento.dart';
 import '../utils/tempo_relativo.dart';
 import '../theme/app_theme.dart';
@@ -54,13 +56,14 @@ class OccurrenceCard extends StatelessWidget {
     final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
     final estagio = EstagioOficialInfo.calcular(o.verificada, o.statusOficial);
     final autor = _authorName;
+    final pal = context.pal;
 
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: pal.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: pal.border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -91,6 +94,8 @@ class OccurrenceCard extends StatelessWidget {
               urls: o.imagensUrls,
               fallbackUrl: o.imagemUrl,
               type: typeEnum,
+              onDoubleTapLike: onLike,
+              alreadyLiked: o.userLiked,
             ),
           _OfficialStatusStrip(estagio: estagio),
           Padding(
@@ -105,13 +110,14 @@ class OccurrenceCard extends StatelessWidget {
                   activeColor: AppColors.danger,
                   onTap: onLike,
                   semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
+                  animateOnActivate: true,
                 ),
                 StreamBuilder<int>(
                   stream: commentCountStream,
                   initialData: o.comments,
                   builder: (context, snap) => _ActionButton(
-                    icon: Icons.mode_comment_outlined,
-                    iconFilled: Icons.mode_comment,
+                    icon: Icons.chat_bubble_outline,
+                    iconFilled: Icons.chat_bubble,
                     count: snap.data ?? o.comments,
                     active: false,
                     activeColor: AppColors.info,
@@ -121,7 +127,7 @@ class OccurrenceCard extends StatelessWidget {
                 ),
                 _IconAction(
                   tooltip: 'Compartilhar',
-                  icon: Icons.send_outlined,
+                  icon: Icons.share_outlined,
                   onTap: () => compartilharOcorrencia(o),
                 ),
                 const Spacer(),
@@ -143,8 +149,8 @@ class OccurrenceCard extends StatelessWidget {
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   text: TextSpan(
-                    style: const TextStyle(
-                      color: Color(0xFF111827),
+                    style: TextStyle(
+                      color: pal.ink,
                       fontSize: 13,
                       height: 1.35,
                     ),
@@ -166,10 +172,10 @@ class OccurrenceCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.location_on_outlined,
                       size: 14,
-                      color: AppColors.muted,
+                      color: pal.muted,
                     ),
                     const SizedBox(width: 4),
                     Expanded(
@@ -177,9 +183,9 @@ class OccurrenceCard extends StatelessWidget {
                         o.localizacao,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.muted,
+                          color: pal.muted,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -199,9 +205,9 @@ class OccurrenceCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   tempoStr,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF9CA3AF),
+                    color: pal.muted,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -246,7 +252,7 @@ class OccurrenceCard extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.pal.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -268,10 +274,10 @@ class _PinnedNotice extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: const Color(0xFFFFFBEB),
+      color: AppColors.warning.withValues(alpha: 0.12),
       child: const Row(
         children: [
-          Icon(Icons.push_pin, size: 15, color: Color(0xFFD97706)),
+          Icon(Icons.push_pin, size: 15, color: AppColors.warning),
           SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -279,7 +285,7 @@ class _PinnedNotice extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Color(0xFF92400E),
+                color: AppColors.warning,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),
@@ -326,8 +332,8 @@ class _CommentPreview extends StatelessWidget {
                     count <= 1
                         ? 'Ver comentário'
                         : 'Ver todos os $count comentários',
-                    style: const TextStyle(
-                      color: AppColors.muted,
+                    style: TextStyle(
+                      color: context.pal.muted,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -339,16 +345,16 @@ class _CommentPreview extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 text: TextSpan(
-                  style: const TextStyle(
-                    color: Color(0xFF374151),
+                  style: TextStyle(
+                    color: context.pal.ink,
                     fontSize: 12.5,
                     height: 1.3,
                   ),
                   children: [
                     TextSpan(
                       text: latest.userName,
-                      style: const TextStyle(
-                        color: Color(0xFF111827),
+                      style: TextStyle(
+                        color: context.pal.ink,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -392,6 +398,7 @@ class _CardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
       child: Row(
@@ -421,10 +428,10 @@ class _CardHeader extends StatelessWidget {
                     authorName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      color: Color(0xFF111827),
+                      color: pal.ink,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -432,9 +439,9 @@ class _CardHeader extends StatelessWidget {
                     location,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.muted,
+                      color: pal.muted,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -444,11 +451,7 @@ class _CardHeader extends StatelessWidget {
           ),
           PopupMenuButton<_CardMenuAction>(
             tooltip: 'Mais opções',
-            icon: const Icon(
-              Icons.more_horiz,
-              color: Color(0xFF111827),
-              size: 24,
-            ),
+            icon: Icon(Icons.more_horiz, color: pal.ink, size: 24),
             elevation: 10,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -536,7 +539,7 @@ class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppColors.danger : const Color(0xFF374151);
+    final color = danger ? AppColors.danger : context.pal.ink;
     return Row(
       children: [
         Icon(icon, size: 18, color: color),
@@ -545,7 +548,7 @@ class _MenuItem extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 13,
-            color: danger ? color : const Color(0xFF111827),
+            color: color,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -719,13 +722,14 @@ class _OfficialStatusStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = estagio.color;
     final active = estagio.temAcaoOficial;
+    final pal = context.pal;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
       decoration: BoxDecoration(
-        color: active ? color.withValues(alpha: 0.09) : const Color(0xFFF9FAFB),
-        border: const Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+        color: active ? color.withValues(alpha: 0.09) : pal.surfaceAlt,
+        border: Border(bottom: BorderSide(color: pal.border)),
       ),
       child: Row(
         children: [
@@ -748,7 +752,7 @@ class _OfficialStatusStrip extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: active ? color : const Color(0xFF4B5563),
+                    color: active ? color : pal.muted,
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                   ),
@@ -758,8 +762,8 @@ class _OfficialStatusStrip extends StatelessWidget {
                   _description,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.muted,
+                  style: TextStyle(
+                    color: pal.muted,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -795,19 +799,37 @@ class _ImageSlider extends StatefulWidget {
   final String? fallbackUrl;
   final OccurrenceType type;
 
+  /// Curtir por toque duplo na foto (estilo Instagram). Só curte — nunca
+  /// descurte — por isso recebe também [alreadyLiked] para não desfazer.
+  final VoidCallback? onDoubleTapLike;
+  final bool alreadyLiked;
+
   const _ImageSlider({
     required this.urls,
     required this.fallbackUrl,
     required this.type,
+    this.onDoubleTapLike,
+    this.alreadyLiked = false,
   });
 
   @override
   State<_ImageSlider> createState() => _ImageSliderState();
 }
 
-class _ImageSliderState extends State<_ImageSlider> {
+class _ImageSliderState extends State<_ImageSlider>
+    with SingleTickerProviderStateMixin {
   final PageController _controller = PageController();
   int _current = 0;
+  late final AnimationController _burstController;
+
+  @override
+  void initState() {
+    super.initState();
+    _burstController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+  }
 
   List<String> get _images {
     if (widget.urls.isNotEmpty) return widget.urls;
@@ -815,9 +837,18 @@ class _ImageSliderState extends State<_ImageSlider> {
     return [];
   }
 
+  void _handleDoubleTap() {
+    if (widget.onDoubleTapLike == null) return;
+    _burstController.forward(from: 0);
+    // Toque duplo sempre "curte": se já estava curtido, apenas repete o coração
+    // sem alternar (não descurte, igual ao Instagram).
+    if (!widget.alreadyLiked) widget.onDoubleTapLike!.call();
+  }
+
   @override
   void dispose() {
     _controller.dispose();
+    _burstController.dispose();
     super.dispose();
   }
 
@@ -827,6 +858,8 @@ class _ImageSliderState extends State<_ImageSlider> {
       builder: (context, constraints) {
         final height = constraints.maxWidth.clamp(220.0, 420.0).toDouble();
         final images = _images;
+        final dpr = MediaQuery.devicePixelRatioOf(context);
+        final larguraImg = constraints.maxWidth;
 
         if (images.isEmpty) {
           return SizedBox(
@@ -840,36 +873,48 @@ class _ImageSliderState extends State<_ImageSlider> {
           height: height,
           child: Stack(
             children: [
-              PageView.builder(
-                controller: _controller,
-                itemCount: images.length,
-                onPageChanged: (i) => setState(() => _current = i),
-                itemBuilder: (_, i) => Container(
-                  width: double.infinity,
-                  color: const Color(0xFFF3F4F6),
-                  alignment: Alignment.center,
-                  child: Image.network(
-                    images[i],
+              GestureDetector(
+                onDoubleTap: widget.onDoubleTapLike == null
+                    ? null
+                    : _handleDoubleTap,
+                child: PageView.builder(
+                  controller: _controller,
+                  itemCount: images.length,
+                  onPageChanged: (i) => setState(() => _current = i),
+                  itemBuilder: (_, i) => Container(
                     width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.cover,
-                    // Descrição para leitores de tela: sem isto o Image.network
-                    // é anunciado apenas como "imagem", sem contexto.
-                    semanticLabel: images.length > 1
-                        ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
-                        : 'Foto da denúncia: ${widget.type.label}',
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                    color: context.pal.surfaceAlt,
+                    alignment: Alignment.center,
+                    child: Image(
+                      image: imagemCacheada(
+                        cloudinaryOtimizada(
+                          images[i],
+                          larguraLogica: larguraImg,
+                          devicePixelRatio: dpr,
                         ),
-                      );
-                    },
-                    errorBuilder: (_, _, _) =>
-                        _ImagePlaceholder(type: widget.type),
+                        cacheWidth: cacheLarguraPx(larguraImg, dpr),
+                      ),
+                      width: double.infinity,
+                      height: double.infinity,
+                      fit: BoxFit.cover,
+                      // Descrição para leitores de tela: sem isto o Image.network
+                      // é anunciado apenas como "imagem", sem contexto.
+                      semanticLabel: images.length > 1
+                          ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
+                          : 'Foto da denúncia: ${widget.type.label}',
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      },
+                      errorBuilder: (_, _, _) =>
+                          _ImagePlaceholder(type: widget.type),
+                    ),
                   ),
                 ),
               ),
@@ -935,10 +980,53 @@ class _ImageSliderState extends State<_ImageSlider> {
                     ),
                   ),
                 ),
+              // Coração que aparece com o duplo-toque (estilo Instagram).
+              if (widget.onDoubleTapLike != null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: _HeartBurst(controller: _burstController),
+                  ),
+                ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+/// Coração grande que "estoura" no centro da foto ao curtir por duplo-toque:
+/// aparece com um leve overshoot e some subindo. Some por completo em repouso.
+class _HeartBurst extends StatelessWidget {
+  final AnimationController controller;
+
+  const _HeartBurst({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, child) {
+        if (controller.isDismissed) return const SizedBox.shrink();
+        final t = controller.value;
+        // Cresce rápido (0→0.35) e depois some suave (0.5→1.0).
+        final scale = t < 0.35 ? Curves.easeOutBack.transform(t / 0.35) : 1.0;
+        final opacity = t < 0.5 ? 1.0 : (1.0 - (t - 0.5) / 0.5).clamp(0.0, 1.0);
+        return Center(
+          child: Opacity(
+            opacity: opacity.clamp(0.0, 1.0),
+            child: Transform.scale(scale: scale, child: child),
+          ),
+        );
+      },
+      child: const Icon(
+        Icons.favorite,
+        color: Colors.white,
+        size: 96,
+        shadows: [
+          Shadow(color: Colors.black38, blurRadius: 16, offset: Offset(0, 3)),
+        ],
+      ),
     );
   }
 }
@@ -1052,22 +1140,23 @@ class _ImagePlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
       width: double.infinity,
-      color: const Color(0xFFF3F4F6),
+      color: pal.surfaceAlt,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(type.icon, size: 40, color: const Color(0xFFD1D5DB)),
+          Icon(type.icon, size: 40, color: pal.hint),
           const SizedBox(height: 8),
-          Text(label, style: TextStyle(color: Color(0xFFD1D5DB), fontSize: 12)),
+          Text(label, style: TextStyle(color: pal.hint, fontSize: 12)),
         ],
       ),
     );
   }
 }
 
-class _ActionButton extends StatelessWidget {
+class _ActionButton extends StatefulWidget {
   final IconData icon;
   final IconData iconFilled;
   final int count;
@@ -1075,6 +1164,10 @@ class _ActionButton extends StatelessWidget {
   final Color activeColor;
   final VoidCallback onTap;
   final String semanticLabel;
+
+  /// Quando true, o ícone dá um "pop" (bounce) e um "+1" sobe ao passar de
+  /// inativo para ativo. Usado no botão de curtir.
+  final bool animateOnActivate;
 
   const _ActionButton({
     required this.icon,
@@ -1084,45 +1177,152 @@ class _ActionButton extends StatelessWidget {
     required this.activeColor,
     required this.onTap,
     required this.semanticLabel,
+    this.animateOnActivate = false,
   });
 
   @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton>
+    with TickerProviderStateMixin {
+  late final AnimationController _popController;
+  late final Animation<double> _scale;
+  late final AnimationController _floatController;
+
+  @override
+  void initState() {
+    super.initState();
+    _popController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+    // Escala com overshoot: cresce até 1.35 e volta a 1.0.
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.0,
+          end: 1.35,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.35,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeIn)),
+        weight: 60,
+      ),
+    ]).animate(_popController);
+    _floatController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _ActionButton old) {
+    super.didUpdateWidget(old);
+    // Dispara as animações só na transição inativo → ativo (curtir), nunca ao
+    // descurtir nem quando o count muda por outro caminho.
+    if (widget.animateOnActivate && widget.active && !old.active) {
+      _popController.forward(from: 0);
+      _floatController.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _popController.dispose();
+    _floatController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
+    final color = widget.active ? widget.activeColor : pal.ink;
     return Semantics(
       button: true,
-      label: '$semanticLabel, $count',
-      selected: active,
+      label: '${widget.semanticLabel}, ${widget.count}',
+      selected: widget.active,
       child: Tooltip(
-        message: semanticLabel,
+        message: widget.semanticLabel,
         child: InkResponse(
-          onTap: onTap,
+          onTap: widget.onTap,
           radius: 24,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: Icon(
-                    active ? iconFilled : icon,
-                    key: ValueKey(active),
-                    size: 24,
-                    color: active ? activeColor : const Color(0xFF111827),
-                  ),
+                Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    ScaleTransition(
+                      scale: _scale,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        child: Icon(
+                          widget.active ? widget.iconFilled : widget.icon,
+                          key: ValueKey(widget.active),
+                          size: 24,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                    if (widget.animateOnActivate)
+                      _FloatingPlusOne(
+                        controller: _floatController,
+                        color: widget.activeColor,
+                      ),
+                  ],
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '$count',
+                  '${widget.count}',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: active ? activeColor : const Color(0xFF374151),
+                    color: color,
                   ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "+1" que sobe e some ao curtir. Fica escondido enquanto o controlador
+/// estiver zerado (estado de repouso).
+class _FloatingPlusOne extends StatelessWidget {
+  final AnimationController controller;
+  final Color color;
+
+  const _FloatingPlusOne({required this.controller, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, child) {
+        if (controller.isDismissed) return const SizedBox.shrink();
+        final t = controller.value;
+        return Positioned(
+          top: -6 - (t * 18),
+          child: Opacity(opacity: (1.0 - t).clamp(0.0, 1.0), child: child),
+        );
+      },
+      child: Text(
+        '+1',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: color,
         ),
       ),
     );
@@ -1147,11 +1347,7 @@ class _IconAction extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       visualDensity: VisualDensity.compact,
-      icon: Icon(
-        icon,
-        size: 24,
-        color: active ? const Color(0xFF111827) : const Color(0xFF111827),
-      ),
+      icon: Icon(icon, size: 24, color: context.pal.ink),
       onPressed: onTap,
     );
   }
@@ -1171,10 +1367,21 @@ class _AuthorAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
     return CircleAvatar(
       radius: radius,
-      backgroundColor: const Color(0xFFE8F5E9),
-      backgroundImage: hasPhoto ? NetworkImage(photoUrl!) : null,
+      backgroundColor: AppColors.primary.withValues(alpha: 0.14),
+      backgroundImage: hasPhoto
+          ? imagemCacheada(
+              cloudinaryOtimizada(
+                photoUrl!,
+                larguraLogica: radius * 2,
+                alturaLogica: radius * 2,
+                devicePixelRatio: dpr,
+                crop: 'fill',
+              ),
+            )
+          : null,
       child: hasPhoto
           ? null
           : Text(
@@ -1235,9 +1442,9 @@ class _AccountSheet extends StatelessWidget {
                         authorName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
-                          color: Color(0xFF111827),
+                          color: context.pal.ink,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -1246,9 +1453,9 @@ class _AccountSheet extends StatelessWidget {
                         anonymous
                             ? 'Publicação anônima'
                             : 'Conta da comunidade EcoJP',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.muted,
+                          color: context.pal.muted,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -1271,10 +1478,10 @@ class _AccountSheet extends StatelessWidget {
             ),
             if (anonymous) ...[
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'O autor escolheu publicar sem expor nome ou foto.',
                 style: TextStyle(
-                  color: AppColors.muted,
+                  color: context.pal.muted,
                   fontSize: 12,
                   height: 1.35,
                 ),
@@ -1311,8 +1518,8 @@ class _AccountInfoRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
-                  color: AppColors.muted,
+                style: TextStyle(
+                  color: context.pal.muted,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1322,8 +1529,8 @@ class _AccountInfoRow extends StatelessWidget {
                 value,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF111827),
+                style: TextStyle(
+                  color: context.pal.ink,
                   fontSize: 13,
                   height: 1.3,
                   fontWeight: FontWeight.w600,

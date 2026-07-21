@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/notificacao_model.dart';
 import '../services/auth_service.dart';
 import '../services/notificacao_service.dart';
-import '../services/ocorrencia_service.dart';
 import '../utils/tempo_relativo.dart';
 import 'detalhe_ocorrencia_page.dart';
 import '../theme/app_theme.dart';
 
-class NotificacoesPage extends StatefulWidget {
+class NotificacoesPage extends ConsumerStatefulWidget {
   const NotificacoesPage({super.key});
 
   @override
-  State<NotificacoesPage> createState() => _NotificacoesPageState();
+  ConsumerState<NotificacoesPage> createState() => _NotificacoesPageState();
 }
 
-class _NotificacoesPageState extends State<NotificacoesPage> {
+class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
   final _authService = AuthService();
   final _service = NotificacaoService();
-  final _ocorrenciaService = OcorrenciaService();
   bool _abrindo = false;
 
   @override
@@ -36,7 +36,9 @@ class _NotificacoesPageState extends State<NotificacoesPage> {
     if (_abrindo) return;
     setState(() => _abrindo = true);
     try {
-      final ocorrencia = await _ocorrenciaService.buscarPorId(n.ocorrenciaId);
+      final ocorrencia = await ref
+          .read(ocorrenciaRepositoryProvider)
+          .buscarPorId(n.ocorrenciaId);
       if (!mounted) return;
       if (ocorrencia == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -76,25 +78,26 @@ class _NotificacoesPageState extends State<NotificacoesPage> {
   @override
   Widget build(BuildContext context) {
     final uid = _authService.currentUser?.uid;
+    final pal = context.pal;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F2),
+      backgroundColor: pal.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.ink,
+        backgroundColor: pal.surface,
+        foregroundColor: pal.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: const Text(
+        title: Text(
           'Notificações',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: AppColors.ink,
+            color: pal.ink,
           ),
         ),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: Color(0xFFD8D8D8)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: pal.border),
         ),
       ),
       body: uid == null
@@ -213,13 +216,16 @@ class _NotificacaoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final info = _infoNotificacao(n.tipo);
     final icone = info.icone;
     final cor = info.cor;
     final frase = info.frase;
 
     return Container(
-      color: n.lida ? Colors.white : const Color(0xFFEFF6FF),
+      color: n.lida
+          ? pal.surface
+          : const Color(0xFF3B82F6).withValues(alpha: 0.10),
       child: ListTile(
         onTap: onTap,
         leading: CircleAvatar(
@@ -228,7 +234,7 @@ class _NotificacaoTile extends StatelessWidget {
         ),
         title: RichText(
           text: TextSpan(
-            style: const TextStyle(fontSize: 14, color: AppColors.ink),
+            style: TextStyle(fontSize: 14, color: pal.ink),
             children: [
               TextSpan(
                 text: n.deUsuarioNome,
@@ -254,10 +260,10 @@ class _NotificacaoTile extends StatelessWidget {
                 ),
               )
             : null,
-        trailing: const Icon(
+        trailing: Icon(
           Icons.chevron_right,
           size: 20,
-          color: Color(0xFFBDBDBD),
+          color: pal.hint,
         ),
       ),
     );
@@ -269,21 +275,22 @@ class _Vazio extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final pal = context.pal;
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.notifications_none, size: 64, color: Color(0xFFBDBDBD)),
-          SizedBox(height: 12),
+          Icon(Icons.notifications_none, size: 64, color: pal.hint),
+          const SizedBox(height: 12),
           Text(
             'Você ainda não tem notificações',
-            style: TextStyle(fontSize: 15, color: AppColors.hint),
+            style: TextStyle(fontSize: 15, color: pal.hint),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
             'Avisaremos quando alguém interagir\ncom as suas denúncias.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Color(0xFFAAAAAA)),
+            style: TextStyle(fontSize: 13, color: pal.hint),
           ),
         ],
       ),

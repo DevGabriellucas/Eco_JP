@@ -1,13 +1,15 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/repositories/ocorrencia_repository.dart';
+import '../features/auth/providers/auth_providers.dart';
+import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/ocorrencia_model.dart';
-import '../services/auth_service.dart';
-import '../services/ocorrencia_service.dart';
 import '../services/relatorio_service.dart';
-import '../services/role_service.dart';
 import '../models/occurrence_types.dart';
+import 'dados_publicos_page.dart';
 import 'mapPage/controller/calc_mostaffectedzones.dart';
 import '../theme/app_theme.dart';
 
@@ -44,36 +46,26 @@ const _resolvedColor = AppColors.success;
 const _pendingColor = Color(0xFF9CA3AF);
 const _unresolvedColor = AppColors.danger;
 const _chartPurple = Color(0xFF8B7CF6);
-const _gridColor = Color(0xFFE5E7EB);
 const _axisLabelColor = Color(0xFF9CA3AF);
-const _legendTextColor = AppColors.muted;
 
 // ─────────────────────────────────────────
 //  ESTATÍSTICAS PAGE
 // ─────────────────────────────────────────
 
-class EstatisticasPage extends StatefulWidget {
+class EstatisticasPage extends ConsumerStatefulWidget {
   const EstatisticasPage({super.key});
 
   @override
-  State<EstatisticasPage> createState() => _EstatisticasPageState();
+  ConsumerState<EstatisticasPage> createState() => _EstatisticasPageState();
 }
 
-class _EstatisticasPageState extends State<EstatisticasPage> {
-  final _ocorrenciaService = OcorrenciaService();
-  final _roleService = RoleService();
-  final _authService = AuthService();
+class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
+  OcorrenciaRepository get _ocorrenciaRepository =>
+      ref.read(ocorrenciaRepositoryProvider);
   final _relatorioService = RelatorioService();
 
-  bool? _isAutoridade; // null enquanto verifica o papel
   _Periodo _periodo = _Periodo.tudo;
   bool _exportando = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checarPapel();
-  }
 
   // Mantém só as ocorrências dentro da janela de tempo selecionada.
   List<OcorrenciaModel> _filtrarPorPeriodo(List<OcorrenciaModel> lista) {
@@ -102,16 +94,6 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
     } finally {
       if (mounted) setState(() => _exportando = false);
     }
-  }
-
-  Future<void> _checarPapel() async {
-    final uid = _authService.currentUser?.uid;
-    if (uid == null) {
-      if (mounted) setState(() => _isAutoridade = false);
-      return;
-    }
-    final isAut = await _roleService.isAutoridade(uid);
-    if (mounted) setState(() => _isAutoridade = isAut);
   }
 
   static const _weekDayLabels = [
@@ -214,34 +196,37 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
+    // Cidadão vê "Dados" (guia + panorama); autoridade vê "Estatísticas".
+    final ehAutoridade = ref.watch(isAutoridadeProvider).value == true;
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F2),
+      backgroundColor: pal.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: pal.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
         titleSpacing: 20,
-        title: const Row(
+        title: Row(
           children: [
             Text(
               'EcoJP',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: AppColors.ink,
+                color: pal.ink,
               ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Text(
-              'Estatísticas',
-              style: TextStyle(fontSize: 15, color: AppColors.hint),
+              ehAutoridade ? 'Estatísticas' : 'Dados',
+              style: TextStyle(fontSize: 15, color: pal.hint),
             ),
           ],
         ),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: Color(0xFFD8D8D8)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: pal.border),
         ),
       ),
       body: _construirCorpo(),
@@ -249,17 +234,19 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
   }
 
   Widget _construirCorpo() {
-    // Aba de dados é uma ferramenta de triagem: exclusiva para autoridades.
-    if (_isAutoridade == null) {
+    // Autoridade vê a ferramenta de triagem; o cidadão vê o painel público
+    // (panorama da cidade + guia de coleta + dicas de reciclagem).
+    final isAutoridade = ref.watch(isAutoridadeProvider);
+    if (isAutoridade.isLoading || !isAutoridade.hasValue) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_isAutoridade == false) {
-      return const _AreaExclusivaAutoridade();
+    if (isAutoridade.value == false) {
+      return const DadosPublicosView();
     }
 
     return StreamBuilder<List<OcorrenciaModel>>(
-      stream: _ocorrenciaService.listarOcorrenciasLimitadas(
-        OcorrenciaService.tetoAgregado,
+      stream: _ocorrenciaRepository.listarOcorrenciasLimitadas(
+        OcorrenciaRepository.tetoAgregado,
       ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -344,63 +331,6 @@ class _EstatisticasPageState extends State<EstatisticasPage> {
 }
 
 // ─────────────────────────────────────────
-//  ÁREA EXCLUSIVA (cidadão sem papel de autoridade)
-// ─────────────────────────────────────────
-
-class _AreaExclusivaAutoridade extends StatelessWidget {
-  const _AreaExclusivaAutoridade();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.insights_outlined,
-                size: 36,
-                color: Color(0xFF16A34A),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Área exclusiva de órgãos públicos',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.ink,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'As estatísticas e relatórios completos são uma ferramenta de '
-              'triagem para as autoridades cadastradas.\n\n'
-              'Você acompanha o seu próprio impacto na aba Perfil.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: AppColors.muted,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────
 //  CARD BASE
 // ─────────────────────────────────────────
 
@@ -415,7 +345,7 @@ class _Card extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -442,6 +372,7 @@ class _PeriodoSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Row(
       children: [
         for (final p in _Periodo.values) ...[
@@ -453,12 +384,10 @@ class _PeriodoSelector extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 9),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: periodo == p ? AppColors.ink : Colors.white,
+                  color: periodo == p ? pal.ink : pal.surface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: periodo == p
-                        ? AppColors.ink
-                        : const Color(0xFFD8D8D8),
+                    color: periodo == p ? pal.ink : pal.border,
                   ),
                 ),
                 child: Text(
@@ -466,9 +395,7 @@ class _PeriodoSelector extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: periodo == p
-                        ? Colors.white
-                        : AppColors.muted,
+                    color: periodo == p ? pal.surface : pal.muted,
                   ),
                 ),
               ),
@@ -548,12 +475,12 @@ class _RankingBairrosCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Bairros mais afetados',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: context.pal.ink,
             ),
           ),
           const SizedBox(height: 14),
@@ -613,10 +540,10 @@ class _LinhaBairro extends StatelessWidget {
             children: [
               Text(
                 bairro,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.ink,
+                  color: context.pal.ink,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -627,7 +554,7 @@ class _LinhaBairro extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: ratio.clamp(0.0, 1.0),
                   minHeight: 6,
-                  backgroundColor: const Color(0xFFF3F4F6),
+                  backgroundColor: context.pal.surfaceAlt,
                   valueColor: const AlwaysStoppedAnimation(Color(0xFF8B7CF6)),
                 ),
               ),
@@ -704,29 +631,30 @@ class _DashboardAutoridade extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final m = metricas;
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
-              Icon(Icons.shield_outlined, size: 18, color: AppColors.ink),
-              SizedBox(width: 8),
+            children: [
+              Icon(Icons.shield_outlined, size: 18, color: pal.ink),
+              const SizedBox(width: 8),
               Text(
                 'Painel da autoridade',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: pal.ink,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Funil de triagem das denúncias',
-            style: TextStyle(fontSize: 12, color: _legendTextColor),
+            style: TextStyle(fontSize: 12, color: context.pal.muted),
           ),
           const SizedBox(height: 16),
 
@@ -794,7 +722,7 @@ class _DashboardAutoridade extends StatelessWidget {
           ),
 
           const SizedBox(height: 16),
-          const Divider(height: 1, color: _gridColor),
+          Divider(height: 1, color: pal.border),
           const SizedBox(height: 16),
 
           // ── Tempos médios e taxas
@@ -877,7 +805,7 @@ class _MiniStat extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 10, color: _legendTextColor),
+            style: TextStyle(fontSize: 10, color: context.pal.muted),
           ),
         ],
       ),
@@ -898,17 +826,14 @@ class _IndicadorLinha extends StatelessWidget {
       children: [
         Text(
           valor,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: AppColors.ink,
+            color: context.pal.ink,
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 11, color: _legendTextColor),
-        ),
+        Text(label, style: TextStyle(fontSize: 11, color: context.pal.muted)),
       ],
     );
   }
@@ -937,14 +862,14 @@ class _StatusPieCard extends StatelessWidget {
     return _Card(
       child: Column(
         children: [
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Status das ocorrências',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: AppColors.ink,
+                color: context.pal.ink,
               ),
             ),
           ),
@@ -1030,7 +955,7 @@ class _PieLegendLabel extends StatelessWidget {
             const SizedBox(width: 5),
             Text(
               label,
-              style: const TextStyle(fontSize: 11, color: _legendTextColor),
+              style: TextStyle(fontSize: 11, color: context.pal.muted),
             ),
           ],
         ),
@@ -1098,6 +1023,7 @@ class _WeeklyLineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final maxValue = data.isEmpty ? 0 : data.reduce(math.max);
     final axisMax = _niceAxisMax(maxValue);
 
@@ -1112,6 +1038,9 @@ class _WeeklyLineCard extends StatelessWidget {
                 data: data,
                 labels: labels,
                 axisMax: axisMax,
+                gridColor: pal.border,
+                lineColor: pal.ink,
+                markerFillColor: pal.surface,
               ),
             ),
           ),
@@ -1119,16 +1048,19 @@ class _WeeklyLineCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CustomPaint(
-                size: Size(24, 12),
-                painter: _LineLegendIconPainter(),
+              CustomPaint(
+                size: const Size(24, 12),
+                painter: _LineLegendIconPainter(
+                  lineColor: pal.ink,
+                  markerFillColor: pal.surface,
+                ),
               ),
               const SizedBox(width: 6),
-              const Text(
+              Text(
                 'Quantidade de Ocorrências',
                 style: TextStyle(
                   fontSize: 12,
-                  color: _legendTextColor,
+                  color: context.pal.muted,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -1141,18 +1073,23 @@ class _WeeklyLineCard extends StatelessWidget {
 }
 
 class _LineLegendIconPainter extends CustomPainter {
-  const _LineLegendIconPainter();
+  final Color lineColor;
+  final Color markerFillColor;
+  const _LineLegendIconPainter({
+    required this.lineColor,
+    required this.markerFillColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final y = size.height / 2;
     final linePaint = Paint()
-      ..color = const Color(0xFF374151)
+      ..color = lineColor
       ..strokeWidth = 1.5;
     canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
 
     final center = Offset(size.width / 2, y);
-    canvas.drawCircle(center, 3, Paint()..color = Colors.white);
+    canvas.drawCircle(center, 3, Paint()..color = markerFillColor);
     canvas.drawCircle(
       center,
       3,
@@ -1171,16 +1108,21 @@ class _LineChartPainter extends CustomPainter {
   final List<int> data;
   final List<String> labels;
   final int axisMax;
+  final Color gridColor;
+  final Color lineColor;
+  final Color markerFillColor;
 
   const _LineChartPainter({
     required this.data,
     required this.labels,
     required this.axisMax,
+    required this.gridColor,
+    required this.lineColor,
+    required this.markerFillColor,
   });
 
   static const _ySteps = 5;
   static const _labelStyle = TextStyle(color: _axisLabelColor, fontSize: 10);
-  static const _lineStrokeColor = Color(0xFF374151);
   static const _leftPadding = 28.0;
   static const _bottomPadding = 22.0;
 
@@ -1192,7 +1134,7 @@ class _LineChartPainter extends CustomPainter {
     final chartHeight = size.height - _bottomPadding;
 
     final gridPaint = Paint()
-      ..color = _gridColor
+      ..color = gridColor
       ..strokeWidth = 1;
 
     // Linhas de grade horizontais + rótulos do eixo Y
@@ -1228,7 +1170,7 @@ class _LineChartPainter extends CustomPainter {
     // Linha conectando os pontos
     if (points.length > 1) {
       final linePaint = Paint()
-        ..color = _lineStrokeColor
+        ..color = lineColor
         ..strokeWidth = 2
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
@@ -1240,7 +1182,7 @@ class _LineChartPainter extends CustomPainter {
     }
 
     // Marcadores (círculos vazados)
-    final markerFill = Paint()..color = Colors.white;
+    final markerFill = Paint()..color = markerFillColor;
     final markerBorder = Paint()
       ..color = _chartPurple
       ..style = PaintingStyle.stroke
@@ -1344,7 +1286,7 @@ class _CategoryBarCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Divider(height: 1, color: _gridColor),
+          Divider(height: 1, color: context.pal.border),
           const SizedBox(height: 4),
           ...data.map(
             (entry) => _CategoryBarRow(
@@ -1366,13 +1308,13 @@ class _CategoryBarCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              const Flexible(
+              Flexible(
                 child: Text(
                   'Total de ocorrências por categoria',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    color: _legendTextColor,
+                    color: context.pal.muted,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1407,7 +1349,7 @@ class _CategoryBarRow extends StatelessWidget {
             width: _CategoryBarCard._labelWidth,
             child: Text(
               type.label,
-              style: const TextStyle(fontSize: 12, color: _legendTextColor),
+              style: TextStyle(fontSize: 12, color: context.pal.muted),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -1418,7 +1360,7 @@ class _CategoryBarRow extends StatelessWidget {
                 Container(
                   height: 6,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
+                    color: context.pal.surfaceAlt,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),

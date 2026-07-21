@@ -103,7 +103,7 @@ class OcorrenciaModel {
       'dataCriacao': dataCriacao ?? FieldValue.serverTimestamp(),
       // Denúncia anônima: o UID real não vai no documento público (protege
       // o denunciante de correlação entre denúncias). Fica só na subcoleção
-      // privada ocorrencias/{id}/dono/info, criada pelo OcorrenciaService
+      // privada ocorrencias/{id}/dono/info, criada pelo OcorrenciaRepository
       // logo após este documento — ver cadastrarOcorrencia().
       'usuarioId': anonima ? null : usuarioId,
       'usuarioNome': usuarioNome,

@@ -25,22 +25,34 @@ service cloud.firestore {
       return status in ['Pendente', 'Resolvido', 'Nao resolvido'];
     }
 
+    // Rejeita conteúdo em branco: exige ao menos um caractere não-espaço. O
+    // `size() >= N` sozinho aceitaria "   " (só espaços), então um cliente
+    // forjado poderia criar denúncias/comentários vazios burlando o trim do
+    // app. [\s\S] casa qualquer caractere (inclusive quebras de linha, que o
+    // `.` do RE2 não pega) — o padrão exige um \S em meio a qualquer conteúdo.
+    function naoEmBranco(texto) {
+      return texto is string && texto.matches('[\\s\\S]*\\S[\\s\\S]*');
+    }
+
     function isValidTitle(title) {
       return title is string
         && title.size() >= 3
-        && title.size() <= 80;
+        && title.size() <= 80
+        && naoEmBranco(title);
     }
 
     function isValidDescription(description) {
       return description is string
         && description.size() >= 10
-        && description.size() <= 1000;
+        && description.size() <= 1000
+        && naoEmBranco(description);
     }
 
     function isValidLocationName(location) {
       return location is string
         && location.size() >= 3
-        && location.size() <= 180;
+        && location.size() <= 180
+        && naoEmBranco(location);
     }
 
     function isValidCategory(category) {
@@ -329,6 +341,15 @@ service cloud.firestore {
         && request.resource.data.oculto is bool;
     }
 
+    // Evento da linha do tempo de auditoria (subcoleção historico). Append-only:
+    // registra qual ação oficial ocorreu, opcionalmente quem, e quando.
+    function isValidHistoricoEvento(data) {
+      return data.keys().hasOnly(['status', 'por', 'data'])
+        && data.status in ['verificada', 'em_analise', 'nao_confirmada', 'encaminhada', 'resolvida']
+        && (!('por' in data) || (data.por is string && data.por.size() >= 1 && data.por.size() <= 80))
+        && data.data == request.time;
+    }
+
     function isValidComment(data) {
       return data.keys().hasOnly([
           'texto', 'userId', 'userName', 'userPhotoUrl', 'dataCriacao',
@@ -337,6 +358,7 @@ service cloud.firestore {
         && data.texto is string
         && data.texto.size() >= 1
         && data.texto.size() <= 500
+        && naoEmBranco(data.texto)
         && data.userId == request.auth.uid
         && data.userName is string
         && data.userName.size() >= 1
@@ -369,7 +391,8 @@ service cloud.firestore {
         && resource.data.userId == request.auth.uid
         && request.resource.data.texto is string
         && request.resource.data.texto.size() >= 1
-        && request.resource.data.texto.size() <= 500;
+        && request.resource.data.texto.size() <= 500
+        && naoEmBranco(request.resource.data.texto);
     }
 
     function isValidUserProfile(data) {
@@ -377,6 +400,7 @@ service cloud.firestore {
         && data.nome is string
         && data.nome.size() >= 1
         && data.nome.size() <= 40
+        && naoEmBranco(data.nome)
         && data.bio is string
         && data.bio.size() <= 150
         && data.bairro is string
@@ -450,6 +474,7 @@ service cloud.firestore {
         && data.motivo is string
         && data.motivo.size() >= 3
         && data.motivo.size() <= 80
+        && naoEmBranco(data.motivo)
         && (data.detalhe == null || (data.detalhe is string && data.detalhe.size() <= 240))
         && data.status == 'pendente'
         && data.criadoEm == request.time;
@@ -501,9 +526,15 @@ service cloud.firestore {
             || (isAutoridade() && isValidOcultarUpdate()));
       }
 
+      // Linha do tempo de auditoria: só a autoridade registra eventos das ações
+      // oficiais (verificação / status), e o registro é imutável — nunca pode
+      // ser editado ou apagado (append-only). Escrito no mesmo batch da
+      // mudança de status pelo app.
       match /historico/{eventoId} {
         allow read: if signedIn();
-        allow create, update, delete: if false;
+        allow create: if isAutoridade()
+          && isValidHistoricoEvento(request.resource.data);
+        allow update, delete: if false;
       }
 
       // UID real do denunciante quando a ocorrência é anônima (S2). Só o

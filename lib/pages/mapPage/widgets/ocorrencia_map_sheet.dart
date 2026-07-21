@@ -1,8 +1,12 @@
 import 'package:eco_jp/models/ocorrencia_model.dart';
 import 'package:eco_jp/models/occurrence_types.dart';
 import 'package:eco_jp/theme/app_theme.dart';
+import 'package:eco_jp/utils/cloudinary_image.dart';
+import 'package:eco_jp/utils/imagem_cacheada.dart';
+import 'package:eco_jp/utils/distancia.dart';
 import 'package:eco_jp/utils/navegacao_externa.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 /// Mostra um resumo da ocorrência (foto, categoria, status, título e local)
 /// ao tocar em um marcador do mapa. Retorna `true` se o usuário pediu para
@@ -14,7 +18,7 @@ Future<bool?> mostrarOcorrenciaSheet(
 ) {
   return showModalBottomSheet<bool>(
     context: context,
-    backgroundColor: Colors.white,
+    backgroundColor: context.pal.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -22,10 +26,45 @@ Future<bool?> mostrarOcorrenciaSheet(
   );
 }
 
-class _OcorrenciaMapSheet extends StatelessWidget {
+class _OcorrenciaMapSheet extends StatefulWidget {
   final OcorrenciaModel ocorrencia;
 
   const _OcorrenciaMapSheet({required this.ocorrencia});
+
+  @override
+  State<_OcorrenciaMapSheet> createState() => _OcorrenciaMapSheetState();
+}
+
+class _OcorrenciaMapSheetState extends State<_OcorrenciaMapSheet> {
+  // Distância até a ocorrência, em metros. Null enquanto carrega ou quando
+  // não há posição conhecida do usuário.
+  double? _distanciaMetros;
+
+  @override
+  void initState() {
+    super.initState();
+    _calcularDistancia();
+  }
+
+  Future<void> _calcularDistancia() async {
+    // getLastKnownPosition é instantâneo (cache) e não dispara novo prompt —
+    // o usuário já está no mapa com permissão concedida. Se não houver cache,
+    // simplesmente não mostramos a distância.
+    try {
+      final pos = await Geolocator.getLastKnownPosition();
+      if (pos == null || !mounted) return;
+      final o = widget.ocorrencia;
+      final metros = Geolocator.distanceBetween(
+        pos.latitude,
+        pos.longitude,
+        o.latitude,
+        o.longitude,
+      );
+      setState(() => _distanciaMetros = metros);
+    } catch (_) {
+      // Sem posição → sem distância; não é erro que precise de aviso.
+    }
+  }
 
   Future<void> _comoChegar(BuildContext context, OcorrenciaModel o) async {
     final ok = await abrirRotaNoMapa(
@@ -42,7 +81,8 @@ class _OcorrenciaMapSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final o = ocorrencia;
+    final pal = context.pal;
+    final o = widget.ocorrencia;
     final tipo = OccurrenceTypeParser.fromString(o.tipoLixo);
     final status = OccurrenceStatusParser.fromString(o.status);
     final imagem = o.imagensUrls.isNotEmpty ? o.imagensUrls.first : o.imagemUrl;
@@ -59,7 +99,7 @@ class _OcorrenciaMapSheet extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.border,
+                  color: pal.border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -79,11 +119,24 @@ class _OcorrenciaMapSheet extends StatelessWidget {
                 child: Container(
                   height: 150,
                   width: double.infinity,
-                  color: const Color(0xFFF3F4F6),
+                  color: pal.surfaceAlt,
                   alignment: Alignment.center,
                   // Mantem a foto inteira no preview pequeno do mapa.
-                  child: Image.network(
-                    imagem,
+                  child: Image(
+                    image: imagemCacheada(
+                      cloudinaryOtimizada(
+                        imagem,
+                        larguraLogica: MediaQuery.sizeOf(context).width,
+                        alturaLogica: 150,
+                        devicePixelRatio: MediaQuery.devicePixelRatioOf(
+                          context,
+                        ),
+                      ),
+                      cacheWidth: cacheLarguraPx(
+                        MediaQuery.sizeOf(context).width,
+                        MediaQuery.devicePixelRatioOf(context),
+                      ),
+                    ),
                     fit: BoxFit.contain,
                     semanticLabel: 'Foto da denúncia',
                     loadingBuilder: (context, child, progress) {
@@ -102,36 +155,46 @@ class _OcorrenciaMapSheet extends StatelessWidget {
             ],
             Text(
               o.titulo.isEmpty ? 'Sem título' : o.titulo,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.ink,
+                color: pal.ink,
               ),
             ),
             const SizedBox(height: 6),
             Row(
               children: [
-                const Icon(
-                  Icons.location_on,
-                  size: 15,
-                  color: AppColors.primary,
-                ),
+                Icon(Icons.location_on, size: 15, color: pal.primary),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     o.localizacao.isEmpty
                         ? 'Localização não informada'
                         : o.localizacao,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.muted,
-                    ),
+                    style: TextStyle(fontSize: 13, color: pal.muted),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
+            if (_distanciaMetros != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.near_me_outlined, size: 15, color: pal.primary),
+                  const SizedBox(width: 4),
+                  Text(
+                    'A ${formatarDistancia(_distanciaMetros!)} de você',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: pal.muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 18),
             Row(
               children: [

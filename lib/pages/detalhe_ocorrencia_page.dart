@@ -1,16 +1,21 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 
+import '../data/repositories/comentario_repository.dart';
+import '../data/repositories/ocorrencia_repository.dart';
+import '../features/auth/providers/auth_providers.dart';
+import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/comentario_model.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/auth_service.dart';
 import '../services/notificacao_service.dart';
-import '../services/ocorrencia_service.dart';
-import '../services/role_service.dart';
 import '../services/usuario_service.dart';
 import '../models/occurrence_types.dart';
+import '../utils/autor_ocorrencia.dart';
+import '../utils/cloudinary_image.dart';
+import '../utils/imagem_cacheada.dart';
 import '../utils/compartilhamento.dart';
 import '../utils/navegacao_externa.dart';
 import '../theme/app_theme.dart';
@@ -22,11 +27,8 @@ import '../widgets/occurrence_comments_sheet.dart';
 // ─────────────────────────────────────────
 
 class _C {
-  static const bg = Color(0xFFF2F2F2);
-  static const white = Colors.white;
-  static const border = Color(0xFFD8D8D8);
-  static const text = AppColors.ink;
-  static const hint = AppColors.hint;
+  // Acentos — iguais nos dois temas. Os neutros (fundo/superfície/borda/
+  // texto/dica) vêm de `context.pal`.
   static const orange = Color(0xFFFF8A1F);
   static const green = AppColors.success;
   static const red = AppColors.danger;
@@ -37,21 +39,24 @@ class _C {
 //  DETALHE OCORRÊNCIA PAGE
 // ─────────────────────────────────────────
 
-class DetalheOcorrenciaPage extends StatefulWidget {
+class DetalheOcorrenciaPage extends ConsumerStatefulWidget {
   final OcorrenciaModel occurrence;
 
   const DetalheOcorrenciaPage({super.key, required this.occurrence});
 
   @override
-  State<DetalheOcorrenciaPage> createState() => _DetalheOcorrenciaPageState();
+  ConsumerState<DetalheOcorrenciaPage> createState() =>
+      _DetalheOcorrenciaPageState();
 }
 
-class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
+class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
   final _authService = AuthService();
-  final _service = OcorrenciaService();
   final _usuarioService = UsuarioService();
   final _notificacaoService = NotificacaoService();
-  final _roleService = RoleService();
+
+  OcorrenciaRepository get _service => ref.read(ocorrenciaRepositoryProvider);
+  ComentarioRepository get _comentarioRepository =>
+      ref.read(comentarioRepositoryProvider);
 
   late int _likes;
   late int _dislikes;
@@ -61,7 +66,6 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
   String? _authorPhoto;
 
   // Verificação oficial
-  bool _isAutoridade = false;
   late bool _verificada;
   String? _verificadaPorNome;
   DateTime? _verificadaEm;
@@ -81,14 +85,6 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
     _verificadaEm = o.verificadaEm;
     _statusOficial = o.statusOficial;
     _fetchAuthorData();
-    _checarPapel();
-  }
-
-  Future<void> _checarPapel() async {
-    final uid = _authService.currentUser?.uid;
-    if (uid == null) return;
-    final isAut = await _roleService.isAutoridade(uid);
-    if (mounted) setState(() => _isAutoridade = isAut);
   }
 
   Future<void> _comoChegar() async {
@@ -215,52 +211,25 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
       return;
     }
 
-    final hasSavedName =
-        o.usuarioNome != null && o.usuarioNome!.trim().isNotEmpty;
-    final hasSavedPhoto =
-        o.usuarioFotoUrl != null && o.usuarioFotoUrl!.isNotEmpty;
-
-    if (hasSavedName && hasSavedPhoto) {
-      setState(() {
-        _authorName = o.usuarioNome;
-        _authorPhoto = o.usuarioFotoUrl;
-      });
-      return;
-    }
-
     if (o.usuarioId == null) {
+      final hasSavedName =
+          o.usuarioNome != null && o.usuarioNome!.trim().isNotEmpty;
       if (hasSavedName) setState(() => _authorName = o.usuarioNome);
       return;
     }
 
-    final doc = await FirebaseFirestore.instance
-        .collection('usuarios')
-        .doc(o.usuarioId)
-        .get();
+    final autor = await resolverAutorOcorrencia(
+      usuarioId: o.usuarioId!,
+      nomeSalvo: o.usuarioNome,
+      fotoSalva: o.usuarioFotoUrl,
+      usuarioService: _usuarioService,
+      authService: _authService,
+    );
 
     if (!mounted) return;
-
-    final data = doc.data();
-    final nome = (data?['nome'] as String?)?.trim();
-    final foto = data?['fotoUrl'] as String?;
-
-    String? resolvedName;
-    if (hasSavedName) {
-      resolvedName = o.usuarioNome;
-    } else if (nome != null && nome.isNotEmpty) {
-      resolvedName = nome;
-    } else if (o.usuarioId == _authService.currentUser?.uid) {
-      final email = _authService.currentUser?.email;
-      resolvedName = email != null ? email.split('@').first : 'Usuário';
-    } else {
-      resolvedName = 'Usuário';
-    }
-
     setState(() {
-      _authorName = resolvedName;
-      _authorPhoto = hasSavedPhoto
-          ? o.usuarioFotoUrl
-          : (foto?.isNotEmpty == true ? foto : null);
+      _authorName = autor.nome;
+      _authorPhoto = autor.foto;
     });
   }
 
@@ -285,7 +254,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
       ocorrencia: widget.occurrence,
       uid: _uid,
       isLike: true,
-      ocorrenciaService: _service,
+      ocorrenciaRepository: _service,
       notificacaoService: _notificacaoService,
       nomeAutor: nome,
       onMudou: () => setState(_sincronizarComOcorrencia),
@@ -301,7 +270,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
       ocorrencia: widget.occurrence,
       uid: _uid,
       isLike: false,
-      ocorrenciaService: _service,
+      ocorrenciaRepository: _service,
       notificacaoService: _notificacaoService,
       nomeAutor: nome,
       onMudou: () => setState(_sincronizarComOcorrencia),
@@ -317,7 +286,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => OccurrenceCommentsSheet(
         occurrence: widget.occurrence,
-        ocorrenciaService: _service,
+        comentarioRepository: _comentarioRepository,
         authService: _authService,
         usuarioService: _usuarioService,
         notificacaoService: _notificacaoService,
@@ -327,12 +296,14 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final o = widget.occurrence;
     final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
     final statusEnum = OccurrenceStatusParser.fromString(o.status);
+    final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
 
     return Scaffold(
-      backgroundColor: _C.bg,
+      backgroundColor: pal.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -366,7 +337,8 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                         children: [
                           if (_verificada && _statusOficial == 'resolvida') ...[
                             _StatusOficialBanner(
-                              label: 'Resolvida — tratada pelo órgão responsável',
+                              label:
+                                  'Resolvida — tratada pelo órgão responsável',
                               icon: Icons.check_circle,
                               color: _C.green,
                             ),
@@ -394,7 +366,8 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                             const SizedBox(height: 10),
                           ] else if (_statusOficial == 'nao_confirmada') ...[
                             _StatusOficialBanner(
-                              label: 'Não confirmada — problema não encontrado no local',
+                              label:
+                                  'Não confirmada — problema não encontrado no local',
                               icon: Icons.cancel_outlined,
                               color: _C.red,
                             ),
@@ -404,10 +377,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                           _FieldCard(
                             child: Text(
                               o.titulo.isEmpty ? 'Sem título' : o.titulo,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: _C.text,
-                              ),
+                              style: TextStyle(fontSize: 14, color: pal.ink),
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -417,11 +387,11 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'Descrição',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: _C.hint,
+                                    color: pal.hint,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -430,9 +400,9 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                                   o.descricao.isEmpty
                                       ? 'Sem descrição'
                                       : o.descricao,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
-                                    color: Color(0xFF374151),
+                                    color: pal.ink,
                                     height: 1.4,
                                   ),
                                 ),
@@ -471,7 +441,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                               ),
                             ],
                           ),
-                          if (_isAutoridade) ...[
+                          if (isAutoridade) ...[
                             const SizedBox(height: 16),
                             _PainelAutoridade(
                               verificada: _verificada,
@@ -492,12 +462,12 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                           const SizedBox(height: 28),
 
                           // Seção de acompanhamento (linha do tempo de status)
-                          const Text(
+                          Text(
                             'Acompanhamento',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
-                              color: _C.text,
+                              color: pal.ink,
                             ),
                           ),
                           const SizedBox(height: 14),
@@ -508,7 +478,9 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                           // (OccurrenceCommentsSheet), evitando reimplementar
                           // a lógica de adicionar/curtir/excluir aqui também.
                           StreamBuilder<List<ComentarioModel>>(
-                            stream: _service.listarComentarios(o.id),
+                            stream: _comentarioRepository.listarComentarios(
+                              o.id,
+                            ),
                             builder: (context, snap) {
                               final total = (snap.data ?? const [])
                                   .where((c) => !c.oculto)
@@ -519,12 +491,12 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    const Text(
+                                    Text(
                                       'Comentários',
                                       style: TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.w700,
-                                        color: _C.text,
+                                        color: pal.ink,
                                       ),
                                     ),
                                     if (total > 0) ...[
@@ -553,10 +525,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
                                       ),
                                     ],
                                     const Spacer(),
-                                    const Icon(
-                                      Icons.chevron_right,
-                                      color: _C.hint,
-                                    ),
+                                    Icon(Icons.chevron_right, color: pal.hint),
                                   ],
                                 ),
                               );
@@ -582,10 +551,11 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
   }
 
   Widget _buildHeader(OcorrenciaModel o, OccurrenceStatus statusEnum) {
+    final pal = context.pal;
     final authorLabel = _authorName ?? 'Usuário';
 
     return Container(
-      color: _C.white,
+      color: pal.surface,
       child: Column(
         children: [
           Padding(
@@ -593,31 +563,32 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back, color: _C.text),
+                  tooltip: 'Voltar',
+                  icon: Icon(Icons.arrow_back, color: pal.ink),
                   onPressed: () => Navigator.pop(context),
                 ),
                 Expanded(
                   child: Center(
                     child: Text(
                       authorLabel,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: _C.text,
+                        color: pal.ink,
                       ),
                     ),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.share_outlined, color: _C.text),
+                  icon: Icon(Icons.share_outlined, color: pal.ink),
                   tooltip: 'Compartilhar',
                   onPressed: () => compartilharOcorrencia(widget.occurrence),
                 ),
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: const Color(0xFFE8F5E9),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.14),
                   backgroundImage: _authorPhoto != null
-                      ? NetworkImage(_authorPhoto!) as ImageProvider
+                      ? imagemCacheada(_authorPhoto!)
                       : null,
                   child: _authorPhoto == null
                       ? Text(
@@ -679,7 +650,7 @@ class _DetalheOcorrenciaPageState extends State<DetalheOcorrenciaPage> {
               ),
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFE5E7EB)),
+          Divider(height: 1, color: pal.border),
         ],
       ),
     );
@@ -726,6 +697,9 @@ class _ImageAreaState extends State<_ImageArea> {
     if (images.isEmpty) {
       return _Placeholder(type: widget.type);
     }
+    final pal = context.pal;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final larguraImg = MediaQuery.sizeOf(context).width;
     return SizedBox(
       height: 240,
       child: Stack(
@@ -736,10 +710,17 @@ class _ImageAreaState extends State<_ImageArea> {
             onPageChanged: (i) => setState(() => _current = i),
             itemBuilder: (_, i) => Container(
               width: double.infinity,
-              color: const Color(0xFFF3F4F6),
+              color: pal.surfaceAlt,
               alignment: Alignment.center,
-              child: Image.network(
-                images[i],
+              child: Image(
+                image: imagemCacheada(
+                  cloudinaryOtimizada(
+                    images[i],
+                    larguraLogica: larguraImg,
+                    devicePixelRatio: dpr,
+                  ),
+                  cacheWidth: cacheLarguraPx(larguraImg, dpr),
+                ),
                 fit: BoxFit.contain,
                 // Descrição para leitores de tela (sem isto vira só "imagem").
                 semanticLabel: images.length > 1
@@ -824,19 +805,17 @@ class _Placeholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
       height: 240,
       width: double.infinity,
-      color: const Color(0xFFD1D5DB),
+      color: pal.surfaceAlt,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(type.icon, size: 48, color: Colors.white54),
+          Icon(type.icon, size: 48, color: pal.hint),
           const SizedBox(height: 8),
-          const Text(
-            'Sem imagem',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
-          ),
+          Text('Sem imagem', style: TextStyle(color: pal.hint, fontSize: 12)),
         ],
       ),
     );
@@ -863,11 +842,13 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
   void initState() {
     super.initState();
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize().then((_) {
-        if (mounted) setState(() {});
-      }).catchError((_) {
-        if (mounted) setState(() => _erro = true);
-      });
+      ..initialize()
+          .then((_) {
+            if (mounted) setState(() {});
+          })
+          .catchError((_) {
+            if (mounted) setState(() => _erro = true);
+          });
   }
 
   @override
@@ -884,15 +865,16 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     if (_erro) {
       return Container(
         height: 120,
         width: double.infinity,
-        color: const Color(0xFFF3F4F6),
+        color: pal.surfaceAlt,
         alignment: Alignment.center,
-        child: const Text(
+        child: Text(
           'Não foi possível carregar o vídeo.',
-          style: TextStyle(color: _C.hint, fontSize: 12),
+          style: TextStyle(color: pal.hint, fontSize: 12),
         ),
       );
     }
@@ -901,7 +883,7 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
       return Container(
         height: 200,
         width: double.infinity,
-        color: Colors.black12,
+        color: pal.surfaceAlt,
         alignment: Alignment.center,
         child: const SizedBox(
           width: 24,
@@ -1002,13 +984,14 @@ class _FieldCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: _C.white,
+        color: pal.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _C.border),
+        border: Border.all(color: pal.border),
       ),
       child: child,
     );
@@ -1036,27 +1019,28 @@ class _ReactionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: active ? activeColor.withValues(alpha: 0.08) : _C.white,
+          color: active ? activeColor.withValues(alpha: 0.08) : pal.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: active ? activeColor : _C.border),
+          border: Border.all(color: active ? activeColor : pal.border),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: active ? activeColor : _C.hint),
+            Icon(icon, size: 16, color: active ? activeColor : pal.hint),
             const SizedBox(width: 6),
             Text(
               '$count',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: active ? activeColor : _C.hint,
+                color: active ? activeColor : pal.hint,
               ),
             ),
           ],
@@ -1076,25 +1060,26 @@ class _AddCommentButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: _C.white,
+          color: pal.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _C.border),
+          border: Border.all(color: pal.border),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.chat_bubble_outline, size: 16, color: _C.hint),
-            SizedBox(width: 6),
+          children: [
+            Icon(Icons.chat_bubble_outline, size: 16, color: pal.hint),
+            const SizedBox(width: 6),
             Text(
               'Adicionar comentário',
               style: TextStyle(
                 fontSize: 13,
-                color: _C.hint,
+                color: pal.hint,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1147,7 +1132,7 @@ class _VerificadaBanner extends StatelessWidget {
                 if (quando != null)
                   Text(
                     'Confirmada em $quando',
-                    style: const TextStyle(fontSize: 11, color: _C.hint),
+                    style: TextStyle(fontSize: 11, color: context.pal.hint),
                   ),
               ],
             ),
@@ -1267,10 +1252,7 @@ class _PainelAutoridade extends StatelessWidget {
               onTap: onResolver,
             ),
             const SizedBox(height: 8),
-            _botaoTexto(
-              label: 'Reverter para confirmada',
-              onTap: onReverter,
-            ),
+            _botaoTexto(label: 'Reverter para confirmada', onTap: onReverter),
           ],
         );
       }
@@ -1328,7 +1310,7 @@ class _PainelAutoridade extends StatelessWidget {
       return _botao(
         label: 'Reverter para pendente',
         icon: Icons.undo,
-        color: _C.hint,
+        color: AppColors.hint,
         onTap: onReverter,
       );
     }
@@ -1399,7 +1381,7 @@ class _PainelAutoridade extends StatelessWidget {
           label,
           style: const TextStyle(
             fontSize: 12,
-            color: _C.hint,
+            color: AppColors.hint,
             decoration: TextDecoration.underline,
           ),
         ),
@@ -1414,33 +1396,64 @@ class _PainelAutoridade extends StatelessWidget {
 
 class _StatusTimeline extends StatelessWidget {
   final OcorrenciaModel occurrence;
-  final OcorrenciaService service;
+  final OcorrenciaRepository service;
   const _StatusTimeline({required this.occurrence, required this.service});
 
   String _fmt(DateTime? d) =>
       d == null ? '' : DateFormat('dd/MM/yyyy HH:mm').format(d);
 
+  // Estilo (ícone/cor/rótulo) de um evento de auditoria. 'verificada' não é um
+  // StatusOficial, então tem tratamento próprio; os demais reusam o enum.
+  ({IconData icone, Color cor, String label}) _estiloEvento(
+    BuildContext context,
+    String chave,
+  ) {
+    if (chave == 'verificada') {
+      return (
+        icone: Icons.verified,
+        cor: context.pal.primary,
+        label: 'Confirmada pela autoridade',
+      );
+    }
+    final s = StatusOficialInfo.fromString(chave);
+    if (s != null) {
+      return (icone: s.icon, cor: s.color, label: s.label);
+    }
+    return (icone: Icons.circle_outlined, cor: context.pal.muted, label: chave);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<({String status, DateTime? data})>>(
+    final pal = context.pal;
+    return StreamBuilder<List<({String status, String? por, DateTime? data})>>(
       stream: service.listarHistorico(occurrence.id),
       builder: (context, snap) {
         final eventos = snap.data ?? [];
         final linhas =
-            <({IconData icone, Color cor, String label, DateTime? data})>[
+            <
+              ({
+                IconData icone,
+                Color cor,
+                String label,
+                String? por,
+                DateTime? data,
+              })
+            >[
               (
                 icone: Icons.add_location_alt_outlined,
-                cor: AppColors.muted,
+                cor: context.pal.muted,
                 label: 'Registrada',
+                por: null,
                 data: occurrence.dataCriacao,
               ),
             ];
         for (final e in eventos) {
-          final s = OccurrenceStatusParser.fromString(e.status);
+          final est = _estiloEvento(context, e.status);
           linhas.add((
-            icone: s.icon,
-            cor: s.color,
-            label: s.label,
+            icone: est.icone,
+            cor: est.cor,
+            label: est.label,
+            por: e.por,
             data: e.data,
           ));
         }
@@ -1470,10 +1483,7 @@ class _StatusTimeline extends StatelessWidget {
                         ),
                         if (i != linhas.length - 1)
                           Expanded(
-                            child: Container(
-                              width: 2,
-                              color: const Color(0xFFE5E7EB),
-                            ),
+                            child: Container(width: 2, color: pal.border),
                           ),
                       ],
                     ),
@@ -1497,10 +1507,12 @@ class _StatusTimeline extends StatelessWidget {
                           if (linhas[i].data != null)
                             Text(
                               _fmt(linhas[i].data),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: _C.hint,
-                              ),
+                              style: TextStyle(fontSize: 12, color: pal.hint),
+                            ),
+                          if (linhas[i].por != null)
+                            Text(
+                              'por ${linhas[i].por}',
+                              style: TextStyle(fontSize: 12, color: pal.hint),
                             ),
                         ],
                       ),

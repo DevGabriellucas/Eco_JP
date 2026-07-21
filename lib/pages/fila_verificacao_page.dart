@@ -1,32 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
-import '../services/ocorrencia_service.dart';
 import 'detalhe_ocorrencia_page.dart';
 import '../theme/app_theme.dart';
 
-class FilaVerificacaoPage extends StatelessWidget {
+class FilaVerificacaoPage extends ConsumerWidget {
   const FilaVerificacaoPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final service = OcorrenciaService.instance;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final service = ref.watch(ocorrenciaRepositoryProvider);
+    final pal = context.pal;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F2),
+      backgroundColor: pal.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.ink,
+        backgroundColor: pal.surface,
+        foregroundColor: pal.ink,
         elevation: 0,
         title: const Text(
           'Fila de verificação',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: Color(0xFFE5E7EB)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: pal.border),
         ),
       ),
       body: StreamBuilder<List<OcorrenciaModel>>(
@@ -52,12 +54,17 @@ class FilaVerificacaoPage extends StatelessWidget {
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (_, i) => _ItemFila(
                     ocorrencia: lista[i],
-                    onTap: () => Navigator.push(
+                    onAbrir: () => Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
                             DetalheOcorrenciaPage(occurrence: lista[i]),
                       ),
+                    ),
+                    onVerificar: () => _marcarVerificada(
+                      context,
+                      ref,
+                      lista[i],
                     ),
                   ),
                 ),
@@ -82,7 +89,7 @@ class _ContadorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: Colors.white,
+      color: context.pal.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
@@ -146,7 +153,7 @@ class _ItemFila extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.pal.surface,
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
@@ -241,10 +248,10 @@ class _ItemFila extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
               child: Text(
                 o.titulo.isEmpty ? 'Sem título' : o.titulo,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: context.pal.ink,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -307,24 +314,29 @@ class _FilaVazia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final pal = context.pal;
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle_outline, size: 72, color: AppColors.success),
-          SizedBox(height: 16),
+          const Icon(
+            Icons.check_circle_outline,
+            size: 72,
+            color: AppColors.success,
+          ),
+          const SizedBox(height: 16),
           Text(
             'Tudo verificado!',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: pal.ink,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Não há denúncias pendentes de verificação.',
-            style: TextStyle(fontSize: 14, color: AppColors.hint),
+            style: TextStyle(fontSize: 14, color: pal.hint),
           ),
         ],
       ),

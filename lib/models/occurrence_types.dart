@@ -68,7 +68,7 @@ extension OccurrenceTypeLabel on OccurrenceType {
       case OccurrenceType.arvoresCaidas:
         return const Color(0xFFFFE066);
       case OccurrenceType.buraco:
-        return const Color(0xFF111827);
+        return const Color(0xFF8B5CF6);
       case OccurrenceType.enchentes:
         return const Color(0xFF1D4ED8);
       case OccurrenceType.esgoto:
@@ -80,7 +80,7 @@ extension OccurrenceTypeLabel on OccurrenceType {
       case OccurrenceType.queimada:
         return AppColors.danger;
       case OccurrenceType.outros:
-        return AppColors.muted;
+        return const Color(0xFF06B6D4);
     }
   }
 

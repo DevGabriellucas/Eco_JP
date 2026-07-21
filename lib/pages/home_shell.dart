@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../services/auth_service.dart';
-import '../services/role_service.dart';
+import '../core/connectivity_provider.dart';
+import '../core/router/routes.dart';
+import '../features/auth/providers/auth_providers.dart';
 import '../theme/app_theme.dart';
 import 'estatisticas_page.dart';
-import 'fila_moderacao_page.dart';
-import 'fila_verificacao_page.dart';
 import 'home_page.dart';
 import 'mapPage/map_page.dart';
 import 'perfil/perfil_page.dart';
 
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 0;
 
   // Abas já abertas. Só elas são instanciadas (lazy): assim Mapa,
@@ -26,25 +27,11 @@ class _HomeShellState extends State<HomeShell> {
   // já visitadas para preservar o estado ao alternar entre elas.
   final Set<int> _visitadas = {0};
 
-  final _roleService = RoleService();
-  final _authService = AuthService();
-
   // Autoridade não cria denúncia: o botão central vira atalho para a fila
   // de verificação. Cidadão comum mantém o "+" para registrar denúncia.
+  // Espelha o valor mais recente do provider para uso fora do build (em
+  // _onTapItem, que roda a partir de um callback, não de um rebuild).
   bool _isAutoridade = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checarPapel();
-  }
-
-  Future<void> _checarPapel() async {
-    final uid = _authService.currentUser?.uid;
-    if (uid == null) return;
-    final isAut = await _roleService.isAutoridade(uid);
-    if (mounted) setState(() => _isAutoridade = isAut);
-  }
 
   // Índices: 0=Feed, 1=Mapa, (2 é o botão +), 3=Dados, 4=Perfil
   Widget _pagina(int i) {
@@ -67,7 +54,7 @@ class _HomeShellState extends State<HomeShell> {
       if (_isAutoridade) {
         _abrirMenuAutoridade();
       } else {
-        Navigator.of(context).pushNamed('/form-ocorrencia');
+        context.push(Routes.formOcorrencia);
       }
       return;
     }
@@ -82,7 +69,7 @@ class _HomeShellState extends State<HomeShell> {
   void _abrirMenuAutoridade() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.pal.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -95,25 +82,21 @@ class _HomeShellState extends State<HomeShell> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.border,
+                color: context.pal.border,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.fact_check_outlined,
-                color: AppColors.primary,
+                color: context.pal.primary,
               ),
               title: const Text('Fila de verificação'),
               subtitle: const Text('Verificar e triar denúncias ambientais'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const FilaVerificacaoPage(),
-                  ),
-                );
+                context.push(Routes.filaVerificacao);
               },
             ),
             ListTile(
@@ -125,9 +108,7 @@ class _HomeShellState extends State<HomeShell> {
               subtitle: const Text('Denúncias de conteúdo abusivo'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const FilaModeracaoPage()),
-                );
+                context.push(Routes.filaModeracao);
               },
             ),
             const SizedBox(height: 8),
@@ -139,6 +120,14 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Espelha o valor mais recente do provider no campo, para que _onTapItem
+    // (chamado a partir de um callback do bottom nav, fora do build) leia o
+    // papel atual sem precisar de outro ref.watch fora da árvore de widgets.
+    _isAutoridade = ref.watch(isAutoridadeProvider).value ?? false;
+
+    // Enquanto o provider não emite, assume online (evita piscar o aviso).
+    final online = ref.watch(conexaoOnlineProvider).value ?? true;
+
     return Scaffold(
       body: IndexedStack(
         index: _index,
@@ -147,11 +136,60 @@ class _HomeShellState extends State<HomeShell> {
           (i) => _visitadas.contains(i) ? _pagina(i) : const SizedBox.shrink(),
         ),
       ),
-      bottomNavigationBar: _BottomNav(
-        currentIndex: _index,
-        onTap: _onTapItem,
-        isAutoridade: _isAutoridade,
+      // Banner de offline fica acima da barra de navegação: assim não conflita
+      // com a AppBar/SafeArea de cada página.
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _BannerOffline(visivel: !online),
+          _BottomNav(
+            currentIndex: _index,
+            onTap: _onTapItem,
+            isAutoridade: _isAutoridade,
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// Aviso fino de que o app está sem conexão e mostrando dados salvos. Anima a
+/// entrada/saída para não "pular" a tela quando a conexão oscila.
+class _BannerOffline extends StatelessWidget {
+  final bool visivel;
+
+  const _BannerOffline({required this.visivel});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      child: visivel
+          ? Container(
+              width: double.infinity,
+              color: AppColors.warning.withValues(alpha: 0.15),
+              padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.cloud_off_outlined, size: 15, color: pal.muted),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Sem conexão — mostrando dados salvos',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: pal.muted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : const SizedBox(width: double.infinity),
     );
   }
 }
@@ -169,10 +207,11 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: pal.surface,
+        border: Border(top: BorderSide(color: pal.border)),
       ),
       child: SafeArea(
         top: false,
@@ -181,11 +220,11 @@ class _BottomNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _item(0, Icons.home_outlined, Icons.home, 'Feed'),
-              _item(1, Icons.map_outlined, Icons.map, 'Mapa'),
-              _botaoCentral(),
-              _item(3, Icons.bar_chart_outlined, Icons.bar_chart, 'Dados'),
-              _item(4, Icons.person_outline, Icons.person, 'Perfil'),
+              _item(0, Icons.home_rounded, Icons.home, 'Feed', pal),
+              _item(1, Icons.location_on_rounded, Icons.location_on, 'Mapa', pal),
+              _botaoCentral(pal),
+              _item(3, Icons.library_books_rounded, Icons.library_books, 'Dados', pal),
+              _item(4, Icons.account_circle_rounded, Icons.account_circle, 'Perfil', pal),
             ],
           ),
         ),
@@ -193,7 +232,13 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _item(int i, IconData icon, IconData iconAtivo, String label) {
+  Widget _item(
+    int i,
+    IconData icon,
+    IconData iconAtivo,
+    String label,
+    AppPalette pal,
+  ) {
     final ativo = currentIndex == i;
     return Expanded(
       child: Semantics(
@@ -209,7 +254,7 @@ class _BottomNav extends StatelessWidget {
               Icon(
                 ativo ? iconAtivo : icon,
                 size: 24,
-                color: ativo ? AppColors.ink : AppColors.hint,
+                color: ativo ? pal.ink : pal.hint,
               ),
               const SizedBox(height: 4),
               Text(
@@ -217,7 +262,7 @@ class _BottomNav extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: ativo ? FontWeight.w600 : FontWeight.w400,
-                  color: ativo ? AppColors.ink : AppColors.hint,
+                  color: ativo ? pal.ink : pal.hint,
                 ),
               ),
             ],
@@ -227,9 +272,11 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _botaoCentral() {
+  Widget _botaoCentral(AppPalette pal) {
     // Autoridade: atalho para a fila de verificação (selo). Cidadão: "+".
-    final label = isAutoridade ? 'Fila de verificação e moderação' : 'Nova denúncia';
+    final label = isAutoridade
+        ? 'Fila de verificação e moderação'
+        : 'Nova denúncia';
     return Expanded(
       child: Center(
         child: Semantics(
@@ -243,12 +290,12 @@ class _BottomNav extends StatelessWidget {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: isAutoridade ? AppColors.success : AppColors.ink,
+                  color: isAutoridade ? AppColors.success : pal.ink,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isAutoridade ? Icons.fact_check_outlined : Icons.add,
-                  color: Colors.white,
+                  isAutoridade ? Icons.fact_check_outlined : Icons.add_circle_rounded,
+                  color: isAutoridade ? Colors.white : pal.surface,
                   size: 26,
                 ),
               ),

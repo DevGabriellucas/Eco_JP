@@ -4,9 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/comentario_repository.dart';
+import '../data/repositories/ocorrencia_repository.dart';
 import '../models/denuncia_moderacao_model.dart';
 import 'analytics_service.dart';
-import 'ocorrencia_service.dart';
 
 class ModeracaoService {
   static final ModeracaoService instance = ModeracaoService();
@@ -15,7 +16,8 @@ class ModeracaoService {
       .instance
       .collection('denuncias_moderacao');
 
-  final OcorrenciaService _ocorrenciaService = OcorrenciaService();
+  final OcorrenciaRepository _ocorrenciaRepository = OcorrenciaRepository();
+  final ComentarioRepository _comentarioRepository = ComentarioRepository();
   final AnalyticsService _analytics = AnalyticsService();
 
   String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
@@ -80,11 +82,17 @@ class ModeracaoService {
 
   // ── FILA DE MODERAÇÃO (autoridade) ────────────────────────────────────────
 
+  // Teto de leitura da fila de moderação — mesmo raciocínio do
+  // OcorrenciaRepository.tetoAgregado: evita baixar a coleção inteira à
+  // medida que o volume de denúncias de abuso cresce.
+  static const int _tetoFila = 200;
+
   /// Denúncias de abuso ainda pendentes, mais antigas primeiro.
   Stream<List<DenunciaModeracaoModel>> listarPendentes() {
     return _ref
         .where('status', isEqualTo: 'pendente')
         .orderBy('criadoEm', descending: false)
+        .limit(_tetoFila)
         .snapshots()
         .map(
           (snap) => snap.docs
@@ -112,17 +120,17 @@ class ModeracaoService {
   }
 
   /// Oculta o conteúdo alvo (ocorrência ou comentário) de uma denúncia e marca
-  /// a denúncia como revisada. Delega a ocultação ao OcorrenciaService.
+  /// a denúncia como revisada. Delega a ocultação aos repositórios.
   Future<void> ocultarAlvo(DenunciaModeracaoModel denuncia) async {
     try {
       if (denuncia.isComentario && denuncia.comentarioId != null) {
-        await _ocorrenciaService.definirComentarioOculto(
+        await _comentarioRepository.definirComentarioOculto(
           denuncia.ocorrenciaId,
           denuncia.comentarioId!,
           oculto: true,
         );
       } else {
-        await _ocorrenciaService.definirOculto(
+        await _ocorrenciaRepository.definirOculto(
           denuncia.ocorrenciaId,
           oculto: true,
         );

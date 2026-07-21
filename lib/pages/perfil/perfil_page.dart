@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/repositories/ocorrencia_repository.dart';
+import '../../features/auth/providers/auth_providers.dart';
+import '../../features/denuncias/providers/denuncia_providers.dart';
 import '../../models/ocorrencia_model.dart';
 import '../../models/usuario_model.dart';
 import '../../services/auth_service.dart';
-import '../../services/ocorrencia_service.dart';
-import '../../services/role_service.dart';
+import '../../utils/cloudinary_image.dart';
+import '../../utils/imagem_cacheada.dart';
+import '../../utils/conquistas.dart';
 import '../../services/usuario_service.dart';
 import '../detalhe_ocorrencia_page.dart';
 import 'configuracoes_conta_page.dart';
@@ -14,43 +19,27 @@ import '../../widgets/ocorrencia_actions.dart';
 import 'editar_perfil_page.dart';
 
 class _C {
-  static const bg = Colors.white;
-  static const cardBg = Color(0xFFEDEDED);
-  static const cardBorder = Color(0xFFD8D8D8);
+  // Cinza do avatar (fundo do fallback) e laranja de destaque — iguais nos
+  // dois temas. Os neutros (fundo/cartão/texto/borda) vêm de `context.pal`.
   static const avatarBg = Color(0xFF9E9E9E);
-  static const text = AppColors.ink;
-  static const hint = AppColors.hint;
   static const laranja = Color(0xFFFF8A1F);
 }
 
-class PerfilPage extends StatefulWidget {
+class PerfilPage extends ConsumerStatefulWidget {
   const PerfilPage({super.key});
 
   @override
-  State<PerfilPage> createState() => _PerfilPageState();
+  ConsumerState<PerfilPage> createState() => _PerfilPageState();
 }
 
-class _PerfilPageState extends State<PerfilPage> {
+class _PerfilPageState extends ConsumerState<PerfilPage> {
   final _authService = AuthService();
   final _usuarioService = UsuarioService();
-  final _ocorrenciaService = OcorrenciaService();
-  final _roleService = RoleService();
+
+  OcorrenciaRepository get _ocorrenciaRepository =>
+      ref.read(ocorrenciaRepositoryProvider);
 
   int _aba = 0; // 0 = Resumo, 1 = Minhas denúncias, 2 = Salvos
-  bool _isAutoridade = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checarPapel();
-  }
-
-  Future<void> _checarPapel() async {
-    final uid = _authService.currentUser?.uid;
-    if (uid == null) return;
-    final isAut = await _roleService.isAutoridade(uid);
-    if (mounted) setState(() => _isAutoridade = isAut);
-  }
 
   static const _meses = [
     'jan',
@@ -88,42 +77,43 @@ class _PerfilPageState extends State<PerfilPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final uid = _authService.currentUser?.uid;
     final emailFallback =
         _authService.currentUser?.email?.split('@').first ?? 'Usuário';
 
     if (uid == null) {
-      return const Scaffold(
-        backgroundColor: _C.bg,
-        body: Center(child: Text('Faça login para ver seu perfil.')),
+      return Scaffold(
+        backgroundColor: pal.surface,
+        body: const Center(child: Text('Faça login para ver seu perfil.')),
       );
     }
 
     return Scaffold(
-      backgroundColor: _C.bg,
+      backgroundColor: pal.surface,
       appBar: AppBar(
-        backgroundColor: _C.bg,
+        backgroundColor: pal.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
         titleSpacing: 20,
-        title: const Row(
+        title: Row(
           children: [
             Text(
               'EcoJP',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: _C.text,
+                color: pal.ink,
               ),
             ),
-            SizedBox(width: 12),
-            Text('Meu Perfil', style: TextStyle(fontSize: 15, color: _C.hint)),
+            const SizedBox(width: 12),
+            Text('Meu Perfil', style: TextStyle(fontSize: 15, color: pal.hint)),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings_outlined, color: _C.text),
+            icon: Icon(Icons.settings_outlined, color: pal.ink),
             tooltip: 'Conta e privacidade',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ConfiguracoesContaPage()),
@@ -131,9 +121,9 @@ class _PerfilPageState extends State<PerfilPage> {
           ),
           const SizedBox(width: 8),
         ],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: _C.cardBorder),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: pal.border),
         ),
       ),
       body: StreamBuilder<UsuarioModel?>(
@@ -143,7 +133,7 @@ class _PerfilPageState extends State<PerfilPage> {
               perfilSnap.data ?? UsuarioModel(uid: uid, nome: emailFallback);
 
           return StreamBuilder<List<OcorrenciaModel>>(
-            stream: _ocorrenciaService.listarMinhasDenuncias(uid),
+            stream: _ocorrenciaRepository.listarMinhasDenuncias(uid),
             builder: (context, ocSnap) {
               final ocorrencias = ocSnap.data ?? [];
               final stats = _calcularStats(ocorrencias);
@@ -178,13 +168,15 @@ class _PerfilPageState extends State<PerfilPage> {
   // ── Cards ─────────────────────────────────────────────────────────────────
 
   Widget _cardPerfil(UsuarioModel perfil) {
+    final pal = context.pal;
     final incompleto =
         perfil.bairro.trim().isEmpty && perfil.bio.trim().isEmpty;
+    final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
     return Container(
       decoration: BoxDecoration(
-        color: _C.cardBg,
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _C.cardBorder),
+        border: Border.all(color: pal.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -209,13 +201,13 @@ class _PerfilPageState extends State<PerfilPage> {
                   children: [
                     Text(
                       perfil.nome.trim().isEmpty ? 'Sem nome' : perfil.nome,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: _C.text,
+                        color: pal.ink,
                       ),
                     ),
-                    if (_isAutoridade) ...[
+                    if (isAutoridade) ...[
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -257,22 +249,22 @@ class _PerfilPageState extends State<PerfilPage> {
                     const SizedBox(height: 6),
                     Text(
                       'Membro desde ${_membroDesde()}',
-                      style: const TextStyle(fontSize: 13, color: _C.hint),
+                      style: TextStyle(fontSize: 13, color: pal.hint),
                     ),
                     const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.location_on, size: 15, color: _C.hint),
+                        Icon(Icons.location_on, size: 15, color: pal.hint),
                         const SizedBox(width: 4),
                         Text(
                           perfil.bairro.trim().isEmpty
                               ? 'Bairro não informado'
                               : perfil.bairro,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
-                            color: _C.text,
+                            color: pal.ink,
                           ),
                         ),
                       ],
@@ -282,9 +274,9 @@ class _PerfilPageState extends State<PerfilPage> {
                       Text(
                         perfil.bio,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: _C.hint,
+                          color: pal.hint,
                           height: 1.4,
                         ),
                       ),
@@ -306,8 +298,8 @@ class _PerfilPageState extends State<PerfilPage> {
             child: Center(
               child: Container(
                 padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(
-                  color: _C.cardBg,
+                decoration: BoxDecoration(
+                  color: pal.surfaceAlt,
                   shape: BoxShape.circle,
                 ),
                 child: _avatar(perfil),
@@ -348,12 +340,12 @@ class _PerfilPageState extends State<PerfilPage> {
           children: [
             const Icon(Icons.auto_awesome, size: 18, color: _C.laranja),
             const SizedBox(width: 10),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Complete seu perfil — adicione seu bairro e uma bio.',
                 style: TextStyle(
                   fontSize: 12.5,
-                  color: _C.text,
+                  color: context.pal.ink,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -370,7 +362,9 @@ class _PerfilPageState extends State<PerfilPage> {
       return CircleAvatar(
         radius: 42,
         backgroundColor: _C.avatarBg,
-        backgroundImage: NetworkImage(perfil.fotoUrl!),
+        backgroundImage: imagemCacheada(
+          cloudinaryAvatar(perfil.fotoUrl!, radius: 42),
+        ),
       );
     }
     return CircleAvatar(
@@ -388,23 +382,24 @@ class _PerfilPageState extends State<PerfilPage> {
   }
 
   Widget _cardStat(String label, String valor) {
+    final pal = context.pal;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 18),
       decoration: BoxDecoration(
-        color: _C.cardBg,
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _C.cardBorder),
+        border: Border.all(color: pal.border),
       ),
       child: Column(
         children: [
-          Text(label, style: const TextStyle(fontSize: 13, color: _C.hint)),
+          Text(label, style: TextStyle(fontSize: 13, color: pal.hint)),
           const SizedBox(height: 6),
           Text(
             valor,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.w800,
-              color: _C.text,
+              color: pal.ink,
             ),
           ),
         ],
@@ -413,22 +408,23 @@ class _PerfilPageState extends State<PerfilPage> {
   }
 
   Widget _cardCategoria(String? categoria) {
+    final pal = context.pal;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
       width: double.infinity,
       decoration: BoxDecoration(
-        color: _C.cardBg,
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _C.cardBorder),
+        border: Border.all(color: pal.border),
       ),
       child: Column(
         children: [
-          const Text(
+          Text(
             'Categoria mais reportada',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: _C.text,
+              color: pal.ink,
             ),
           ),
           const SizedBox(height: 12),
@@ -455,12 +451,13 @@ class _PerfilPageState extends State<PerfilPage> {
   // ── Abas (Resumo / Minhas denúncias) ──────────────────────────────────────
 
   Widget _abas() {
+    final pal = context.pal;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: _C.cardBg,
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _C.cardBorder),
+        border: Border.all(color: pal.border),
       ),
       child: Row(
         children: [
@@ -473,6 +470,7 @@ class _PerfilPageState extends State<PerfilPage> {
   }
 
   Widget _abaBtn(String label, int idx) {
+    final pal = context.pal;
     final ativo = _aba == idx;
     return GestureDetector(
       onTap: () {
@@ -483,16 +481,16 @@ class _PerfilPageState extends State<PerfilPage> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: ativo ? _C.bg : Colors.transparent,
+          color: ativo ? pal.surface : Colors.transparent,
           borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: ativo ? _C.cardBorder : Colors.transparent),
+          border: Border.all(color: ativo ? pal.border : Colors.transparent),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 13,
             fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
-            color: ativo ? _C.text : _C.hint,
+            color: ativo ? pal.ink : pal.hint,
           ),
         ),
       ),
@@ -597,7 +595,70 @@ class _PerfilPageState extends State<PerfilPage> {
       ),
       const SizedBox(height: 14),
       _cardCategoria(stats.categoriaTop),
+      const SizedBox(height: 14),
+      _cardConquistas(stats),
     ];
+  }
+
+  // Conquistas (gamificação): badges derivados das estatísticas do usuário.
+  // As desbloqueadas aparecem coloridas; as pendentes, esmaecidas com o
+  // progresso atual (ex.: "3/5").
+  Widget _cardConquistas(_Stats stats) {
+    final pal = context.pal;
+    final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
+    final conquistas = calcularConquistas(
+      denuncias: stats.total,
+      resolvidas: stats.resolvidasOficial,
+      curtidas: stats.curtidas,
+      isAutoridade: isAutoridade,
+    );
+    final desbloqueadas = conquistas.where((c) => c.desbloqueada).length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      decoration: BoxDecoration(
+        color: pal.surfaceAlt,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: pal.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.emoji_events_outlined, size: 18, color: pal.ink),
+              const SizedBox(width: 8),
+              Text(
+                'Conquistas',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: pal.ink,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$desbloqueadas/${conquistas.length}',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: pal.muted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final c in conquistas) _ConquistaBadge(conquista: c),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Seção: Minhas denúncias ───────────────────────────────────────────────
@@ -619,22 +680,23 @@ class _PerfilPageState extends State<PerfilPage> {
   }
 
   Widget _denunciasVazio() {
+    final pal = context.pal;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
       decoration: BoxDecoration(
-        color: _C.cardBg,
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _C.cardBorder),
+        border: Border.all(color: pal.border),
       ),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.inbox_outlined, size: 48, color: _C.hint),
-          SizedBox(height: 12),
+          Icon(Icons.inbox_outlined, size: 48, color: pal.hint),
+          const SizedBox(height: 12),
           Text(
             'Você ainda não fez nenhuma denúncia',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: _C.hint),
+            style: TextStyle(fontSize: 14, color: pal.hint),
           ),
         ],
       ),
@@ -650,7 +712,7 @@ class _PerfilPageState extends State<PerfilPage> {
         if (favoritos.isEmpty) return _salvosVazio();
 
         return StreamBuilder<List<OcorrenciaModel>>(
-          stream: _ocorrenciaService.observarPorIds(favoritos),
+          stream: _ocorrenciaRepository.observarPorIds(favoritos),
           builder: (context, ocorrenciasSnap) {
             final salvas =
                 (ocorrenciasSnap.data ?? const <OcorrenciaModel>[]).toList()
@@ -681,22 +743,23 @@ class _PerfilPageState extends State<PerfilPage> {
   }
 
   Widget _salvosVazio() {
+    final pal = context.pal;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
       decoration: BoxDecoration(
-        color: _C.cardBg,
+        color: pal.surfaceAlt,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _C.cardBorder),
+        border: Border.all(color: pal.border),
       ),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.bookmark_border, size: 48, color: _C.hint),
-          SizedBox(height: 12),
+          Icon(Icons.bookmark_border, size: 48, color: pal.hint),
+          const SizedBox(height: 12),
           Text(
             'Nenhuma denúncia salva ainda',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: _C.hint),
+            style: TextStyle(fontSize: 14, color: pal.hint),
           ),
         ],
       ),
@@ -723,6 +786,7 @@ class _PerfilPageState extends State<PerfilPage> {
     bool gerenciar = true,
     VoidCallback? onRemoverSalvo,
   }) {
+    final pal = context.pal;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
@@ -733,9 +797,9 @@ class _PerfilPageState extends State<PerfilPage> {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _C.cardBg,
+              color: pal.surfaceAlt,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _C.cardBorder),
+              border: Border.all(color: pal.border),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -750,20 +814,16 @@ class _PerfilPageState extends State<PerfilPage> {
                         o.titulo.trim().isEmpty ? 'Sem título' : o.titulo,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: _C.text,
+                          color: pal.ink,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 13,
-                            color: _C.hint,
-                          ),
+                          Icon(Icons.location_on, size: 13, color: pal.hint),
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
@@ -772,10 +832,7 @@ class _PerfilPageState extends State<PerfilPage> {
                                   : o.localizacao,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: _C.hint,
-                              ),
+                              style: TextStyle(fontSize: 12, color: pal.hint),
                             ),
                           ),
                         ],
@@ -787,10 +844,7 @@ class _PerfilPageState extends State<PerfilPage> {
                           const Spacer(),
                           Text(
                             _formatarData(o.dataCriacao),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _C.hint,
-                            ),
+                            style: TextStyle(fontSize: 11, color: pal.hint),
                           ),
                         ],
                       ),
@@ -801,16 +855,16 @@ class _PerfilPageState extends State<PerfilPage> {
                               ? () => showOcorrenciaActions(
                                   context: context,
                                   ocorrencia: o,
-                                  service: _ocorrenciaService,
+                                  service: _ocorrenciaRepository,
                                 )
                               : onRemoverSalvo,
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
-                              color: _C.text.withValues(alpha: 0.06),
+                              color: pal.ink.withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: _C.cardBorder),
+                              border: Border.all(color: pal.border),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -820,17 +874,17 @@ class _PerfilPageState extends State<PerfilPage> {
                                       ? Icons.tune
                                       : Icons.bookmark_remove_outlined,
                                   size: 14,
-                                  color: _C.text,
+                                  color: pal.ink,
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
                                   gerenciar
                                       ? 'Gerenciar denúncia'
                                       : 'Remover dos salvos',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: _C.text,
+                                    color: pal.ink,
                                   ),
                                 ),
                               ],
@@ -853,13 +907,27 @@ class _PerfilPageState extends State<PerfilPage> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: (url != null && url.isNotEmpty)
-          ? Image.network(
-              url,
-              width: 60,
-              height: 60,
-              fit: BoxFit.cover,
-              semanticLabel: 'Foto da denúncia: ${o.titulo}',
-              errorBuilder: (_, _, _) => _thumbPlaceholder(),
+          ? Builder(
+              builder: (context) {
+                final dpr = MediaQuery.devicePixelRatioOf(context);
+                return Image(
+                  image: imagemCacheada(
+                    cloudinaryOtimizada(
+                      url,
+                      larguraLogica: 60,
+                      alturaLogica: 60,
+                      devicePixelRatio: dpr,
+                      crop: 'fill',
+                    ),
+                    cacheWidth: cacheLarguraPx(60, dpr),
+                  ),
+                  width: 60,
+                  height: 60,
+                  fit: BoxFit.cover,
+                  semanticLabel: 'Foto da denúncia: ${o.titulo}',
+                  errorBuilder: (_, _, _) => _thumbPlaceholder(),
+                );
+              },
             )
           : _thumbPlaceholder(),
     );
@@ -960,4 +1028,76 @@ class _Stats {
     required this.verificadas,
     required this.resolvidasOficial,
   });
+}
+
+/// Badge de uma conquista no perfil. Desbloqueada = ícone colorido + título
+/// forte; pendente = esmaecida, mostrando o progresso (ex.: "3/5").
+class _ConquistaBadge extends StatelessWidget {
+  final Conquista conquista;
+
+  const _ConquistaBadge({required this.conquista});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final c = conquista;
+    final ativa = c.desbloqueada;
+    final cor = ativa ? c.cor : pal.hint;
+
+    return Tooltip(
+      message: '${c.descricao}${ativa ? '' : '  ·  ${c.progresso}/${c.meta}'}',
+      child: Container(
+        width: 96,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: ativa ? c.cor.withValues(alpha: 0.10) : pal.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: ativa ? c.cor.withValues(alpha: 0.35) : pal.border,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(c.icone, size: 26, color: cor),
+                if (!ativa)
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Icon(Icons.lock, size: 12, color: pal.hint),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              c.titulo,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+                color: ativa ? pal.ink : pal.muted,
+              ),
+            ),
+            if (!ativa) ...[
+              const SizedBox(height: 3),
+              Text(
+                '${c.progresso}/${c.meta}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: pal.hint,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -15,96 +15,10 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      - name: Configurar Flutter
-        uses: subosito/flutter-action@v2
+      - name: Configurar Flutter (setup compartilhado)
+        uses: ./.github/actions/flutter-setup
         with:
-          channel: stable
-          cache: true
-
-      - name: Versões instaladas
-        run: flutter --version
-
-      - name: Instalar dependências
-        run: flutter pub get
-
-      - name: Injetar MAPS_API_KEY
-        run: echo "MAPS_API_KEY=${{ secrets.MAPS_API_KEY }}" >> android/local.properties
-
-      - name: Gerar FirebaseOptions de CI
-        run: |
-          cat > lib/firebase_options.dart <<'DART'
-          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-          import 'package:flutter/foundation.dart'
-              show defaultTargetPlatform, kIsWeb, TargetPlatform;
-
-          class DefaultFirebaseOptions {
-            static FirebaseOptions get currentPlatform {
-              if (kIsWeb) return web;
-              switch (defaultTargetPlatform) {
-                case TargetPlatform.android:
-                  return android;
-                case TargetPlatform.iOS:
-                  return ios;
-                case TargetPlatform.macOS:
-                  return macos;
-                case TargetPlatform.windows:
-                  return windows;
-                case TargetPlatform.linux:
-                  throw UnsupportedError(
-                    'DefaultFirebaseOptions are not configured for linux.',
-                  );
-                case TargetPlatform.fuchsia:
-                  throw UnsupportedError(
-                    'DefaultFirebaseOptions are not configured for fuchsia.',
-                  );
-              }
-            }
-
-            static const FirebaseOptions web = FirebaseOptions(
-              apiKey: 'ci-placeholder',
-              appId: '1:000000000000:web:0000000000000000000000',
-              messagingSenderId: '000000000000',
-              projectId: 'ecojp-ci',
-              authDomain: 'ecojp-ci.firebaseapp.com',
-              storageBucket: 'ecojp-ci.appspot.com',
-            );
-
-            static const FirebaseOptions android = FirebaseOptions(
-              apiKey: 'ci-placeholder',
-              appId: '1:000000000000:android:0000000000000000000000',
-              messagingSenderId: '000000000000',
-              projectId: 'ecojp-ci',
-              storageBucket: 'ecojp-ci.appspot.com',
-            );
-
-            static const FirebaseOptions ios = FirebaseOptions(
-              apiKey: 'ci-placeholder',
-              appId: '1:000000000000:ios:0000000000000000000000',
-              messagingSenderId: '000000000000',
-              projectId: 'ecojp-ci',
-              storageBucket: 'ecojp-ci.appspot.com',
-              iosBundleId: 'com.example.ecoJp',
-            );
-
-            static const FirebaseOptions macos = FirebaseOptions(
-              apiKey: 'ci-placeholder',
-              appId: '1:000000000000:ios:0000000000000000000000',
-              messagingSenderId: '000000000000',
-              projectId: 'ecojp-ci',
-              storageBucket: 'ecojp-ci.appspot.com',
-              iosBundleId: 'com.example.ecoJp',
-            );
-
-            static const FirebaseOptions windows = FirebaseOptions(
-              apiKey: 'ci-placeholder',
-              appId: '1:000000000000:web:0000000000000000000000',
-              messagingSenderId: '000000000000',
-              projectId: 'ecojp-ci',
-              authDomain: 'ecojp-ci.firebaseapp.com',
-              storageBucket: 'ecojp-ci.appspot.com',
-            );
-          }
-          DART
+          maps-api-key: ${{ secrets.MAPS_API_KEY }}
 
       - name: Verificar formatação
         run: dart format --output=none --set-exit-if-changed lib test || echo "::warning::Arquivos fora do padrão de formatação (não bloqueante)"
@@ -114,3 +28,67 @@ jobs:
 
       - name: Testes unitários
         run: flutter test
+
+  firestore-rules:
+    name: Regras de segurança do Firestore
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # O emulador do Firestore roda sobre a JVM.
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: test/firestore_rules/package-lock.json
+
+      - name: Instalar Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Instalar dependências dos testes
+        working-directory: test/firestore_rules
+        run: npm ci
+
+      # `npm test` sobe o emulador via `firebase emulators:exec`, roda o Jest
+      # e derruba o emulador. A firebase.json (porta 8080) fica na raiz do repo.
+      - name: Rodar testes de regras
+        working-directory: test/firestore_rules
+        run: npm test
+
+  # Builds só rodam se a qualidade passar — pegam quebra de compilação por
+  # plataforma antes do merge, sem precisar de segredos de assinatura.
+  build-android:
+    name: Build Android (APK)
+    runs-on: ubuntu-latest
+    needs: quality
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Flutter (setup compartilhado)
+        uses: ./.github/actions/flutter-setup
+        with:
+          maps-api-key: ${{ secrets.MAPS_API_KEY }}
+
+      # Release assinado com a debug key (config atual do projeto): serve como
+      # smoke test e para distribuição interna. Para publicar na Play Store,
+      # ver o checklist de segredos de assinatura na DOCUMENTACAO_TECNICA (17.9).
+      - name: Build APK release
+        run: flutter build apk --release
+
+      - name: Publicar APK como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecojp-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error

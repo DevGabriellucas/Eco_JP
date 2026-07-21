@@ -1,9 +1,9 @@
 import 'package:eco_jp/models/occurrence_types.dart';
 import 'package:eco_jp/pages/mapPage/controller/map_controller.dart';
+import 'package:eco_jp/pages/mapPage/map_style.dart';
 import 'package:eco_jp/services/geolocation/geolocation_service.dart';
 import 'package:eco_jp/services/geolocation/geovalidations.dart';
 import 'package:eco_jp/theme/app_theme.dart';
-import 'package:eco_jp/utils/google_maps_web_support.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -22,7 +22,6 @@ class _MapDisplayState extends State<MapDisplay> {
   GoogleMapController? _mapController;
   CameraPosition? cameraPosition;
   bool _jaEnquadrou = false;
-  int _ultimoTokenCamera = 0;
 
   @override
   void initState() {
@@ -88,14 +87,12 @@ class _MapDisplayState extends State<MapDisplay> {
 
   @override
   Widget build(BuildContext context) {
-    if (!isGoogleMapsWebReady) {
-      return const _MapWebConfigMissing();
-    }
-
     if (cameraPosition == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final temMarcadores = widget.controller.listaMarcadores.isNotEmpty;
 
     // Enquadra automaticamente os marcadores na primeira carga.
@@ -106,27 +103,13 @@ class _MapDisplayState extends State<MapDisplay> {
       });
     }
 
-    // Centraliza a câmera quando um bairro é selecionado na busca. O token
-    // muda a cada seleção; só animamos quando ele avança e o mapa já existe.
-    final tokenCamera = widget.controller.alvoCameraToken;
-    final alvoCamera = widget.controller.alvoCamera;
-    if (tokenCamera != _ultimoTokenCamera &&
-        alvoCamera != null &&
-        _mapController != null) {
-      _ultimoTokenCamera = tokenCamera;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLngZoom(alvoCamera, 15),
-          );
-        }
-      });
-    }
-
     return Stack(
       children: [
         GoogleMap(
           initialCameraPosition: cameraPosition!,
+          // Tiles escuros (harmonizados com o tema) só no modo escuro; no
+          // claro, null volta o mapa ao padrão. Reativo: troca junto do tema.
+          style: isDark ? kEstiloMapaEscuro : null,
           myLocationEnabled: true,
           // Botão nativo desativado: ficava atrás dos filtros de status no
           // topo. Usamos um botão próprio no canto inferior esquerdo.
@@ -136,7 +119,6 @@ class _MapDisplayState extends State<MapDisplay> {
               ? const {}
               : widget.controller.listaMarcadores,
           heatmaps: widget.controller.listaHeatmap,
-          circles: widget.controller.circuloBairro,
           clusterManagers: {
             ClusterManager(clusterManagerId: MapController.clusterManagerId),
           },
@@ -175,15 +157,14 @@ class _MapDisplayState extends State<MapDisplay> {
                 heroTag: 'filtro-pendentes',
                 backgroundColor: widget.controller.soPendentes
                     ? AppColors.primary
-                    : Colors.white,
+                    : pal.surface,
                 foregroundColor: widget.controller.soPendentes
                     ? Colors.white
-                    : AppColors.ink,
+                    : pal.ink,
                 elevation: 3,
                 tooltip: 'Só pendentes de verificação',
-                onPressed: () => setState(
-                  () => widget.controller.alternarSoPendentes(),
-                ),
+                onPressed: () =>
+                    setState(() => widget.controller.alternarSoPendentes()),
                 child: const Icon(Icons.pending_actions),
               ),
               const SizedBox(height: 10),
@@ -191,10 +172,10 @@ class _MapDisplayState extends State<MapDisplay> {
                 heroTag: 'mapa-calor',
                 backgroundColor: widget.controller.heatmapAtivo
                     ? AppColors.danger
-                    : Colors.white,
+                    : pal.surface,
                 foregroundColor: widget.controller.heatmapAtivo
                     ? Colors.white
-                    : AppColors.ink,
+                    : pal.ink,
                 elevation: 3,
                 tooltip: 'Mapa de calor (regiões mais afetadas)',
                 onPressed: () =>
@@ -204,8 +185,8 @@ class _MapDisplayState extends State<MapDisplay> {
               const SizedBox(height: 10),
               FloatingActionButton.small(
                 heroTag: 'enquadrar-ocorrencias',
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.ink,
+                backgroundColor: pal.surface,
+                foregroundColor: pal.ink,
                 elevation: 3,
                 onPressed: temMarcadores ? _enquadrarMarcadores : null,
                 child: const Icon(Icons.fit_screen),
@@ -220,46 +201,77 @@ class _MapDisplayState extends State<MapDisplay> {
           bottom: 12,
           child: FloatingActionButton.small(
             heroTag: 'minha-localizacao',
-            backgroundColor: Colors.white,
-            foregroundColor: AppColors.ink,
+            backgroundColor: pal.surface,
+            foregroundColor: pal.ink,
             elevation: 3,
             onPressed: _irParaMinhaLocalizacao,
             child: const Icon(Icons.my_location),
           ),
         ),
+
+        // Legenda do mapa de calor: só aparece com a camada ligada, explicando
+        // o que as cores significam (poucas → muitas denúncias).
+        if (widget.controller.heatmapAtivo)
+          const Positioned(
+            bottom: 16,
+            left: 0,
+            right: 0,
+            child: Center(child: _LegendaCalor()),
+          ),
       ],
     );
   }
 }
 
-class _MapWebConfigMissing extends StatelessWidget {
-  const _MapWebConfigMissing();
+/// Legenda do gradiente do mapa de calor. Usa exatamente a mesma paleta do
+/// heatmap ([kCoresGradienteCalor]) para não divergir das cores no mapa.
+class _LegendaCalor extends StatelessWidget {
+  const _LegendaCalor();
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     return Container(
-      width: double.infinity,
-      color: AppColors.surface,
-      padding: const EdgeInsets.all(24),
-      child: const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: pal.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.map_outlined, size: 42, color: AppColors.hint),
-          SizedBox(height: 14),
           Text(
-            'Mapa indisponível no navegador',
-            textAlign: TextAlign.center,
+            'Concentração de denúncias',
             style: TextStyle(
-              color: AppColors.ink,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: pal.muted,
             ),
           ),
-          SizedBox(height: 8),
-          Text(
-            'Configure web/maps_config.js com uma chave Google Maps Web para usar o mapa no Chrome.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.hint, fontSize: 13, height: 1.35),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Poucas', style: TextStyle(fontSize: 10, color: pal.hint)),
+              const SizedBox(width: 6),
+              Container(
+                width: 90,
+                height: 8,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: kCoresGradienteCalor),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text('Muitas', style: TextStyle(fontSize: 10, color: pal.hint)),
+            ],
           ),
         ],
       ),
@@ -281,6 +293,7 @@ class _FiltrosStatus extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         children: [
           _chip(
+            context,
             label: 'Todos',
             cor: AppColors.muted,
             selecionado: controller.statusSelecionado == null,
@@ -288,6 +301,7 @@ class _FiltrosStatus extends StatelessWidget {
           ),
           for (final s in OccurrenceStatus.values)
             _chip(
+              context,
               label: s.label,
               cor: s.color,
               selecionado: controller.statusSelecionado == s,
@@ -298,12 +312,14 @@ class _FiltrosStatus extends StatelessWidget {
     );
   }
 
-  Widget _chip({
+  Widget _chip(
+    BuildContext context, {
     required String label,
     required Color cor,
     required bool selecionado,
     required VoidCallback onTap,
   }) {
+    final pal = context.pal;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: GestureDetector(
@@ -313,9 +329,9 @@ class _FiltrosStatus extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selecionado ? cor : Colors.white,
+            color: selecionado ? cor : pal.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: selecionado ? cor : AppColors.border),
+            border: Border.all(color: selecionado ? cor : pal.border),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.08),
@@ -329,7 +345,7 @@ class _FiltrosStatus extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: selecionado ? Colors.white : AppColors.muted,
+              color: selecionado ? Colors.white : pal.muted,
             ),
           ),
         ),

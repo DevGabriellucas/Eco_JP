@@ -49,16 +49,17 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
 
   @override
   Widget build(BuildContext context) {
-    const linkStyle = TextStyle(
+    final pal = context.pal;
+    final linkStyle = TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.w600,
-      color: AppColors.ink,
+      color: pal.ink,
       decoration: TextDecoration.underline,
     );
-    const textStyle = TextStyle(fontSize: 14, color: AppColors.muted);
+    final textStyle = TextStyle(fontSize: 14, color: pal.muted);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: pal.surface,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
@@ -72,22 +73,22 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                 color: AppColors.success,
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Privacidade e Termos',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: pal.ink,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Antes de continuar, precisamos do seu consentimento sobre como '
                 'os seus dados são tratados no EcoJP.',
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.5,
-                  color: AppColors.muted,
+                  color: pal.muted,
                 ),
               ),
               const SizedBox(height: 20),
@@ -145,22 +146,22 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                     child: Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        const Text('Li e aceito a ', style: textStyle),
+                        Text('Li e aceito a ', style: textStyle),
                         GestureDetector(
                           onTap: () => _abrirDocumento(
                             'Política de Privacidade',
                             kPoliticaPrivacidade,
                           ),
-                          child: const Text(
+                          child: Text(
                             'Política de Privacidade',
                             style: linkStyle,
                           ),
                         ),
-                        const Text(' e os ', style: textStyle),
+                        Text(' e os ', style: textStyle),
                         GestureDetector(
                           onTap: () =>
                               _abrirDocumento('Termos de Uso', kTermosDeUso),
-                          child: const Text('Termos de Uso', style: linkStyle),
+                          child: Text('Termos de Uso', style: linkStyle),
                         ),
                       ],
                     ),
@@ -174,8 +175,8 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                 child: ElevatedButton(
                   onPressed: (_aceito && !_processando) ? _confirmar : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.ink,
-                    foregroundColor: Colors.white,
+                    backgroundColor: pal.ink,
+                    foregroundColor: pal.surface,
                     disabledBackgroundColor: const Color(0xFFBDBDBD),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -183,11 +184,11 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                     ),
                   ),
                   child: _processando
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                            color: Colors.white,
+                            color: pal.surface,
                             strokeWidth: 2,
                           ),
                         )
@@ -226,10 +227,10 @@ class _Topico extends StatelessWidget {
           Expanded(
             child: Text(
               texto,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13.5,
                 height: 1.5,
-                color: Color(0xFF374151),
+                color: context.pal.ink,
               ),
             ),
           ),

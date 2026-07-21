@@ -1,18 +1,44 @@
 import 'dart:async';
 
+import 'package:eco_jp/data/repositories/ocorrencia_repository.dart';
 import 'package:eco_jp/models/ocorrencia_model.dart';
 import 'package:eco_jp/models/occurrence_types.dart';
-import 'package:eco_jp/models/rota_coleta_model.dart';
-import 'package:eco_jp/services/geolocation/bairros_jp.dart';
-import 'package:eco_jp/services/geolocation/geolocation_service.dart';
-import 'package:eco_jp/services/ocorrencia_service.dart';
-import 'package:eco_jp/services/rota_coleta_service.dart';
-import 'package:eco_jp/theme/app_theme.dart';
-import 'package:eco_jp/utils/texto.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:eco_jp/pages/mapPage/controller/calc_mostaffectedzones.dart';
 import 'package:eco_jp/pages/mapPage/controller/marker_icons.dart';
+
+// Cores do gradiente do mapa de calor, do menos ao mais afetado. Nomeadas
+// individualmente para serem usadas tanto no gradiente (const) quanto na
+// legenda do mapa — fonte única de verdade.
+const _calorVerde = Color(0xFF2ECC71); // poucas denúncias
+const _calorAmarelo = Color(0xFFF1C40F);
+const _calorLaranja = Color(0xFFE67E22);
+const _calorVermelho = Color(0xFFE74C3C); // zona muito afetada
+
+/// Paleta do mapa de calor exposta para a legenda (mesma ordem do gradiente).
+const kCoresGradienteCalor = <Color>[
+  _calorVerde,
+  _calorAmarelo,
+  _calorLaranja,
+  _calorVermelho,
+];
+
+/// Gradiente do mapa de calor: verde (poucas denúncias) → vermelho (zona muito
+/// afetada). Combinado com [_maxIntensidadeCalor], faz a cor refletir a
+/// quantidade de denúncias concentradas — quanto mais afetada a zona, mais
+/// "quente" a cor fica.
+const _gradienteCalor = HeatmapGradient([
+  HeatmapGradientColor(_calorVerde, 0.1),
+  HeatmapGradientColor(_calorAmarelo, 0.4),
+  HeatmapGradientColor(_calorLaranja, 0.7),
+  HeatmapGradientColor(_calorVermelho, 1.0),
+]);
+
+/// Nº aproximado de denúncias sobrepostas para a zona atingir o vermelho.
+/// Fixo (não dinâmico) para que "mais denúncias = cor mais quente", em vez de
+/// o Google normalizar sempre o ponto mais denso como vermelho. Ajuste este
+/// valor conforme a densidade real de denúncias da cidade.
+const _maxIntensidadeCalor = 8.0;
 
 abstract class MapControllerState {}
 
@@ -33,14 +59,13 @@ class MapControllerStateError extends MapControllerState {
 }
 
 class MapController extends ChangeNotifier {
-  MapController({this.aoTocarMarcador});
+  MapController({this.aoTocarMarcador, OcorrenciaRepository? service})
+    : service = service ?? OcorrenciaRepository();
 
   /// Disparado quando o usuário toca em um marcador individual no mapa.
   void Function(OcorrenciaModel ocorrencia)? aoTocarMarcador;
 
-  final OcorrenciaService service = OcorrenciaService();
-  final RotaColetaService _rotaColetaService = RotaColetaService();
-  final LocationService _locationService = LocationService();
+  final OcorrenciaRepository service;
 
   /// Identificador do agrupador (clustering nativo do Google Maps).
   static const ClusterManagerId clusterManagerId = ClusterManagerId(
@@ -65,42 +90,7 @@ class MapController extends ChangeNotifier {
   // Ícones customizados por categoria (vazio = usa marcador padrão).
   Map<OccurrenceType, BitmapDescriptor> _icones = {};
 
-  List<({String bairro, int quantidade})> zonasMaisAfetadas = [];
-
   StreamSubscription<List<OcorrenciaModel>>? _subscription;
-
-  // ── Rotas de coleta de lixo (cronograma por bairro, dados estáticos) ─────
-
-  List<RotaColetaModel> _rotasColeta = [];
-
-  // Bairro localizado pela busca: círculo de área aproximada + alvo de câmera
-  // (consumido pela view, que detém o GoogleMapController).
-  Set<Circle> _circuloBairro = {};
-  LatLng? _alvoCamera;
-  int _alvoCameraToken = 0;
-  String? bairroSelecionado;
-
-  Set<Circle> get circuloBairro => _circuloBairro;
-
-  /// Ponto para o qual a câmera deve animar; muda de identidade a cada nova
-  /// seleção. A view observa [alvoCameraToken] para saber quando reagir.
-  LatLng? get alvoCamera => _alvoCamera;
-  int get alvoCameraToken => _alvoCameraToken;
-
-  /// Agendas (uma por grupo do cronograma) cadastradas para um bairro.
-  List<RotaColetaModel> agendasDoBairro(String bairro) =>
-      _rotasColeta.where((r) => r.bairro == bairro).toList();
-
-  /// Nomes de bairro distintos, ordenados ignorando acentos.
-  List<String> get bairrosOrdenados {
-    final nomes = _rotasColeta.map((r) => r.bairro).toSet().toList();
-    nomes.sort(
-      (a, b) => removerAcentos(
-        a,
-      ).toLowerCase().compareTo(removerAcentos(b).toLowerCase()),
-    );
-    return nomes;
-  }
 
   // ── Estado dos filtros (consultado pela UI) ──────────────────────────────
 
@@ -121,81 +111,29 @@ class MapController extends ChangeNotifier {
       _subscription?.cancel();
 
       _subscription = service
-          .listarOcorrenciasLimitadas(OcorrenciaService.tetoAgregado)
+          .listarOcorrenciasLimitadas(OcorrenciaRepository.tetoAgregado)
           .listen(
-        (data) {
-          _todasOcorrencias = data;
-          state = MapControllerStateLoaded(data);
+            (data) {
+              _todasOcorrencias = data;
+              state = MapControllerStateLoaded(data);
 
-          _recomputar();
+              _recomputar();
 
-          notifyListeners();
-        },
-        onError: (error) {
-          state = MapControllerStateError(
-            "Erro no carregamento das ocorrências",
+              notifyListeners();
+            },
+            onError: (error) {
+              state = MapControllerStateError(
+                "Erro no carregamento das ocorrências",
+              );
+
+              notifyListeners();
+            },
           );
-
-          notifyListeners();
-        },
-      );
     } catch (e) {
       state = MapControllerStateError("Erro no carregamento das ocorrências");
 
       notifyListeners();
     }
-  }
-
-  /// Carrega o cronograma (uma única vez). Usado pela busca por bairro.
-  Future<void> carregarRotasSeNecessario() async {
-    if (_rotasColeta.isNotEmpty) return;
-
-    _rotasColeta = await _rotaColetaService.carregarRotas();
-  }
-
-  /// Localiza um bairro no mapa. Prioridade (do mais confiável ao menos):
-  /// 1. `coord` conferida no JSON (geocodificação oficial — tools/geocode_bairros);
-  /// 2. tabela curada de João Pessoa;
-  /// 3. centro de uma área desenhada do cronograma;
-  /// 4. geocodificação sob demanda no aparelho.
-  /// Desenha um círculo de área aproximada e pede à view para centralizar.
-  Future<void> selecionarBairro(String bairro) async {
-    bairroSelecionado = bairro;
-
-    LatLng? alvo;
-    for (final agenda in agendasDoBairro(bairro)) {
-      if (agenda.coord != null) {
-        alvo = agenda.coord;
-        break;
-      }
-    }
-    alvo ??= coordenadaBairroJP(bairro);
-    if (alvo == null) {
-      for (final agenda in agendasDoBairro(bairro)) {
-        if (agenda.temArea) {
-          alvo = agenda.centro;
-          break;
-        }
-      }
-    }
-    alvo ??= await _locationService.geocodeBairro(bairro);
-
-    if (alvo != null) {
-      _alvoCamera = alvo;
-      _alvoCameraToken++;
-      _circuloBairro = {
-        Circle(
-          circleId: const CircleId('bairro-selecionado'),
-          center: alvo,
-          radius: 450,
-          strokeWidth: 2,
-          strokeColor: AppColors.primary,
-          fillColor: AppColors.primary.withValues(alpha: 0.12),
-        ),
-      };
-    }
-
-    notifyListeners();
   }
 
   // ── Filtros ──────────────────────────────────────────────────────────────
@@ -256,7 +194,9 @@ class MapController extends ChangeNotifier {
       for (final ocorrencia in filtradas) criarMarcador(ocorrencia),
     };
 
-    // Camada de calor: um ponto por ocorrência filtrada (peso uniforme).
+    // Camada de calor: um ponto por ocorrência filtrada (peso uniforme). O
+    // gradiente + maxIntensity fazem a cor variar conforme a concentração de
+    // denúncias na zona (verde = poucas, vermelho = muito afetada).
     listaHeatmap = heatmapAtivo && filtradas.isNotEmpty
         ? {
             Heatmap(
@@ -265,17 +205,13 @@ class MapController extends ChangeNotifier {
                 for (final o in filtradas)
                   WeightedLatLng(LatLng(o.latitude, o.longitude)),
               ],
+              gradient: _gradienteCalor,
+              maxIntensity: _maxIntensidadeCalor,
               radius: HeatmapRadius.fromPixels(45),
-              opacity: 0.7,
+              opacity: 0.75,
             ),
           }
         : {};
-
-    // O ranking de bairros considera todas as ocorrências com coordenada
-    // válida, independentemente dos filtros visuais aplicados no mapa.
-    zonasMaisAfetadas = CalcMostAffectedZones(
-      _todasOcorrencias.where(_temCoordenadaValida).toList(),
-    ).zonasMaisAfetadas(limite: 3);
   }
 
   Marker criarMarcador(OcorrenciaModel ocorrencia) {

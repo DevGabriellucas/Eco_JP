@@ -13,7 +13,14 @@ Future<Uint8List> removerMetadadosImagem(Uint8List bytes) {
 }
 
 Uint8List _semExif(Uint8List bytes) {
-  final imagem = img.decodeImage(bytes);
+  // decodeImage pode lançar (não só retornar null) em bytes corrompidos ou
+  // truncados — nesse caso mantemos o original em vez de derrubar o isolate.
+  img.Image? imagem;
+  try {
+    imagem = img.decodeImage(bytes);
+  } catch (_) {
+    return bytes;
+  }
   if (imagem == null) return bytes; // formato não reconhecido, mantém original
 
   // decodeImage já não preserva EXIF por padrão nas versões recentes do

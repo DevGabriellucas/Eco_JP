@@ -15,7 +15,7 @@ Future<ReportContentResult?> showReportContentSheet(
   return showModalBottomSheet<ReportContentResult>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: context.pal.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
@@ -64,6 +64,7 @@ class _ReportContentSheetState extends State<_ReportContentSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = context.pal;
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 10, 20, 20 + bottom),
@@ -76,7 +77,7 @@ class _ReportContentSheetState extends State<_ReportContentSheet> {
               width: 42,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFD1D5DB),
+                color: pal.border,
                 borderRadius: BorderRadius.circular(999),
               ),
             ),
@@ -84,8 +85,8 @@ class _ReportContentSheetState extends State<_ReportContentSheet> {
           const SizedBox(height: 16),
           Text(
             widget.title,
-            style: const TextStyle(
-              color: Color(0xFF111827),
+            style: TextStyle(
+              color: pal.ink,
               fontSize: 18,
               fontWeight: FontWeight.w800,
             ),
@@ -104,9 +105,9 @@ class _ReportContentSheetState extends State<_ReportContentSheet> {
                     Expanded(
                       child: Text(
                         motivo,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
-                          color: Color(0xFF111827),
+                          color: pal.ink,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -121,10 +122,12 @@ class _ReportContentSheetState extends State<_ReportContentSheet> {
             controller: _detalheCtrl,
             maxLines: 3,
             maxLength: 240,
+            style: TextStyle(color: pal.ink),
             decoration: InputDecoration(
               hintText: 'Detalhe opcional',
+              hintStyle: TextStyle(color: pal.hint),
               filled: true,
-              fillColor: const Color(0xFFF3F4F6),
+              fillColor: pal.surfaceAlt,
               counterText: '',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -170,7 +173,7 @@ class _SelectionDot extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: selected ? AppColors.danger : const Color(0xFF9CA3AF),
+          color: selected ? AppColors.danger : context.pal.hint,
           width: selected ? 6 : 2,
         ),
       ),
