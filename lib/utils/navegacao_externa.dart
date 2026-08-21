@@ -21,12 +21,12 @@ Future<bool> abrirRotaNoMapa({
 
   try {
     if (await canLaunchUrl(uri)) {
-      return launchUrl(uri, mode: LaunchMode.externalApplication);
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     // Fallback: esquema geo: (alguns dispositivos sem Google Maps).
     final geo = Uri.parse('geo:$destino?q=$destino${rotulo != null ? '($rotulo)' : ''}');
     if (await canLaunchUrl(geo)) {
-      return launchUrl(geo, mode: LaunchMode.externalApplication);
+      return await launchUrl(geo, mode: LaunchMode.externalApplication);
     }
     return false;
   } catch (e) {
