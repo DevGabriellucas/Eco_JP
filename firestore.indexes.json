@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "denuncias_moderacao",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

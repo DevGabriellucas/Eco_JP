@@ -1,0 +1,655 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Só permite postar conteúdo (denúncias, comentários, reações, notificações)
+    // a quem confirmou o e-mail. Contas Google já chegam com email_verified=true.
+    function emailVerificado() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Autoridade credenciada (órgão público). O papel é concedido manualmente
+    // criando um doc em roles/{uid} com { role: 'autoridade' } pelo Console do
+    // Firebase — nunca pelo app. Dá poderes de moderação e status oficial.
+    function isAutoridade() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == 'autoridade';
+    }
+
+    function isValidStatus(status) {
+      return status in ['Pendente', 'Resolvido', 'Nao resolvido'];
+    }
+
+    // Rejeita conteúdo em branco: exige ao menos um caractere não-espaço. O
+    // `size() >= N` sozinho aceitaria "   " (só espaços), então um cliente
+    // forjado poderia criar denúncias/comentários vazios burlando o trim do
+    // app. [\s\S] casa qualquer caractere (inclusive quebras de linha, que o
+    // `.` do RE2 não pega) — o padrão exige um \S em meio a qualquer conteúdo.
+    function naoEmBranco(texto) {
+      return texto is string && texto.matches('[\\s\\S]*\\S[\\s\\S]*');
+    }
+
+    function isValidTitle(title) {
+      return title is string
+        && title.size() >= 3
+        && title.size() <= 80
+        && naoEmBranco(title);
+    }
+
+    function isValidDescription(description) {
+      return description is string
+        && description.size() >= 10
+        && description.size() <= 1000
+        && naoEmBranco(description);
+    }
+
+    function isValidLocationName(location) {
+      return location is string
+        && location.size() >= 3
+        && location.size() <= 180
+        && naoEmBranco(location);
+    }
+
+    function isValidCategory(category) {
+      return category in [
+        'Lixo',
+        'Queimada',
+        'Buraco',
+        'Árvores caídas',
+        'Enchentes',
+        'Esgoto',
+        'Falta iluminação',
+        'Outros',
+      ];
+    }
+
+    function isValidCoordinate(lat, lon) {
+      return lat is number
+        && lon is number
+        && lat >= -90
+        && lat <= 90
+        && lon >= -180
+        && lon <= 180
+        && !(lat == 0 && lon == 0);
+    }
+
+    // Cloud name is public in delivered image URLs; secrets remain out of code.
+    function isCloudinaryImageUrl(url) {
+      return url is string
+        && url.size() <= 2048
+        && url.matches('^https://res\\.cloudinary\\.com/dmdghbgac/image/upload/.+');
+    }
+
+    function isCloudinaryVideoUrl(url) {
+      return url is string
+        && url.size() <= 2048
+        && url.matches('^https://res\\.cloudinary\\.com/dmdghbgac/video/upload/.+');
+    }
+
+    function isOptionalVideoUrl(url) {
+      return url == null || isCloudinaryVideoUrl(url);
+    }
+
+    function isOptionalPublicName(name) {
+      return name == null || (name is string && name.size() <= 80);
+    }
+
+    function isOptionalPublicPhoto(url) {
+      return url == null || (url is string && url.size() <= 2048);
+    }
+
+    function isValidPublicUserFields(data) {
+      return (!('usuarioNome' in data) || isOptionalPublicName(data.usuarioNome))
+        && (!('usuarioFotoUrl' in data) || isOptionalPublicPhoto(data.usuarioFotoUrl));
+    }
+
+    function isValidOccurrenceImages(data) {
+      return data.imagensUrls is list
+        && data.imagensUrls.size() >= 1
+        && data.imagensUrls.size() <= 3
+        && isCloudinaryImageUrl(data.imagensUrls[0])
+        && (data.imagensUrls.size() < 2 || isCloudinaryImageUrl(data.imagensUrls[1]))
+        && (data.imagensUrls.size() < 3 || isCloudinaryImageUrl(data.imagensUrls[2]))
+        && data.imagemUrl == data.imagensUrls[0];
+    }
+
+    function isValidOcorrencia(data) {
+      return data.keys().hasAll([
+          'titulo',
+          'descricao',
+          'localizacao',
+          'latitude',
+          'longitude',
+          'tipoLixo',
+          'status',
+          'dataCriacao',
+          'usuarioId',
+          'imagemUrl',
+          'imagensUrls',
+          'anonima',
+          'likes',
+          'dislikes',
+          'comments',
+          'likedBy',
+          'dislikedBy',
+          'fixada',
+        ])
+        && data.keys().hasOnly([
+          'titulo',
+          'descricao',
+          'localizacao',
+          'latitude',
+          'longitude',
+          'tipoLixo',
+          'status',
+          'dataCriacao',
+          'usuarioId',
+          'imagemUrl',
+          'imagensUrls',
+          'usuarioNome',
+          'usuarioFotoUrl',
+          'videoUrl',
+          'anonima',
+          'likes',
+          'dislikes',
+          'comments',
+          'likedBy',
+          'dislikedBy',
+          'fixada',
+          // Opcional (não exigido em hasAll): identifica o município da
+          // denúncia. Dados novos já enviam; dados antigos ficam sem, sem
+          // quebrar leitura — preparação para expansão multi-município.
+          'municipioId',
+        ])
+        && isValidTitle(data.titulo)
+        && isValidDescription(data.descricao)
+        && isValidLocationName(data.localizacao)
+        && isValidCoordinate(data.latitude, data.longitude)
+        && isValidCategory(data.tipoLixo)
+        && data.status == 'Pendente'
+        && data.dataCriacao == request.time
+        // Proteção do denunciante anônimo: quando anonima==true, usuarioId no
+        // documento público fica null (o UID real vive só na subcoleção
+        // privada ocorrencias/{id}/dono/info, ver isValidDonoInfo). Quando
+        // não-anônima, usuarioId precisa ser o próprio uid (evita forjar autor).
+        && (data.anonima == true
+          ? data.usuarioId == null
+          : data.usuarioId == request.auth.uid)
+        && isValidOccurrenceImages(data)
+        && isValidPublicUserFields(data)
+        && (!('videoUrl' in data) || isOptionalVideoUrl(data.videoUrl))
+        && (!('fixada' in data) || data.fixada == false)
+        // Proteção do denunciante: se marcada como anônima, nome/foto não
+        // podem ser gravados — a identidade nunca chega ao documento.
+        && data.anonima is bool
+        && (!data.anonima
+          || ((!('usuarioNome' in data) || data.usuarioNome == null)
+            && (!('usuarioFotoUrl' in data) || data.usuarioFotoUrl == null)))
+        && data.likes is int && data.likes == 0
+        && data.dislikes is int && data.dislikes == 0
+        && data.comments is int && data.comments == 0
+        && data.likedBy is list && data.likedBy.size() == 0
+        && data.dislikedBy is list && data.dislikedBy.size() == 0;
+    }
+
+    // Dono de uma ocorrência: campo direto (não-anônima) ou, quando anônima,
+    // a subcoleção privada dono/info (só o próprio uid consegue ler/criar).
+    function isOwner() {
+      return signedIn()
+        && (resource.data.usuarioId == request.auth.uid
+          || (resource.data.anonima == true
+            && exists(/databases/$(database)/documents/ocorrencias/$(resource.id)/dono/info)
+            && get(/databases/$(database)/documents/ocorrencias/$(resource.id)/dono/info).data.usuarioId == request.auth.uid));
+    }
+
+    // Subcoleção privada que guarda o UID real do denunciante quando a
+    // ocorrência é anônima. Só o próprio dono ou a autoridade podem ler —
+    // protege contra correlacionar denúncias anônimas por usuarioId (S2).
+    function isValidDonoInfo(data) {
+      return data.keys().hasOnly(['usuarioId'])
+        && data.usuarioId == request.auth.uid;
+    }
+
+    function addedCurrentUser(before, after) {
+      return !(request.auth.uid in before)
+        && request.auth.uid in after
+        && after.size() == before.size() + 1
+        && after.hasAll(before);
+    }
+
+    function removedCurrentUser(before, after) {
+      return request.auth.uid in before
+        && !(request.auth.uid in after)
+        && after.size() == before.size() - 1
+        && before.hasAll(after);
+    }
+
+    function validReactionFields(data) {
+      return data.likes is int
+        && data.dislikes is int
+        && data.likedBy is list
+        && data.dislikedBy is list
+        && data.likes == data.likedBy.size()
+        && data.dislikes == data.dislikedBy.size()
+        && !(request.auth.uid in data.likedBy && request.auth.uid in data.dislikedBy);
+    }
+
+    function isValidReactionUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likes', 'likedBy', 'dislikes', 'dislikedBy'])
+        && validReactionFields(request.resource.data)
+        && (
+          // Add like.
+          (addedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && request.resource.data.dislikedBy == resource.data.dislikedBy
+            && request.resource.data.likes == resource.data.likes + 1
+            && request.resource.data.dislikes == resource.data.dislikes)
+          ||
+          // Remove like.
+          (removedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && request.resource.data.dislikedBy == resource.data.dislikedBy
+            && request.resource.data.likes == resource.data.likes - 1
+            && request.resource.data.dislikes == resource.data.dislikes)
+          ||
+          // Add dislike.
+          (request.resource.data.likedBy == resource.data.likedBy
+            && addedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes
+            && request.resource.data.dislikes == resource.data.dislikes + 1)
+          ||
+          // Remove dislike.
+          (request.resource.data.likedBy == resource.data.likedBy
+            && removedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes
+            && request.resource.data.dislikes == resource.data.dislikes - 1)
+          ||
+          // Switch dislike to like.
+          (addedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && removedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes + 1
+            && request.resource.data.dislikes == resource.data.dislikes - 1)
+          ||
+          // Switch like to dislike.
+          (removedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && addedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes - 1
+            && request.resource.data.dislikes == resource.data.dislikes + 1)
+        );
+    }
+
+    // Autoridade só pode mexer nos campos de verificação. Ao confirmar, grava
+    // quem verificou (UID + nome) e quando, formando trilha de auditoria.
+    // statusOficial é limpo (null) ao confirmar caso estivesse em 'em_analise'.
+    function isValidVerificacaoUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['verificada', 'verificadaPor', 'verificadaPorNome', 'verificadaEm', 'statusOficial'])
+        && request.resource.data.verificada is bool
+        && (
+          (request.resource.data.verificada == true
+            && request.resource.data.verificadaPor == request.auth.uid
+            && request.resource.data.verificadaPorNome is string
+            && request.resource.data.verificadaPorNome.size() >= 1
+            && request.resource.data.verificadaPorNome.size() <= 80
+            && request.resource.data.verificadaEm == request.time)
+          ||
+          request.resource.data.verificada == false
+        );
+    }
+
+    // Autoridade move a denúncia pelo ciclo oficial. Estados pré-confirmação
+    // (em_analise / nao_confirmada) exigem verificada==false; estados pós-
+    // confirmação (encaminhada / resolvida) exigem verificada==true e gravam
+    // carimbo de tempo de auditoria. null reverte o status atual.
+    function isValidStatusOficialUpdate() {
+      return (
+        // Reverter (volta para pendente ou confirmada, conforme verificada).
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial'])
+          && request.resource.data.statusOficial == null)
+        ||
+        // Triagem pré-confirmação.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial'])
+          && request.resource.data.statusOficial in ['em_analise', 'nao_confirmada']
+          && resource.data.get('verificada', false) == false)
+        ||
+        // Encaminhar ao órgão responsável (só após confirmada).
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial', 'encaminhadaEm'])
+          && request.resource.data.statusOficial == 'encaminhada'
+          && resource.data.get('verificada', false) == true
+          && request.resource.data.encaminhadaEm == request.time)
+        ||
+        // Marcar como resolvida (só após confirmada).
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial', 'resolvidaEm'])
+          && request.resource.data.statusOficial == 'resolvida'
+          && resource.data.get('verificada', false) == true
+          && request.resource.data.resolvidaEm == request.time)
+      );
+    }
+
+    function isValidFixadaUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fixada'])
+        && request.resource.data.fixada is bool;
+    }
+
+    // Autoridade oculta/reexibe conteúdo denunciado por abuso (moderação).
+    function isValidOcultarUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['oculto'])
+        && request.resource.data.oculto is bool;
+    }
+
+    // Evento da linha do tempo de auditoria (subcoleção historico). Append-only:
+    // registra qual ação oficial ocorreu, opcionalmente quem, e quando.
+    function isValidHistoricoEvento(data) {
+      return data.keys().hasOnly(['status', 'por', 'data'])
+        && data.status in ['verificada', 'em_analise', 'nao_confirmada', 'encaminhada', 'resolvida']
+        && (!('por' in data) || (data.por is string && data.por.size() >= 1 && data.por.size() <= 80))
+        && data.data == request.time;
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasOnly([
+          'texto', 'userId', 'userName', 'userPhotoUrl', 'dataCriacao',
+          'parentId', 'likedBy', 'likes',
+        ])
+        && data.texto is string
+        && data.texto.size() >= 1
+        && data.texto.size() <= 500
+        && naoEmBranco(data.texto)
+        && data.userId == request.auth.uid
+        && data.userName is string
+        && data.userName.size() >= 1
+        && data.userName.size() <= 80
+        && isOptionalPublicPhoto(data.userPhotoUrl)
+        && data.dataCriacao == request.time
+        && (!('parentId' in data) || data.parentId == null
+          || (data.parentId is string && data.parentId.size() > 0 && data.parentId.size() <= 200))
+        && data.likedBy is list && data.likedBy.size() == 0
+        && data.likes is int && data.likes == 0;
+    }
+
+    // Curtir/descurtir comentário: o usuário só adiciona/remove o próprio UID.
+    function isValidCommentLikeUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy', 'likes'])
+        && request.resource.data.likedBy is list
+        && request.resource.data.likes is int
+        && request.resource.data.likes == request.resource.data.likedBy.size()
+        && (
+          (addedCurrentUser(resource.data.get('likedBy', []), request.resource.data.likedBy)
+            && request.resource.data.likes == resource.data.get('likes', 0) + 1)
+          ||
+          (removedCurrentUser(resource.data.get('likedBy', []), request.resource.data.likedBy)
+            && request.resource.data.likes == resource.data.get('likes', 0) - 1)
+        );
+    }
+
+    function isValidCommentTextUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['texto'])
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.texto is string
+        && request.resource.data.texto.size() >= 1
+        && request.resource.data.texto.size() <= 500
+        && naoEmBranco(request.resource.data.texto);
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasOnly(['nome', 'bio', 'bairro', 'fotoUrl'])
+        && data.nome is string
+        && data.nome.size() >= 1
+        && data.nome.size() <= 40
+        && naoEmBranco(data.nome)
+        && data.bio is string
+        && data.bio.size() <= 150
+        && data.bairro is string
+        && data.bairro.size() <= 40
+        && (!('fotoUrl' in data) || isOptionalPublicPhoto(data.fotoUrl));
+    }
+
+    function isValidFavorite(data, ocorrenciaId) {
+      return data.keys().hasOnly(['ocorrenciaId', 'salvoEm'])
+        && data.ocorrenciaId == ocorrenciaId
+        && data.salvoEm == request.time
+        && exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId));
+    }
+
+    function isValidSocialLink(data, uid) {
+      return data.keys().hasOnly(['uid', 'criadoEm'])
+        && data.uid == uid
+        && data.criadoEm == request.time;
+    }
+
+    function isValidNotification(data, donoId) {
+      return data.keys().hasOnly([
+          'tipo',
+          'deUsuarioNome',
+          'ocorrenciaId',
+          'ocorrenciaTitulo',
+          'dataCriacao',
+          'lida',
+        ])
+        && data.tipo in [
+          'comentario',
+          'curtida',
+          'status_em_analise',
+          'status_confirmada',
+          'status_nao_confirmada',
+          'status_encaminhada',
+          'status_resolvida',
+        ]
+        && data.deUsuarioNome is string
+        && data.deUsuarioNome.size() >= 1
+        && data.deUsuarioNome.size() <= 80
+        && data.ocorrenciaId is string
+        && data.ocorrenciaId.size() > 0
+        && data.ocorrenciaTitulo is string
+        && data.ocorrenciaTitulo.size() <= 80
+        && data.dataCriacao == request.time
+        && data.lida == false
+        && exists(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId))
+        && get(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId)).data.usuarioId == donoId;
+    }
+
+    function isValidModerationReport(data) {
+      return data.keys().hasOnly([
+          'alvoTipo',
+          'ocorrenciaId',
+          'comentarioId',
+          'denuncianteId',
+          'motivo',
+          'detalhe',
+          'status',
+          'criadoEm',
+        ])
+        && data.alvoTipo in ['ocorrencia', 'comentario']
+        && data.ocorrenciaId is string
+        && data.ocorrenciaId.size() > 0
+        && exists(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId))
+        && (data.alvoTipo == 'ocorrencia'
+          ? data.comentarioId == null
+          : (data.comentarioId is string && data.comentarioId.size() > 0))
+        && data.denuncianteId == request.auth.uid
+        && data.motivo is string
+        && data.motivo.size() >= 3
+        && data.motivo.size() <= 80
+        && naoEmBranco(data.motivo)
+        && (data.detalhe == null || (data.detalhe is string && data.detalhe.size() <= 240))
+        && data.status == 'pendente'
+        && data.criadoEm == request.time;
+    }
+
+    match /ocorrencias/{ocorrenciaId} {
+      allow read: if signedIn();
+      allow create: if emailVerificado() && isValidOcorrencia(request.resource.data);
+
+      allow update: if emailVerificado() && (
+        // Owner can edit title and description.
+        (isOwner()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['titulo', 'descricao'])
+          && isValidTitle(request.resource.data.titulo)
+          && isValidDescription(request.resource.data.descricao))
+        ||
+        // Owner can propagate public display data after editing profile —
+        // nunca em denúncia anônima (manteria a identidade fora do registro).
+        (isOwner()
+          && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['usuarioNome', 'usuarioFotoUrl'])
+          && resource.data.anonima != true
+          && isValidPublicUserFields(request.resource.data))
+        ||
+        // Reactions: authenticated user can only add/remove their own UID.
+        isValidReactionUpdate()
+        ||
+        // Autoridade pode verificar / desverificar qualquer denúncia.
+        (isAutoridade() && isValidVerificacaoUpdate())
+        ||
+        // Autoridade pode definir status de triagem (em análise / não confirmada).
+        (isAutoridade() && isValidStatusOficialUpdate())
+        ||
+        (isAutoridade() && isValidFixadaUpdate())
+        ||
+        // Autoridade oculta conteúdo denunciado por abuso (moderação).
+        (isAutoridade() && isValidOcultarUpdate())
+      );
+
+      allow delete: if isOwner();
+
+      match /comentarios/{comentarioId} {
+        allow read: if signedIn();
+        allow create: if emailVerificado() && isValidComment(request.resource.data);
+        allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+        // Curtidas/texto pelo autor; ocultação por abuso pela autoridade.
+        allow update: if emailVerificado()
+          && (isValidCommentLikeUpdate() || isValidCommentTextUpdate()
+            || (isAutoridade() && isValidOcultarUpdate()));
+      }
+
+      // Linha do tempo de auditoria: só a autoridade registra eventos das ações
+      // oficiais (verificação / status), e o registro é imutável — nunca pode
+      // ser editado ou apagado (append-only). Escrito no mesmo batch da
+      // mudança de status pelo app.
+      match /historico/{eventoId} {
+        allow read: if signedIn();
+        allow create: if isAutoridade()
+          && isValidHistoricoEvento(request.resource.data);
+        allow update, delete: if false;
+      }
+
+      // UID real do denunciante quando a ocorrência é anônima (S2). Só o
+      // próprio dono ou autoridade leem; ninguém mais consegue correlacionar
+      // denúncias anônimas pelo autor. Criado junto com a ocorrência pai
+      // (mesmo request, mesma transação lógica no client).
+      match /dono/{docId} {
+        allow read: if signedIn()
+          && (resource.data.usuarioId == request.auth.uid || isAutoridade());
+        // !exists() impede que um segundo usuário sobrescreva dono/info já
+        // gravado pelo dono real (create com o mesmo docId seria um set()
+        // substituindo o documento) — só a primeira escrita vale.
+        allow create: if emailVerificado()
+          && !exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/dono/$(docId))
+          && get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.anonima == true
+          && get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.usuarioId == null
+          && isValidDonoInfo(request.resource.data);
+        // Só o próprio dono apaga (ao excluir a denúncia anônima).
+        allow delete: if signedIn() && resource.data.usuarioId == request.auth.uid;
+        allow update: if false;
+      }
+    }
+
+    match /usuarios/{userId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && isValidUserProfile(request.resource.data);
+      // LGPD art. 18 — direito à exclusão: o próprio usuário pode apagar seu perfil.
+      allow delete: if signedIn() && request.auth.uid == userId;
+
+      match /favoritos/{ocorrenciaId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow create, update: if emailVerificado()
+          && request.auth.uid == userId
+          && isValidFavorite(request.resource.data, ocorrenciaId);
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
+
+      // Ponteiros (só o ID) das próprias denúncias anônimas do usuário (S2).
+      // Necessário porque o documento público da ocorrência não guarda mais
+      // usuarioId quando anonima==true — sem isso, "Minhas denúncias" não
+      // conseguiria listar as próprias denúncias anônimas.
+      match /minhas_denuncias_anonimas/{ocorrenciaId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow create: if emailVerificado()
+          && request.auth.uid == userId
+          && get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.anonima == true;
+        allow update, delete: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /seguindo/{alvoUid} {
+        allow read: if signedIn();
+        allow create, update: if emailVerificado()
+          && request.auth.uid == userId
+          && request.auth.uid != alvoUid
+          && isValidSocialLink(request.resource.data, alvoUid);
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /seguidores/{seguidorUid} {
+        allow read: if signedIn();
+        allow create, update: if emailVerificado()
+          && request.auth.uid == seguidorUid
+          && request.auth.uid != userId
+          && isValidSocialLink(request.resource.data, seguidorUid);
+        allow delete: if signedIn() && request.auth.uid == seguidorUid;
+      }
+    }
+
+    match /notificacoes/{donoId}/items/{notifId} {
+      allow read, update, delete: if signedIn() && request.auth.uid == donoId;
+      allow create: if emailVerificado()
+        && request.auth.uid != donoId
+        && isValidNotification(request.resource.data, donoId);
+    }
+
+    // Papéis de autoridade. Cada usuário só lê o próprio papel (para o app
+    // decidir o que mostrar). A escrita é feita apenas pelo Console do Firebase
+    // (Admin), nunca pelo app — por isso nenhuma escrita é permitida aqui.
+    match /denuncias_moderacao/{denunciaId} {
+      allow create: if emailVerificado()
+        && isValidModerationReport(request.resource.data);
+      allow read, update, delete: if isAutoridade();
+    }
+
+    match /roles/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Registro comprovável de consentimento (LGPD art. 8 §1): versão dos
+    // documentos aceitos + carimbo de tempo. O usuário só lê/grava o próprio,
+    // e o aceite precisa ser explícito (termos e privacidade == true).
+    function isValidConsentimento(data) {
+      return data.keys().hasOnly(['versao', 'aceiteTermos', 'aceitePrivacidade', 'aceitoEm'])
+        && data.versao is string
+        && data.versao.size() >= 1
+        && data.versao.size() <= 20
+        && data.aceiteTermos == true
+        && data.aceitePrivacidade == true
+        && data.aceitoEm == request.time;
+    }
+
+    match /consentimentos/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && isValidConsentimento(request.resource.data);
+      // LGPD art. 18 — exclusão de conta apaga também o registro de consentimento.
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

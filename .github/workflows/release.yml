@@ -1,0 +1,58 @@
+name: Release
+
+# Dispara ao empurrar uma tag SemVer (ex.: v1.0.0). Ver o esquema de versão e o
+# checklist de segredos na DOCUMENTACAO_TECNICA (ETAPA 17.9).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # necessário para criar a GitHub Release
+
+jobs:
+  release:
+    name: Build e publicar release
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # Injeta a config REAL do Firebase (se os segredos existirem) ANTES do
+      # setup — como o setup só gera placeholders "se não existir", o release
+      # usa a config real e o APK/web conectam ao projeto de produção. Sem os
+      # segredos, cai no placeholder (build ainda compila, mas não conecta).
+      - name: Injetar config real do Firebase (se disponível)
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            echo "google-services.json real injetado."
+          fi
+          if [ -n "$FIREBASE_OPTIONS_DART" ]; then
+            printf '%s' "$FIREBASE_OPTIONS_DART" > lib/firebase_options.dart
+            echo "firebase_options.dart real injetado."
+          fi
+
+      - name: Configurar Flutter (setup compartilhado)
+        uses: ./.github/actions/flutter-setup
+        with:
+          maps-api-key: ${{ secrets.MAPS_API_KEY }}
+
+      - name: Build APK release
+        run: flutter build apk --release
+
+      - name: Criar GitHub Release (notas automáticas)
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+
+      # ── HOOK DP-1 (E2E) ──────────────────────────────────────────────────
+      # Se a decisão for a Opção A (integration_test + emuladores), o job de
+      # E2E entra aqui (ou num staging.yml dedicado), reusando o job de
+      # emulador que já existe no ci.yml. Ver Decisões Pendentes na doc.
