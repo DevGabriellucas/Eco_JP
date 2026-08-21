@@ -1,0 +1,39 @@
+import 'package:intl/intl.dart';
+
+/// Formata uma data como tempo relativo curto em português:
+/// "agora", "há 5 min", "há 2 h", "ontem", "há 3 dias" e, para datas mais
+/// antigas que uma semana, a data absoluta (dd/MM/yyyy).
+///
+/// Usado no feed, nos comentários e nas notificações para deixar o tempo
+/// mais legível do que uma data/hora completa.
+String tempoRelativo(DateTime? data, {DateTime? agora}) {
+  if (data == null) return '';
+  final referencia = agora ?? DateTime.now();
+  final diff = referencia.difference(data);
+
+  // Datas no futuro (relógios fora de sincronia) caem em "agora".
+  if (diff.isNegative) return 'agora';
+
+  if (diff.inSeconds < 60) return 'agora';
+  if (diff.inMinutes < 60) return 'há ${diff.inMinutes} min';
+  if (diff.inHours < 24) return 'há ${diff.inHours} h';
+  if (diff.inDays == 1) return 'ontem';
+  if (diff.inDays < 7) return 'há ${diff.inDays} dias';
+
+  return DateFormat('dd/MM/yyyy').format(data);
+}
+
+/// Rótulo do "grupo" de uma data, usado para separar listas (ex.: notificações)
+/// em seções: "Hoje", "Ontem", "Esta semana" e "Mais antigas".
+String grupoPorData(DateTime? data, {DateTime? agora}) {
+  if (data == null) return 'Mais antigas';
+  final referencia = agora ?? DateTime.now();
+  final hoje = DateTime(referencia.year, referencia.month, referencia.day);
+  final dia = DateTime(data.year, data.month, data.day);
+  final diffDias = hoje.difference(dia).inDays;
+
+  if (diffDias <= 0) return 'Hoje';
+  if (diffDias == 1) return 'Ontem';
+  if (diffDias < 7) return 'Esta semana';
+  return 'Mais antigas';
+}

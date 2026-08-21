@@ -1,0 +1,49 @@
+name: eco_jp
+description: "Eco JP App"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  flutter_riverpod: ^2.4.1
+  cloud_firestore: ^4.13.5
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.10.1
+  firebase_crashlytics: ^3.3.6
+  firebase_app_check: ^0.2.2
+  go_router: ^12.1.1
+  app_links: ^7.2.1
+  connectivity_plus: ^5.0.1
+  intl: ^0.19.0
+  shared_preferences: ^2.2.2
+  google_maps_flutter: ^2.5.0
+  flutter_svg: ^2.0.7
+  video_player: ^2.7.2
+  geolocator: ^9.0.2
+  image_picker: ^1.0.4
+  url_launcher: ^6.2.4
+  image: ^4.1.1
+  firebase_analytics: ^10.7.0
+  google_sign_in: ^6.2.0
+  google_generative_ai: ^0.4.1
+  geocoding: ^2.1.1
+  pdf: ^3.10.5
+  printing: ^5.11.0
+  google_fonts: ^6.2.0
+  share_plus: ^7.2.1
+  cached_network_image: ^3.3.1
+  http: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
