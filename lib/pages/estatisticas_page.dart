@@ -151,9 +151,9 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
 
     for (final o in ocorrencias) {
       if (o.verificada) {
-        if (o.statusOficial == 'resolvida') {
+        if (o.statusOficial == StatusOficial.resolvida) {
           resolvidas++;
-        } else if (o.statusOficial == 'encaminhada') {
+        } else if (o.statusOficial == StatusOficial.encaminhada) {
           encaminhadas++;
         } else {
           confirmadas++;
@@ -166,9 +166,9 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
           final d = o.resolvidaEm!.difference(o.dataCriacao!);
           if (!d.isNegative) tempoResolucao.add(d);
         }
-      } else if (o.statusOficial == 'em_analise') {
+      } else if (o.statusOficial == StatusOficial.emAnalise) {
         emAnalise++;
-      } else if (o.statusOficial == 'nao_confirmada') {
+      } else if (o.statusOficial == StatusOficial.naoConfirmada) {
         naoConfirmadas++;
       } else {
         pendentes++;
@@ -421,8 +421,8 @@ class _BotaoExportar extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: exportando ? null : onTap,
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF16A34A),
-          side: const BorderSide(color: Color(0xFF16A34A)),
+          foregroundColor: AppColors.successStrong,
+          side: const BorderSide(color: AppColors.successStrong),
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),

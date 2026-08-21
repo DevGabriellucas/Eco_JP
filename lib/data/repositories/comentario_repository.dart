@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../models/comentario_model.dart';
 import '../../services/rate_limiter.dart';
+import '../../utils/log_erros.dart';
 import '../../utils/texto.dart';
 
 /// Acesso à subcoleção `ocorrencias/{id}/comentarios`: listagem, contagem,
@@ -88,7 +88,7 @@ class ComentarioRepository {
       'comentario_${_currentUserId ?? "anon"}',
       RateLimiter.intervaloComentario,
     );
-    try {
+    return comLogDeErro('adicionar comentário', () async {
       // Higieniza o texto no choke point de persistência: cobre todas as
       // entradas (input principal, resposta rápida) sem depender de cada UI.
       final dados = comentario.toMap();
@@ -97,27 +97,21 @@ class ComentarioRepository {
           .doc(ocorrenciaId)
           .collection('comentarios')
           .add(dados);
-    } catch (e) {
-      debugPrint('Erro ao adicionar comentário: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<void> editarComentario(
     String ocorrenciaId,
     String comentarioId,
     String texto,
-  ) async {
-    try {
+  ) {
+    return comLogDeErro('editar comentário', () async {
       await _ocorrenciasRef
           .doc(ocorrenciaId)
           .collection('comentarios')
           .doc(comentarioId)
           .update({'texto': sanitizarTexto(texto)});
-    } catch (e) {
-      debugPrint('Erro ao editar comentário: $e');
-      rethrow;
-    }
+    });
   }
 
   /// Curte/descurte um comentário (toggle do próprio UID via transação).
@@ -125,12 +119,12 @@ class ComentarioRepository {
     String ocorrenciaId,
     String comentarioId,
     String userId,
-  ) async {
+  ) {
     final ref = _ocorrenciasRef
         .doc(ocorrenciaId)
         .collection('comentarios')
         .doc(comentarioId);
-    try {
+    return comLogDeErro('curtir comentário', () async {
       await _firestore.runTransaction((txn) async {
         final doc = await txn.get(ref);
         if (!doc.exists) return;
@@ -142,17 +136,14 @@ class ComentarioRepository {
         }
         txn.update(ref, {'likedBy': likedBy, 'likes': likedBy.length});
       });
-    } catch (e) {
-      debugPrint('Erro ao curtir comentário: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<void> deletarComentario(
     String ocorrenciaId,
     String comentarioId,
-  ) async {
-    try {
+  ) {
+    return comLogDeErro('deletar comentário', () async {
       final comentariosRef = _ocorrenciasRef
           .doc(ocorrenciaId)
           .collection('comentarios');
@@ -166,10 +157,7 @@ class ComentarioRepository {
         batch.delete(doc.reference);
       }
       await batch.commit();
-    } catch (e) {
-      debugPrint('Erro ao deletar comentário: $e');
-      rethrow;
-    }
+    });
   }
 
   /// Oculta/reexibe um comentário denunciado por abuso.
@@ -177,16 +165,13 @@ class ComentarioRepository {
     String ocorrenciaId,
     String comentarioId, {
     required bool oculto,
-  }) async {
-    try {
+  }) {
+    return comLogDeErro('ocultar comentário', () async {
       await _ocorrenciasRef
           .doc(ocorrenciaId)
           .collection('comentarios')
           .doc(comentarioId)
           .update({'oculto': oculto});
-    } catch (e) {
-      debugPrint('Erro ao ocultar comentário: $e');
-      rethrow;
-    }
+    });
   }
 }

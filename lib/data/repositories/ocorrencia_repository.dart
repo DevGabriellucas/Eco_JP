@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 
+import '../../models/occurrence_types.dart';
 import '../../models/ocorrencia_model.dart';
 import '../../services/analytics_service.dart';
 import '../../services/rate_limiter.dart';
+import '../../utils/log_erros.dart';
 import '../../utils/texto.dart';
 
 /// Acesso à coleção `ocorrencias` (denúncias) no Firestore: criação, feed,
@@ -49,7 +50,7 @@ class OcorrenciaRepository {
       'denuncia_${_currentUserId ?? "anon"}',
       RateLimiter.intervaloDenuncia,
     );
-    try {
+    return comLogDeErro('salvar ocorrência', () async {
       // Higieniza os textos livres no choke point de persistência (remove
       // controle/zero-width/bidi; título e localização viram linha única).
       final dados = ocorrencia.toMap();
@@ -84,10 +85,7 @@ class OcorrenciaRepository {
           anonima: ocorrencia.anonima,
         ),
       );
-    } catch (e) {
-      debugPrint('Erro ao salvar ocorrência: $e');
-      rethrow;
-    }
+    });
   }
 
   // ── READ ──────────────────────────────────────────────────────────────────
@@ -404,8 +402,8 @@ class OcorrenciaRepository {
 
   // ── DELETE ────────────────────────────────────────────────────────────────
 
-  Future<void> deletarOcorrencia(String id) async {
-    try {
+  Future<void> deletarOcorrencia(String id) {
+    return comLogDeErro('deletar ocorrência', () async {
       // Denúncia anônima tem documentos auxiliares (dono/info e o ponteiro
       // em minhas_denuncias_anonimas) que não são apagados em cascata pelo
       // Firestore — precisam ser limpos manualmente antes/junto da exclusão
@@ -426,26 +424,20 @@ class OcorrenciaRepository {
       }
 
       await ref.delete();
-    } catch (e) {
-      debugPrint('Erro ao deletar ocorrência: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<void> atualizarTextos(
     String id,
     String titulo,
     String descricao,
-  ) async {
-    try {
+  ) {
+    return comLogDeErro('editar denúncia', () async {
       await _ocorrenciasRef.doc(id).update({
         'titulo': sanitizarLinhaUnica(titulo),
         'descricao': sanitizarTexto(descricao),
       });
-    } catch (e) {
-      debugPrint('Erro ao editar denúncia: $e');
-      rethrow;
-    }
+    });
   }
 
   // ── VERIFICAÇÃO OFICIAL (autoridade) ──────────────────────────────────────
@@ -457,8 +449,8 @@ class OcorrenciaRepository {
     required bool verificar,
     required String nomeAutoridade,
     String? autoridadeUid,
-  }) async {
-    try {
+  }) {
+    return comLogDeErro('definir verificação', () async {
       if (verificar) {
         final batch = _firestore.batch();
         batch.update(_ocorrenciasRef.doc(id), {
@@ -477,59 +469,46 @@ class OcorrenciaRepository {
           'statusOficial': null,
         });
       }
-    } catch (e) {
-      debugPrint('Erro ao definir verificação: $e');
-      rethrow;
-    }
+    });
   }
 
-  /// Define o status do ciclo oficial da autoridade.
-  /// [status]: 'em_analise', 'nao_confirmada', 'encaminhada', 'resolvida' ou
-  /// null (reverter). Grava o carimbo de tempo de auditoria ao encaminhar/resolver.
-  Future<void> definirStatusOficial(String id, String? status) async {
-    try {
-      final data = <String, dynamic>{'statusOficial': status};
-      if (status == 'encaminhada') {
+  /// Define o status do ciclo oficial da autoridade. [status] null reverte.
+  /// Grava o carimbo de tempo de auditoria ao encaminhar/resolver.
+  Future<void> definirStatusOficial(String id, StatusOficial? status) {
+    return comLogDeErro('definir status oficial', () async {
+      final data = <String, dynamic>{'statusOficial': status?.valor};
+      if (status == StatusOficial.encaminhada) {
         data['encaminhadaEm'] = FieldValue.serverTimestamp();
-      } else if (status == 'resolvida') {
+      } else if (status == StatusOficial.resolvida) {
         data['resolvidaEm'] = FieldValue.serverTimestamp();
       }
       final batch = _firestore.batch();
       batch.update(_ocorrenciasRef.doc(id), data);
       // Reverter (status == null) não gera evento — é um "desfazer".
       if (status != null) {
-        _registrarHistorico(batch, id, status);
+        _registrarHistorico(batch, id, status.valor);
       }
       await batch.commit();
       if (status != null) {
-        unawaited(_analytics.statusAvancado(statusOficial: status));
+        unawaited(_analytics.statusAvancado(statusOficial: status.valor));
       }
-    } catch (e) {
-      debugPrint('Erro ao definir status oficial: $e');
-      rethrow;
-    }
+    });
   }
 
-  Future<void> definirFixada(String id, {required bool fixada}) async {
-    try {
+  Future<void> definirFixada(String id, {required bool fixada}) {
+    return comLogDeErro('definir destaque da denuncia', () async {
       await _ocorrenciasRef.doc(id).update({'fixada': fixada});
-    } catch (e) {
-      debugPrint('Erro ao definir destaque da denuncia: $e');
-      rethrow;
-    }
+    });
   }
 
   // ── MODERAÇÃO (autoridade) ────────────────────────────────────────────────
 
   /// Oculta/reexibe uma ocorrência denunciada por abuso. Conteúdo oculto some
   /// do feed do cidadão (ver filtro em listarFeedComFixadas / home_page).
-  Future<void> definirOculto(String id, {required bool oculto}) async {
-    try {
+  Future<void> definirOculto(String id, {required bool oculto}) {
+    return comLogDeErro('ocultar denúncia', () async {
       await _ocorrenciasRef.doc(id).update({'oculto': oculto});
-    } catch (e) {
-      debugPrint('Erro ao ocultar denúncia: $e');
-      rethrow;
-    }
+    });
   }
 
   /// Retorna denúncias pendentes de verificação (mais antigas primeiro).
@@ -562,7 +541,9 @@ class OcorrenciaRepository {
                 ),
               )
               .where(
-                (o) => !o.verificada && o.statusOficial != 'nao_confirmada',
+                (o) =>
+                    !o.verificada &&
+                    o.statusOficial != StatusOficial.naoConfirmada,
               )
               .toList()
             ..sort((a, b) {
@@ -582,9 +563,23 @@ class OcorrenciaRepository {
   //   • Mesma lógica simétrica para dislike.
   //   Usamos transação Firestore para evitar race condition.
 
-  Future<void> toggleLike(String ocorrenciaId, String userId) async {
+  Future<void> toggleLike(String ocorrenciaId, String userId) =>
+      _toggleReacao(ocorrenciaId, userId, curtir: true);
+
+  Future<void> toggleDislike(String ocorrenciaId, String userId) =>
+      _toggleReacao(ocorrenciaId, userId, curtir: false);
+
+  // Alterna a reação do usuário de forma mutuamente exclusiva ([curtir] true =
+  // like; false = dislike). Tocar na reação já ativa a remove (toggle off);
+  // tocar na oposta troca (remove a anterior, adiciona a nova). Usa transação
+  // para evitar race condition; os contadores são sempre derivados das listas.
+  Future<void> _toggleReacao(
+    String ocorrenciaId,
+    String userId, {
+    required bool curtir,
+  }) {
     final ref = _ocorrenciasRef.doc(ocorrenciaId);
-    try {
+    return comLogDeErro('dar ${curtir ? 'like' : 'dislike'}', () async {
       await _firestore.runTransaction((txn) async {
         final doc = await txn.get(ref);
         if (!doc.exists) return;
@@ -592,42 +587,15 @@ class OcorrenciaRepository {
         final likedBy = List<String>.from(doc.data()!['likedBy'] ?? []);
         final dislikedBy = List<String>.from(doc.data()!['dislikedBy'] ?? []);
 
-        if (likedBy.contains(userId)) {
-          likedBy.remove(userId); // desfaz like
+        // Lista da reação tocada e a oposta (aliases das listas acima).
+        final tocada = curtir ? likedBy : dislikedBy;
+        final oposta = curtir ? dislikedBy : likedBy;
+
+        if (tocada.contains(userId)) {
+          tocada.remove(userId); // desfaz a reação
         } else {
-          likedBy.add(userId); // adiciona like
-          dislikedBy.remove(userId); // remove dislike se existia
-        }
-
-        // Contadores sempre derivados das listas (mantém likes == likedBy.length).
-        txn.update(ref, {
-          'likedBy': likedBy,
-          'dislikedBy': dislikedBy,
-          'likes': likedBy.length,
-          'dislikes': dislikedBy.length,
-        });
-      });
-    } catch (e) {
-      debugPrint('Erro ao dar like: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> toggleDislike(String ocorrenciaId, String userId) async {
-    final ref = _ocorrenciasRef.doc(ocorrenciaId);
-    try {
-      await _firestore.runTransaction((txn) async {
-        final doc = await txn.get(ref);
-        if (!doc.exists) return;
-
-        final likedBy = List<String>.from(doc.data()!['likedBy'] ?? []);
-        final dislikedBy = List<String>.from(doc.data()!['dislikedBy'] ?? []);
-
-        if (dislikedBy.contains(userId)) {
-          dislikedBy.remove(userId); // desfaz dislike
-        } else {
-          dislikedBy.add(userId); // adiciona dislike
-          likedBy.remove(userId); // remove like se existia
+          tocada.add(userId); // adiciona a reação
+          oposta.remove(userId); // remove a oposta se existia
         }
 
         txn.update(ref, {
@@ -637,9 +605,6 @@ class OcorrenciaRepository {
           'dislikes': dislikedBy.length,
         });
       });
-    } catch (e) {
-      debugPrint('Erro ao dar dislike: $e');
-      rethrow;
-    }
+    });
   }
 }

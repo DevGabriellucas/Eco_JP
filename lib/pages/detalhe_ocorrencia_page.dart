@@ -26,7 +26,7 @@ import '../widgets/occurrence_comments_sheet.dart';
 //  PALETA
 // ─────────────────────────────────────────
 
-class _C {
+class _Cores {
   // Acentos — iguais nos dois temas. Os neutros (fundo/superfície/borda/
   // texto/dica) vêm de `context.pal`.
   static const orange = Color(0xFFFF8A1F);
@@ -69,7 +69,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
   late bool _verificada;
   String? _verificadaPorNome;
   DateTime? _verificadaEm;
-  String? _statusOficial;
+  StatusOficial? _statusOficial;
   bool _processandoVerif = false;
 
   @override
@@ -147,8 +147,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
     }
   }
 
-  /// Define o status de triagem (em_analise / nao_confirmada / null = reverter).
-  Future<void> _handleStatusOficial(String? novoStatus) async {
+  /// Define o status de triagem (emAnalise / naoConfirmada / null = reverter).
+  Future<void> _handleStatusOficial(StatusOficial? novoStatus) async {
     if (_processandoVerif) return;
     setState(() => _processandoVerif = true);
 
@@ -173,7 +173,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
         _processandoVerif = false;
       });
       if (novoStatus != null && nomeAutoridade != null) {
-        _notificarStatusOficial('status_$novoStatus', nomeAutoridade);
+        _notificarStatusOficial('status_${novoStatus.valor}', nomeAutoridade);
       }
     } catch (_) {
       if (!mounted) return;
@@ -335,20 +335,21 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (_verificada && _statusOficial == 'resolvida') ...[
+                          if (_verificada &&
+                              _statusOficial == StatusOficial.resolvida) ...[
                             const _StatusOficialBanner(
                               label:
                                   'Resolvida — tratada pelo órgão responsável',
                               icon: Icons.check_circle,
-                              color: _C.green,
+                              color: _Cores.green,
                             ),
                             const SizedBox(height: 10),
                           ] else if (_verificada &&
-                              _statusOficial == 'encaminhada') ...[
+                              _statusOficial == StatusOficial.encaminhada) ...[
                             const _StatusOficialBanner(
                               label: 'Encaminhada ao órgão responsável',
                               icon: Icons.send,
-                              color: _C.blue,
+                              color: _Cores.blue,
                             ),
                             const SizedBox(height: 10),
                           ] else if (_verificada) ...[
@@ -357,19 +358,21 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                               data: _verificadaEm,
                             ),
                             const SizedBox(height: 10),
-                          ] else if (_statusOficial == 'em_analise') ...[
+                          ] else if (_statusOficial ==
+                              StatusOficial.emAnalise) ...[
                             const _StatusOficialBanner(
                               label: 'Em análise pela autoridade',
                               icon: Icons.search,
-                              color: _C.orange,
+                              color: _Cores.orange,
                             ),
                             const SizedBox(height: 10),
-                          ] else if (_statusOficial == 'nao_confirmada') ...[
+                          ] else if (_statusOficial ==
+                              StatusOficial.naoConfirmada) ...[
                             const _StatusOficialBanner(
                               label:
                                   'Não confirmada — problema não encontrado no local',
                               icon: Icons.cancel_outlined,
-                              color: _C.red,
+                              color: _Cores.red,
                             ),
                             const SizedBox(height: 10),
                           ],
@@ -420,7 +423,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                     : Icons.thumb_up_alt_outlined,
                                 count: _likes,
                                 active: _userLiked,
-                                activeColor: _C.green,
+                                activeColor: _Cores.green,
                                 onTap: _handleLike,
                               ),
                               const SizedBox(width: 8),
@@ -430,7 +433,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                     : Icons.thumb_down_alt_outlined,
                                 count: _dislikes,
                                 active: _userDisliked,
-                                activeColor: _C.red,
+                                activeColor: _Cores.red,
                                 onTap: _handleDislike,
                               ),
                               const SizedBox(width: 8),
@@ -449,13 +452,15 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                               processando: _processandoVerif,
                               onConfirmar: _toggleVerificacao,
                               onEmAnalise: () =>
-                                  _handleStatusOficial('em_analise'),
-                              onNaoConfirmada: () =>
-                                  _handleStatusOficial('nao_confirmada'),
-                              onEncaminhar: () =>
-                                  _handleStatusOficial('encaminhada'),
+                                  _handleStatusOficial(StatusOficial.emAnalise),
+                              onNaoConfirmada: () => _handleStatusOficial(
+                                StatusOficial.naoConfirmada,
+                              ),
+                              onEncaminhar: () => _handleStatusOficial(
+                                StatusOficial.encaminhada,
+                              ),
                               onResolver: () =>
-                                  _handleStatusOficial('resolvida'),
+                                  _handleStatusOficial(StatusOficial.resolvida),
                               onReverter: () => _handleStatusOficial(null),
                             ),
                           ],
@@ -608,7 +613,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Row(
               children: [
-                const Icon(Icons.location_on, size: 14, color: _C.orange),
+                const Icon(Icons.location_on, size: 14, color: _Cores.orange),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -617,7 +622,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                         : o.localizacao,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: _C.orange,
+                      color: _Cores.orange,
                       fontWeight: FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -635,8 +640,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
               child: OutlinedButton.icon(
                 onPressed: _comoChegar,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: _C.green,
-                  side: const BorderSide(color: _C.green),
+                  foregroundColor: _Cores.green,
+                  side: const BorderSide(color: _Cores.green),
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -1107,13 +1112,13 @@ class _VerificadaBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: _C.green.withValues(alpha: 0.10),
+        color: _Cores.green.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _C.green.withValues(alpha: 0.5)),
+        border: Border.all(color: _Cores.green.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.verified, color: _C.green, size: 22),
+          const Icon(Icons.verified, color: _Cores.green, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -1195,7 +1200,7 @@ class _StatusOficialBanner extends StatelessWidget {
 
 class _PainelAutoridade extends StatelessWidget {
   final bool verificada;
-  final String? statusOficial;
+  final StatusOficial? statusOficial;
   final bool processando;
   final VoidCallback onConfirmar;
   final VoidCallback onEmAnalise;
@@ -1225,7 +1230,7 @@ class _PainelAutoridade extends StatelessWidget {
           child: SizedBox(
             width: 22,
             height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2, color: _C.green),
+            child: CircularProgressIndicator(strokeWidth: 2, color: _Cores.green),
           ),
         ),
       );
@@ -1234,7 +1239,7 @@ class _PainelAutoridade extends StatelessWidget {
     // ── Estados pós-confirmação (verificada == true) ──
     if (verificada) {
       // Estado: Resolvida
-      if (statusOficial == 'resolvida') {
+      if (statusOficial == StatusOficial.resolvida) {
         return _botaoTexto(
           label: 'Reverter para encaminhada',
           onTap: onEncaminhar,
@@ -1242,13 +1247,13 @@ class _PainelAutoridade extends StatelessWidget {
       }
 
       // Estado: Encaminhada
-      if (statusOficial == 'encaminhada') {
+      if (statusOficial == StatusOficial.encaminhada) {
         return Column(
           children: [
             _botao(
               label: 'Marcar como resolvida',
               icon: Icons.check_circle_outline,
-              color: _C.green,
+              color: _Cores.green,
               onTap: onResolver,
             ),
             const SizedBox(height: 8),
@@ -1263,7 +1268,7 @@ class _PainelAutoridade extends StatelessWidget {
           _botao(
             label: 'Encaminhar ao órgão',
             icon: Icons.send,
-            color: _C.blue,
+            color: _Cores.blue,
             onTap: onEncaminhar,
           ),
           const SizedBox(height: 8),
@@ -1275,7 +1280,7 @@ class _PainelAutoridade extends StatelessWidget {
     // ── Estados pré-confirmação (verificada == false) ──
 
     // Estado: Em análise
-    if (statusOficial == 'em_analise') {
+    if (statusOficial == StatusOficial.emAnalise) {
       return Column(
         children: [
           Row(
@@ -1284,7 +1289,7 @@ class _PainelAutoridade extends StatelessWidget {
                 child: _botao(
                   label: 'Confirmar',
                   icon: Icons.verified_outlined,
-                  color: _C.green,
+                  color: _Cores.green,
                   onTap: onConfirmar,
                 ),
               ),
@@ -1293,7 +1298,7 @@ class _PainelAutoridade extends StatelessWidget {
                 child: _botao(
                   label: 'Não confirmada',
                   icon: Icons.cancel_outlined,
-                  color: _C.red,
+                  color: _Cores.red,
                   onTap: onNaoConfirmada,
                 ),
               ),
@@ -1306,7 +1311,7 @@ class _PainelAutoridade extends StatelessWidget {
     }
 
     // Estado: Não confirmada
-    if (statusOficial == 'nao_confirmada') {
+    if (statusOficial == StatusOficial.naoConfirmada) {
       return _botao(
         label: 'Reverter para pendente',
         icon: Icons.undo,
@@ -1322,7 +1327,7 @@ class _PainelAutoridade extends StatelessWidget {
           child: _botao(
             label: 'Em análise',
             icon: Icons.search,
-            color: _C.orange,
+            color: _Cores.orange,
             onTap: onEmAnalise,
           ),
         ),
@@ -1331,7 +1336,7 @@ class _PainelAutoridade extends StatelessWidget {
           child: _botao(
             label: 'Confirmar',
             icon: Icons.verified_outlined,
-            color: _C.green,
+            color: _Cores.green,
             onTap: onConfirmar,
           ),
         ),

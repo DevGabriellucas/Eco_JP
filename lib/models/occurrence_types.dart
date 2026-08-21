@@ -272,14 +272,22 @@ enum EstagioOficial {
 
 extension EstagioOficialInfo on EstagioOficial {
   /// Deriva o estágio a partir dos campos persistidos da ocorrência.
-  static EstagioOficial calcular(bool verificada, String? statusOficial) {
+  static EstagioOficial calcular(bool verificada, StatusOficial? statusOficial) {
     if (verificada) {
-      if (statusOficial == 'resolvida') return EstagioOficial.resolvida;
-      if (statusOficial == 'encaminhada') return EstagioOficial.encaminhada;
+      if (statusOficial == StatusOficial.resolvida) {
+        return EstagioOficial.resolvida;
+      }
+      if (statusOficial == StatusOficial.encaminhada) {
+        return EstagioOficial.encaminhada;
+      }
       return EstagioOficial.confirmada;
     }
-    if (statusOficial == 'em_analise') return EstagioOficial.emAnalise;
-    if (statusOficial == 'nao_confirmada') return EstagioOficial.naoConfirmada;
+    if (statusOficial == StatusOficial.emAnalise) {
+      return EstagioOficial.emAnalise;
+    }
+    if (statusOficial == StatusOficial.naoConfirmada) {
+      return EstagioOficial.naoConfirmada;
+    }
     return EstagioOficial.pendente;
   }
 
@@ -313,7 +321,7 @@ extension EstagioOficialInfo on EstagioOficial {
       case EstagioOficial.encaminhada:
         return const Color(0xFF3B82F6);
       case EstagioOficial.resolvida:
-        return const Color(0xFF16A34A);
+        return AppColors.successStrong;
     }
   }
 

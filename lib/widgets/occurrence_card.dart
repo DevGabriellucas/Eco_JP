@@ -1387,7 +1387,7 @@ class _AuthorAvatar extends StatelessWidget {
           : Text(
               _initial,
               style: TextStyle(
-                color: const Color(0xFF16A34A),
+                color: AppColors.successStrong,
                 fontWeight: FontWeight.w800,
                 fontSize: radius * 0.82,
               ),
@@ -1510,7 +1510,7 @@ class _AccountInfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: const Color(0xFF16A34A)),
+        Icon(icon, size: 18, color: AppColors.successStrong),
         const SizedBox(width: 10),
         Expanded(
           child: Column(

@@ -15,7 +15,7 @@ import '../../services/usuario_service.dart';
 import '../../theme/app_theme.dart';
 import '../legal/documentos_legais.dart';
 
-class _C {
+class _Cores {
   // Vermelho de ação destrutiva — igual nos dois temas.
   static const sair = Color(0xFFC62828);
 }
@@ -113,7 +113,7 @@ class _ConfiguracoesContaPageState
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _C.sair,
+              backgroundColor: _Cores.sair,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -164,7 +164,7 @@ class _ConfiguracoesContaPageState
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _C.sair,
+              backgroundColor: _Cores.sair,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -308,7 +308,7 @@ class _ConfiguracoesContaPageState
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: _C.sair,
+              backgroundColor: _Cores.sair,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -391,7 +391,7 @@ class _ConfiguracoesContaPageState
               Icons.delete_forever_outlined,
               _excluindo ? 'Excluindo...' : 'Excluir minha conta',
               _excluindo ? null : _confirmarExclusaoConta,
-              cor: _C.sair,
+              cor: _Cores.sair,
             ),
           ]),
           const SizedBox(height: 12),
@@ -410,7 +410,7 @@ class _ConfiguracoesContaPageState
               Icons.logout,
               'Sair da conta',
               _confirmarLogout,
-              cor: _C.sair,
+              cor: _Cores.sair,
             ),
           ]),
         ],

@@ -19,6 +19,9 @@ abstract final class AppColors {
   static const primaryLight = Color(0xFF43C589);
   static const primaryDark = Color(0xFF145A38);
   static const success = Color(0xFF22C55E);
+  // Verde de marca mais fechado — usado em selos "verificado/resolvido" e em
+  // ações de confirmação (enviar comentário, seguir). Igual nos dois temas.
+  static const successStrong = Color(0xFF16A34A);
   static const warning = Color(0xFFF97316);
   static const danger = Color(0xFFEF4444);
   static const info = Color(0xFF2563EB);

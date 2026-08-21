@@ -456,7 +456,7 @@ class _ItemFila extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = ocorrencia;
     final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
-    final statusOficial = StatusOficialInfo.fromString(o.statusOficial);
+    final statusOficial = o.statusOficial;
     final idadeStr = _idade(o.dataCriacao);
     final dataStr = o.dataCriacao != null
         ? DateFormat('dd/MM/yyyy').format(o.dataCriacao!)

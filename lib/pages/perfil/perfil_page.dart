@@ -18,7 +18,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/ocorrencia_actions.dart';
 import 'editar_perfil_page.dart';
 
-class _C {
+class _Cores {
   // Cinza do avatar (fundo do fallback) e laranja de destaque — iguais nos
   // dois temas. Os neutros (fundo/cartão/texto/borda) vêm de `context.pal`.
   static const avatarBg = Color(0xFF9E9E9E);
@@ -196,7 +196,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                 height: 76,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF16A34A), AppColors.success],
+                    colors: [AppColors.successStrong, AppColors.success],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -238,7 +238,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                             Icon(
                               Icons.shield,
                               size: 14,
-                              color: Color(0xFF16A34A),
+                              color: AppColors.successStrong,
                             ),
                             SizedBox(width: 6),
                             Text(
@@ -246,7 +246,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF16A34A),
+                                color: AppColors.successStrong,
                               ),
                             ),
                           ],
@@ -339,13 +339,13 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: _C.laranja.withValues(alpha: 0.10),
+          color: _Cores.laranja.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _C.laranja.withValues(alpha: 0.4)),
+          border: Border.all(color: _Cores.laranja.withValues(alpha: 0.4)),
         ),
         child: Row(
           children: [
-            const Icon(Icons.auto_awesome, size: 18, color: _C.laranja),
+            const Icon(Icons.auto_awesome, size: 18, color: _Cores.laranja),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -357,7 +357,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                 ),
               ),
             ),
-            const Icon(Icons.chevron_right, size: 18, color: _C.laranja),
+            const Icon(Icons.chevron_right, size: 18, color: _Cores.laranja),
           ],
         ),
       ),
@@ -368,7 +368,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     if (perfil.fotoUrl != null && perfil.fotoUrl!.isNotEmpty) {
       return CircleAvatar(
         radius: 42,
-        backgroundColor: _C.avatarBg,
+        backgroundColor: _Cores.avatarBg,
         backgroundImage: imagemCacheada(
           cloudinaryAvatar(perfil.fotoUrl!, radius: 42),
         ),
@@ -376,7 +376,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     }
     return CircleAvatar(
       radius: 42,
-      backgroundColor: _C.avatarBg,
+      backgroundColor: _Cores.avatarBg,
       child: Text(
         perfil.iniciais,
         style: const TextStyle(
@@ -438,7 +438,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
             decoration: BoxDecoration(
-              color: _C.laranja,
+              color: _Cores.laranja,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -514,7 +514,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF16A34A), AppColors.success],
+          colors: [AppColors.successStrong, AppColors.success],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -944,7 +944,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     return Container(
       width: 60,
       height: 60,
-      color: _C.avatarBg,
+      color: _Cores.avatarBg,
       child: const Icon(
         Icons.image_not_supported_outlined,
         size: 24,
@@ -1008,7 +1008,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     // Impacto oficial: verificadas pela autoridade e resolvidas oficialmente.
     final verificadas = ocorrencias.where((o) => o.verificada).length;
     final resolvidasOficial = ocorrencias
-        .where((o) => o.verificada && o.statusOficial == 'resolvida')
+        .where((o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
         .length;
 
     return _Stats(

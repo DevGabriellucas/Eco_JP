@@ -274,7 +274,10 @@ class AuthService {
   Future<void> sair() async {
     try {
       await GoogleSignIn().signOut();
-    } catch (_) {}
+    } catch (e) {
+      // Falha ao desconectar do Google não deve impedir o signOut do Firebase.
+      debugPrint('Falha ao encerrar sessão Google (ignorada): $e');
+    }
     await _auth.signOut();
   }
 

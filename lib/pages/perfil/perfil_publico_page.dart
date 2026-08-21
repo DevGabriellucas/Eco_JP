@@ -143,7 +143,7 @@ class _ProfileHeader extends StatelessWidget {
               : Text(
                   perfil.iniciais,
                   style: const TextStyle(
-                    color: Color(0xFF16A34A),
+                    color: AppColors.successStrong,
                     fontSize: 30,
                     fontWeight: FontWeight.w800,
                   ),
@@ -296,7 +296,7 @@ class _SocialBarState extends State<_SocialBar> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: seguindo
                               ? context.pal.surfaceAlt
-                              : const Color(0xFF16A34A),
+                              : AppColors.successStrong,
                           foregroundColor: seguindo
                               ? context.pal.ink
                               : Colors.white,
@@ -367,7 +367,7 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final resolvidas = ocorrencias
-        .where((o) => o.verificada && o.statusOficial == 'resolvida')
+        .where((o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
         .length;
     final verificadas = ocorrencias.where((o) => o.verificada).length;
 
@@ -593,7 +593,7 @@ class _ContribuicaoCard extends StatelessWidget {
     }
 
     final resolvidas = ocorrencias
-        .where((o) => o.verificada && o.statusOficial == 'resolvida')
+        .where((o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
         .length;
     final taxaResolucao = ocorrencias.isEmpty
         ? 0

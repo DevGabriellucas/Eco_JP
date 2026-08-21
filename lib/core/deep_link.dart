@@ -61,7 +61,10 @@ class _DeepLinkListenerState extends ConsumerState<DeepLinkListener> {
       final uri = await _appLinks.getInitialLink();
       if (uri == null || !mounted) return;
       WidgetsBinding.instance.addPostFrameCallback((_) => _handle(uri));
-    } catch (_) {}
+    } catch (e) {
+      // Sem link inicial válido não há para onde navegar; app abre normal.
+      debugPrint('Deep link inicial ignorado: $e');
+    }
   }
 
   void _handle(Uri uri) {

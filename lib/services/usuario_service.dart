@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
 import '../models/usuario_model.dart';
+import '../utils/log_erros.dart';
 import '../utils/texto.dart';
 
 class UsuarioService {
@@ -29,8 +29,8 @@ class UsuarioService {
   }
 
   // Cria ou atualiza o perfil
-  Future<void> salvarPerfil(UsuarioModel usuario) async {
-    try {
+  Future<void> salvarPerfil(UsuarioModel usuario) {
+    return comLogDeErro('salvar perfil', () async {
       // Nome/bio/bairro são exibidos publicamente — higieniza no choke point
       // (nome e bairro em linha única; bio pode ter quebras). Remove
       // zero-width/bidi usados para spoofing de nome.
@@ -45,10 +45,7 @@ class UsuarioService {
         dados['bio'] = sanitizarTexto(dados['bio'] as String);
       }
       await _ref.doc(usuario.uid).set(dados);
-    } catch (e) {
-      debugPrint('Erro ao salvar perfil: $e');
-      rethrow;
-    }
+    });
   }
 
   CollectionReference<Map<String, dynamic>> _favoritosRef(String uid) =>
@@ -72,25 +69,19 @@ class UsuarioService {
         .map((snap) => snap.docs.map((d) => d.id).toSet());
   }
 
-  Future<void> salvarFavorito(String uid, String ocorrenciaId) async {
-    try {
+  Future<void> salvarFavorito(String uid, String ocorrenciaId) {
+    return comLogDeErro('salvar favorito', () async {
       await _favoritosRef(uid).doc(ocorrenciaId).set({
         'ocorrenciaId': ocorrenciaId,
         'salvoEm': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      debugPrint('Erro ao salvar favorito: $e');
-      rethrow;
-    }
+    });
   }
 
-  Future<void> removerFavorito(String uid, String ocorrenciaId) async {
-    try {
+  Future<void> removerFavorito(String uid, String ocorrenciaId) {
+    return comLogDeErro('remover favorito', () async {
       await _favoritosRef(uid).doc(ocorrenciaId).delete();
-    } catch (e) {
-      debugPrint('Erro ao remover favorito: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<void> definirFavorito({
@@ -117,7 +108,7 @@ class UsuarioService {
 
   Future<void> seguirUsuario(String uid, String alvoUid) async {
     if (uid == alvoUid) return;
-    try {
+    return comLogDeErro('seguir usuário', () async {
       final batch = FirebaseFirestore.instance.batch();
       batch.set(_seguindoRef(uid).doc(alvoUid), {
         'uid': alvoUid,
@@ -128,22 +119,16 @@ class UsuarioService {
         'criadoEm': FieldValue.serverTimestamp(),
       });
       await batch.commit();
-    } catch (e) {
-      debugPrint('Erro ao seguir usuário: $e');
-      rethrow;
-    }
+    });
   }
 
-  Future<void> deixarDeSeguir(String uid, String alvoUid) async {
-    try {
+  Future<void> deixarDeSeguir(String uid, String alvoUid) {
+    return comLogDeErro('deixar de seguir', () async {
       final batch = FirebaseFirestore.instance.batch();
       batch.delete(_seguindoRef(uid).doc(alvoUid));
       batch.delete(_seguidoresRef(alvoUid).doc(uid));
       await batch.commit();
-    } catch (e) {
-      debugPrint('Erro ao deixar de seguir: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<void> definirSeguindo({

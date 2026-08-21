@@ -211,7 +211,10 @@ class GeocodingService {
         ].where((s) => s != null && s.trim().isNotEmpty).take(3).join(', ');
         if (parts.isNotEmpty) return parts;
       }
-    } catch (_) {}
+    } catch (e) {
+      // Geocoder da plataforma indisponível (ex.: web/sem rede): cai no Nominatim.
+      debugPrint('reverseGeocode (placemark) falhou, tentando Nominatim: $e');
+    }
 
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
@@ -240,7 +243,10 @@ class GeocodingService {
           if (parts.isNotEmpty) return parts;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      // Sem endereço via Nominatim também: devolve o texto padrão abaixo.
+      debugPrint('reverseGeocode (Nominatim) falhou: $e');
+    }
 
     return 'Endereço não encontrado';
   }

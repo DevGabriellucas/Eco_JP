@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'occurrence_types.dart';
+
 class OcorrenciaModel {
   final String id;
   final String titulo;
@@ -40,14 +42,14 @@ class OcorrenciaModel {
   String? verificadaPorNome;
   DateTime? verificadaEm;
 
-  // Ciclo de vida oficial da autoridade. Valores de statusOficial:
-  //   null            → pendente (ou, se verificada==true, confirmada)
-  //   'em_analise'    → autoridade vai ao local checar
-  //   'nao_confirmada'→ foi ao local e o problema não existia
-  //   'encaminhada'   → confirmada e encaminhada ao órgão responsável
-  //   'resolvida'     → confirmada e tratada pelo órgão
+  // Ciclo de vida oficial da autoridade (ver enum StatusOficial):
+  //   null                        → pendente (ou, se verificada==true, confirmada)
+  //   StatusOficial.emAnalise     → autoridade vai ao local checar
+  //   StatusOficial.naoConfirmada → foi ao local e o problema não existia
+  //   StatusOficial.encaminhada   → confirmada e encaminhada ao órgão responsável
+  //   StatusOficial.resolvida     → confirmada e tratada pelo órgão
   // 'confirmada' é representado por verificada == true && statusOficial == null.
-  String? statusOficial;
+  StatusOficial? statusOficial;
   DateTime? encaminhadaEm;
   DateTime? resolvidaEm;
   bool fixada;
@@ -162,7 +164,7 @@ class OcorrenciaModel {
       verificadaEm: map['verificadaEm'] != null
           ? (map['verificadaEm'] as Timestamp).toDate()
           : null,
-      statusOficial: map['statusOficial'] as String?,
+      statusOficial: StatusOficialInfo.fromString(map['statusOficial'] as String?),
       encaminhadaEm: map['encaminhadaEm'] != null
           ? (map['encaminhadaEm'] as Timestamp).toDate()
           : null,

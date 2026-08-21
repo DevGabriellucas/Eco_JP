@@ -216,7 +216,7 @@ class _DashboardCidade extends StatelessWidget {
 
     final total = ocorrencias.length;
     final resolvidas = ocorrencias
-        .where((o) => o.verificada && o.statusOficial == 'resolvida')
+        .where((o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
         .length;
     final taxa = total == 0 ? 0 : (resolvidas * 100 / total).round();
 

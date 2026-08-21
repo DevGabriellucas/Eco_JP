@@ -170,7 +170,7 @@ class MapController extends ChangeNotifier {
   }
 
   bool _ehPendente(OcorrenciaModel o) =>
-      !o.verificada && o.statusOficial != 'nao_confirmada';
+      !o.verificada && o.statusOficial != StatusOficial.naoConfirmada;
 
   List<OcorrenciaModel> get _ocorrenciasFiltradas {
     return _todasOcorrencias.where((o) {

@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 
 import '../data/repositories/comentario_repository.dart';
 import '../data/repositories/ocorrencia_repository.dart';
 import '../models/denuncia_moderacao_model.dart';
+import '../utils/log_erros.dart';
 import 'analytics_service.dart';
 
 class ModeracaoService {
@@ -61,8 +61,8 @@ class ModeracaoService {
     required String denuncianteId,
     required String motivo,
     String? detalhe,
-  }) async {
-    try {
+  }) {
+    return comLogDeErro('denunciar conteúdo', () async {
       await _ref.add({
         'alvoTipo': alvoTipo,
         'ocorrenciaId': ocorrenciaId,
@@ -74,10 +74,7 @@ class ModeracaoService {
         'criadoEm': FieldValue.serverTimestamp(),
       });
       unawaited(_analytics.denunciaDeAbusoCriada(alvoTipo: alvoTipo));
-    } catch (e) {
-      debugPrint('Erro ao denunciar conteúdo: $e');
-      rethrow;
-    }
+    });
   }
 
   // ── FILA DE MODERAÇÃO (autoridade) ────────────────────────────────────────
@@ -106,23 +103,20 @@ class ModeracaoService {
   Future<void> resolver(
     String denunciaId, {
     required String decisao,
-  }) async {
-    try {
+  }) {
+    return comLogDeErro('resolver denúncia de moderação', () async {
       await _ref.doc(denunciaId).update({
         'status': decisao,
         'resolvidoPor': _currentUserId,
         'resolvidoEm': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      debugPrint('Erro ao resolver denúncia de moderação: $e');
-      rethrow;
-    }
+    });
   }
 
   /// Oculta o conteúdo alvo (ocorrência ou comentário) de uma denúncia e marca
   /// a denúncia como revisada. Delega a ocultação aos repositórios.
-  Future<void> ocultarAlvo(DenunciaModeracaoModel denuncia) async {
-    try {
+  Future<void> ocultarAlvo(DenunciaModeracaoModel denuncia) {
+    return comLogDeErro('ocultar alvo da denúncia', () async {
       if (denuncia.isComentario && denuncia.comentarioId != null) {
         await _comentarioRepository.definirComentarioOculto(
           denuncia.ocorrenciaId,
@@ -136,9 +130,6 @@ class ModeracaoService {
         );
       }
       await resolver(denuncia.id, decisao: 'revisada');
-    } catch (e) {
-      debugPrint('Erro ao ocultar alvo da denúncia: $e');
-      rethrow;
-    }
+    });
   }
 }

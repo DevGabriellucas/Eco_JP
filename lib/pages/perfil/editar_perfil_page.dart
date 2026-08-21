@@ -12,7 +12,7 @@ import '../../utils/cloudinary_image.dart';
 import '../../utils/imagem_cacheada.dart';
 import '../../theme/app_theme.dart';
 
-class _C {
+class _Cores {
   // Cinza do avatar e vermelho de erro — iguais nos dois temas. Os neutros
   // (fundo/texto/borda/dica) vêm de `context.pal`.
   static const avatarBg = Color(0xFF9E9E9E);
@@ -191,7 +191,7 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erro ao salvar: $e'),
-          backgroundColor: _C.error,
+          backgroundColor: _Cores.error,
         ),
       );
     } finally {
@@ -306,7 +306,7 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
         children: [
           CircleAvatar(
             radius: 52,
-            backgroundColor: _C.avatarBg,
+            backgroundColor: _Cores.avatarBg,
             backgroundImage: temFotoNova
                 ? MemoryImage(_novaFotoBytes!)
                 : temFotoAtual
@@ -381,11 +381,11 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _C.error),
+          borderSide: const BorderSide(color: _Cores.error),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _C.error, width: 1.5),
+          borderSide: const BorderSide(color: _Cores.error, width: 1.5),
         ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:eco_jp/models/occurrence_types.dart';
 import 'package:eco_jp/models/ocorrencia_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -84,6 +85,34 @@ void main() {
       expect(model.likedBy, isEmpty);
       expect(model.likes, 0);
       expect(model.userLiked, isFalse);
+    });
+
+    test('statusOficial: string do Firestore vira o enum correspondente', () {
+      final model = OcorrenciaModel.fromMap(
+        baseMap()..['statusOficial'] = 'encaminhada',
+        'doc-1',
+      );
+
+      expect(model.statusOficial, StatusOficial.encaminhada);
+    });
+
+    test('statusOficial: ausente ou desconhecido vira null', () {
+      final semStatus = OcorrenciaModel.fromMap(baseMap(), 'doc-1');
+      final statusInvalido = OcorrenciaModel.fromMap(
+        baseMap()..['statusOficial'] = 'valor_que_nao_existe',
+        'doc-1',
+      );
+
+      expect(semStatus.statusOficial, isNull);
+      expect(statusInvalido.statusOficial, isNull);
+    });
+  });
+
+  group('StatusOficial (fronteira de serialização)', () {
+    test('round-trip valor <-> enum é estável para todos os status', () {
+      for (final status in StatusOficial.values) {
+        expect(StatusOficialInfo.fromString(status.valor), status);
+      }
     });
   });
 }

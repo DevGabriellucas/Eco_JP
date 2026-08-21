@@ -258,7 +258,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                         Navigator.pop(dialogContext, text);
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
+                  backgroundColor: AppColors.successStrong,
                   foregroundColor: Colors.white,
                   elevation: 0,
                 ),
@@ -892,7 +892,7 @@ class _CommentComposer extends StatelessWidget {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.send, color: Color(0xFF16A34A), size: 22),
+                : const Icon(Icons.send, color: AppColors.successStrong, size: 22),
             onPressed: sending ? null : onSend,
           ),
         ],
@@ -960,7 +960,7 @@ class _UserAvatar extends StatelessWidget {
           : Text(
               _initials,
               style: TextStyle(
-                color: const Color(0xFF16A34A),
+                color: AppColors.successStrong,
                 fontSize: radius * 0.72,
                 fontWeight: FontWeight.w800,
               ),
