@@ -19,5 +19,5 @@ final conexaoOnlineProvider = StreamProvider<bool>((ref) async* {
   yield* connectivity.onConnectivityChanged.map(_isOnline);
 });
 
-bool _isOnline(ConnectivityResult result) =>
-    result != ConnectivityResult.none;
+bool _isOnline(List<ConnectivityResult> results) =>
+    results.isNotEmpty && results.any((r) => r != ConnectivityResult.none);

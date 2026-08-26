@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/repositories/comentario_repository.dart';
@@ -22,6 +24,7 @@ class OccurrenceCommentsSheet extends StatefulWidget {
   final AuthService authService;
   final UsuarioService usuarioService;
   final NotificacaoService notificacaoService;
+  final String? comentarioIdEmFoco;
 
   const OccurrenceCommentsSheet({
     super.key,
@@ -30,6 +33,7 @@ class OccurrenceCommentsSheet extends StatefulWidget {
     required this.authService,
     required this.usuarioService,
     required this.notificacaoService,
+    this.comentarioIdEmFoco,
   });
 
   @override
@@ -63,12 +67,27 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
   bool _sending = false;
   // Se o usuário logado é órgão/autoridade — carimba o selo no comentário.
   bool _ehAutoridade = false;
+  // Foco em comentário vindo da fila de moderação: destaca por alguns segundos.
+  String? _comentarioEmFoco;
+  bool _mostraDestaque = false;
+  Timer? _focoTimer;
+  // Controla quais comentários têm respostas expandidas
+  final Set<String> _expandedComments = {};
 
   @override
   void initState() {
     super.initState();
     _carregarPerfilAtual();
     _carregarPapel();
+    // Se houver comentário em foco, ativa o destaque.
+    if (widget.comentarioIdEmFoco != null) {
+      _comentarioEmFoco = widget.comentarioIdEmFoco;
+      _mostraDestaque = true;
+      _focoTimer = Timer(const Duration(seconds: 3), () {
+        if (!mounted) return;
+        setState(() => _mostraDestaque = false);
+      });
+    }
   }
 
   Future<void> _carregarPapel() async {
@@ -85,6 +104,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
 
   @override
   void dispose() {
+    _focoTimer?.cancel();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -470,35 +490,52 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                         final replies =
                             repliesByParent[root.id] ??
                             const <ComentarioModel>[];
+                        final isExpanded = _expandedComments.contains(root.id);
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _CommentTile(
                               comentario: root,
                               isOwn: root.userId == user?.uid,
+                              isEmFoco: _comentarioEmFoco == root.id && _mostraDestaque,
+                              isUserAutority: _ehAutoridade,
+                              replyCount: replies.length,
+                              showReplies: isExpanded,
                               onLike: () => _toggleLike(root),
                               onReply: () => _replyToComment(root),
                               onEdit: () => _editComment(root),
                               onDelete: () => _deleteComment(root),
                               onReport: () => _reportComment(root),
+                              onToggleReplies: (show) {
+                                setState(() {
+                                  if (show) {
+                                    _expandedComments.add(root.id);
+                                  } else {
+                                    _expandedComments.remove(root.id);
+                                  }
+                                });
+                              },
                             ),
-                            for (final reply in replies)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 42),
-                                child: _CommentTile(
-                                  comentario: reply,
-                                  isOwn: reply.userId == user?.uid,
-                                  compact: true,
-                                  onLike: () => _toggleLike(reply),
-                                  onReply: () => _replyToComment(
-                                    reply,
-                                    parentRootId: root.id,
+                            if (isExpanded)
+                              for (final reply in replies)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 42),
+                                  child: _CommentTile(
+                                    comentario: reply,
+                                    isOwn: reply.userId == user?.uid,
+                                    isEmFoco: _comentarioEmFoco == reply.id && _mostraDestaque,
+                                    isUserAutority: _ehAutoridade,
+                                    compact: true,
+                                    onLike: () => _toggleLike(reply),
+                                    onReply: () => _replyToComment(
+                                      reply,
+                                      parentRootId: root.id,
+                                    ),
+                                    onEdit: () => _editComment(reply),
+                                    onDelete: () => _deleteComment(reply),
+                                    onReport: () => _reportComment(reply),
                                   ),
-                                  onEdit: () => _editComment(reply),
-                                  onDelete: () => _deleteComment(reply),
-                                  onReport: () => _reportComment(reply),
                                 ),
-                              ),
                           ],
                         );
                       },
@@ -532,7 +569,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
   }
 }
 
-class _CommentTile extends StatelessWidget {
+class _CommentTile extends StatefulWidget {
   final ComentarioModel comentario;
   final bool isOwn;
   final VoidCallback onLike;
@@ -540,7 +577,12 @@ class _CommentTile extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onReport;
+  final ValueChanged<bool>? onToggleReplies;
+  final bool showReplies;
   final bool compact;
+  final bool isEmFoco;
+  final bool isUserAutority;
+  final int replyCount;
 
   const _CommentTile({
     required this.comentario,
@@ -550,76 +592,173 @@ class _CommentTile extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onReport,
+    this.onToggleReplies,
+    this.showReplies = false,
     this.compact = false,
+    this.isEmFoco = false,
+    this.isUserAutority = false,
+    this.replyCount = 0,
   });
 
   @override
+  State<_CommentTile> createState() => _CommentTileState();
+}
+
+class _CommentTileState extends State<_CommentTile> {
+  @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    final c = comentario;
+    final c = widget.comentario;
     return Padding(
-      padding: EdgeInsets.only(bottom: compact ? 14 : 18),
-      child: Row(
+      padding: EdgeInsets.only(bottom: widget.compact ? 14 : 18),
+      child: Container(
+        decoration: widget.isEmFoco
+            ? BoxDecoration(
+                border: Border.all(
+                  color: pal.primary,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              )
+            : null,
+        padding: widget.isEmFoco ? const EdgeInsets.all(8) : null,
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _UserAvatar(
             name: c.userName,
             photoUrl: c.userPhotoUrl,
-            radius: compact ? 14 : 18,
+            radius: widget.compact ? 14 : 18,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                      fontSize: compact ? 12.5 : 13,
-                      color: pal.ink,
-                      height: 1.35,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: c.userName,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      // Selo de verificado (órgão): checkmark azul estilo
-                      // redes sociais, logo após o nome.
-                      if (c.autorAutoridade)
-                        const WidgetSpan(
-                          alignment: PlaceholderAlignment.middle,
-                          child: Padding(
-                            padding: EdgeInsets.only(left: 3),
-                            child: Icon(
-                              Icons.verified,
-                              size: 14,
-                              color: Color(0xFF3B82F6),
-                            ),
-                          ),
-                        ),
-                      const TextSpan(text: '  '),
-                      TextSpan(text: c.texto),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 5),
+                // Header: Nome + Selo + Tempo + (❤️ pela autoridade se curtiu)
                 Row(
                   children: [
-                    Text(
-                      tempoRelativo(c.dataCriacao),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: pal.hint,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          RichText(
+                            text: TextSpan(
+                              style: TextStyle(
+                                fontSize: widget.compact ? 12.5 : 13,
+                                color: pal.ink,
+                                height: 1.35,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: c.userName,
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                                if (c.autorAutoridade)
+                                  const WidgetSpan(
+                                    alignment: PlaceholderAlignment.middle,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(left: 3),
+                                      child: Icon(
+                                        Icons.verified,
+                                        size: 14,
+                                        color: Color(0xFF3B82F6),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            tempoRelativo(c.dataCriacao),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: pal.hint,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          // ❤️ pela autoridade (apenas se autoridade curtiu)
+                          if (widget.isUserAutority && c.userLiked) ...[
+                            const SizedBox(width: 6),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.favorite,
+                                  size: 12,
+                                  color: AppColors.danger,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'pela autoridade',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: pal.hint,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 14),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                // Texto do comentário + Coração curtir
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        c.texto,
+                        style: TextStyle(
+                          fontSize: widget.compact ? 12.5 : 13,
+                          color: pal.ink,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: widget.onLike,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              c.userLiked ? Icons.favorite : Icons.favorite_border,
+                              size: 20,
+                              color: c.userLiked ? AppColors.danger : pal.hint,
+                            ),
+                            if (c.likes > 0) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '${c.likes}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: c.userLiked ? AppColors.danger : pal.hint,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                // Ações: Responder + Menu
+                Row(
+                  children: [
                     Semantics(
                       button: true,
                       label: 'Responder comentário',
                       child: GestureDetector(
-                        onTap: onReply,
+                        onTap: widget.onReply,
                         child: Text(
                           'Responder',
                           style: TextStyle(
@@ -630,90 +769,83 @@ class _CommentTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    const Spacer(),
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: PopupMenuButton<_CommentOwnerAction>(
+                        tooltip: 'Opções do comentário',
+                        icon: Icon(Icons.more_horiz, size: 16, color: pal.hint),
+                        padding: EdgeInsets.zero,
+                        onSelected: (action) {
+                          switch (action) {
+                            case _CommentOwnerAction.edit:
+                              widget.onEdit();
+                              break;
+                            case _CommentOwnerAction.delete:
+                              widget.onDelete();
+                              break;
+                            case _CommentOwnerAction.report:
+                              widget.onReport();
+                              break;
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          if (widget.isOwn) ...const [
+                            PopupMenuItem(
+                              value: _CommentOwnerAction.edit,
+                              child: _CommentMenuItem(
+                                icon: Icons.edit_outlined,
+                                label: 'Editar',
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: _CommentOwnerAction.delete,
+                              child: _CommentMenuItem(
+                                icon: Icons.delete_outline,
+                                label: 'Excluir',
+                                danger: true,
+                              ),
+                            ),
+                          ],
+                          if (!widget.isOwn)
+                            const PopupMenuItem(
+                              value: _CommentOwnerAction.report,
+                              child: _CommentMenuItem(
+                                icon: Icons.flag_outlined,
+                                label: 'Denunciar',
+                                danger: true,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
+                // Ver mais/menos respostas (se houver)
+                if (widget.replyCount > 0) ...[
+                  const SizedBox(height: 8),
+                  Semantics(
+                    button: true,
+                    label: widget.showReplies ? 'Ver menos respostas' : 'Ver mais respostas',
+                    child: GestureDetector(
+                      onTap: () => widget.onToggleReplies?.call(!widget.showReplies),
+                      child: Text(
+                        widget.showReplies ? 'Ver menos respostas' : 'Ver mais respostas',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: pal.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: c.userLiked ? 'Remover curtida' : 'Curtir comentário',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                icon: Icon(
-                  c.userLiked ? Icons.favorite : Icons.favorite_border,
-                  size: 18,
-                  color: c.userLiked ? AppColors.danger : pal.hint,
-                ),
-                onPressed: onLike,
-              ),
-              // Número de curtidas logo abaixo do coração (antes ficava na
-              // linha de metadados junto de "Responder").
-              if (c.likes > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, bottom: 2),
-                  child: Text(
-                    '${c.likes}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: c.userLiked ? AppColors.danger : pal.hint,
-                    ),
-                  ),
-                ),
-              PopupMenuButton<_CommentOwnerAction>(
-                tooltip: 'Opções do comentário',
-                icon: Icon(Icons.more_horiz, size: 18, color: pal.hint),
-                padding: EdgeInsets.zero,
-                onSelected: (action) {
-                  switch (action) {
-                    case _CommentOwnerAction.edit:
-                      onEdit();
-                      break;
-                    case _CommentOwnerAction.delete:
-                      onDelete();
-                      break;
-                    case _CommentOwnerAction.report:
-                      onReport();
-                      break;
-                  }
-                },
-                itemBuilder: (context) => [
-                  if (isOwn) ...const [
-                    PopupMenuItem(
-                      value: _CommentOwnerAction.edit,
-                      child: _CommentMenuItem(
-                        icon: Icons.edit_outlined,
-                        label: 'Editar',
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: _CommentOwnerAction.delete,
-                      child: _CommentMenuItem(
-                        icon: Icons.delete_outline,
-                        label: 'Excluir',
-                        danger: true,
-                      ),
-                    ),
-                  ],
-                  if (!isOwn)
-                    const PopupMenuItem(
-                      value: _CommentOwnerAction.report,
-                      child: _CommentMenuItem(
-                        icon: Icons.flag_outlined,
-                        label: 'Denunciar',
-                        danger: true,
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
         ],
+        ),
       ),
     );
   }

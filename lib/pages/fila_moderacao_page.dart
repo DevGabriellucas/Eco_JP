@@ -7,7 +7,6 @@ import '../models/denuncia_moderacao_model.dart';
 import '../services/moderacao_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/mensagem_erro.dart';
-import 'detalhe_ocorrencia_page.dart';
 
 /// Fila de moderação (autoridade): denúncias de conteúdo abusivo pendentes.
 /// Espelha o padrão de FilaVerificacaoPage, mas trata a coleção
@@ -445,12 +444,18 @@ class _ItemModeracaoState extends ConsumerState<_ItemModeracao> {
       );
       return;
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DetalheOcorrenciaPage(occurrence: ocorrencia),
-      ),
-    );
+
+    // Para denúncia: leva ao feed com destaque.
+    // Para comentário: leva ao feed com destaque + abre sheet de comentários.
+    ref.read(feedFocoOcorrenciaProvider.notifier).state = ocorrencia;
+    if (widget.denuncia.isComentario && widget.denuncia.comentarioId != null) {
+      ref.read(feedFocoComentarioProvider.notifier).state =
+          widget.denuncia.comentarioId;
+    }
+
+    // Volta ao feed (HomeShell detecta a mudança e muda a aba).
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override

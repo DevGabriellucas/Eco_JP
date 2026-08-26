@@ -48,51 +48,11 @@ class UsuarioService {
     });
   }
 
-  CollectionReference<Map<String, dynamic>> _favoritosRef(String uid) =>
-      _ref.doc(uid).collection('favoritos');
-
   CollectionReference<Map<String, dynamic>> _seguindoRef(String uid) =>
       _ref.doc(uid).collection('seguindo');
 
   CollectionReference<Map<String, dynamic>> _seguidoresRef(String uid) =>
       _ref.doc(uid).collection('seguidores');
-
-  // Teto de favoritos observados por vez — evita baixar a subcoleção inteira
-  // de um usuário que salvou muitas denúncias a cada emissão do stream.
-  static const int _tetoFavoritos = 300;
-
-  Stream<Set<String>> observarFavoritosIds(String uid) {
-    return _favoritosRef(uid)
-        .orderBy('salvoEm', descending: true)
-        .limit(_tetoFavoritos)
-        .snapshots()
-        .map((snap) => snap.docs.map((d) => d.id).toSet());
-  }
-
-  Future<void> salvarFavorito(String uid, String ocorrenciaId) {
-    return comLogDeErro('salvar favorito', () async {
-      await _favoritosRef(uid).doc(ocorrenciaId).set({
-        'ocorrenciaId': ocorrenciaId,
-        'salvoEm': FieldValue.serverTimestamp(),
-      });
-    });
-  }
-
-  Future<void> removerFavorito(String uid, String ocorrenciaId) {
-    return comLogDeErro('remover favorito', () async {
-      await _favoritosRef(uid).doc(ocorrenciaId).delete();
-    });
-  }
-
-  Future<void> definirFavorito({
-    required String uid,
-    required String ocorrenciaId,
-    required bool salvar,
-  }) {
-    return salvar
-        ? salvarFavorito(uid, ocorrenciaId)
-        : removerFavorito(uid, ocorrenciaId);
-  }
 
   Stream<bool> observarSeguindo(String uid, String alvoUid) {
     return _seguindoRef(uid).doc(alvoUid).snapshots().map((doc) => doc.exists);

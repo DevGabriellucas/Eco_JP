@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 
 /// Sugestão de endereço para o autocomplete do formulário de denúncia.
@@ -197,25 +196,8 @@ class GeocodingService {
     }
   }
 
-  /// Endereço legível a partir de coordenadas. Tenta o plugin `geocoding`
-  /// (placemark nativo) e cai para o Nominatim reverse.
+  /// Endereço legível a partir de coordenadas usando Nominatim reverse.
   Future<String> reverseGeocode(double lat, double lng) async {
-    try {
-      final marks = await placemarkFromCoordinates(lat, lng);
-      if (marks.isNotEmpty) {
-        final p = marks.first;
-        final parts = [
-          p.street,
-          p.subLocality,
-          p.locality,
-        ].where((s) => s != null && s.trim().isNotEmpty).take(3).join(', ');
-        if (parts.isNotEmpty) return parts;
-      }
-    } catch (e) {
-      // Geocoder da plataforma indisponível (ex.: web/sem rede): cai no Nominatim.
-      debugPrint('reverseGeocode (placemark) falhou, tentando Nominatim: $e');
-    }
-
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
         'format': 'jsonv2',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,7 +51,9 @@ enum _FeedPeriodo {
 }
 
 class HomePage extends ConsumerStatefulWidget {
-  const HomePage({super.key});
+  final ScrollController? scrollController;
+
+  const HomePage({super.key, this.scrollController});
 
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
@@ -59,7 +63,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   static const _pageSize = 10;
 
   final TextEditingController _searchController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController;
   final _authService = AuthService();
   final _notificacaoService = NotificacaoService();
   final _usuarioService = UsuarioService();
@@ -85,38 +89,79 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   final Map<String, String> _nomeCache = {};
   final Map<String, String?> _fotoCache = {};
-  final Set<String> _hiddenOccurrenceIds = <String>{};
 
-  // Cache da contagem de comentários por ocorrência. A contagem agora usa
-  // aggregation .count() (uma leitura pontual, não um listener por doc). O
-  // cache evita refazer a contagem a cada rebuild do feed (like, filtro,
-  // scroll). Envolvido em asStream() para preservar a API do card.
+  // Foco vindo da fila de verificação: a denúncia é injetada no topo do feed
+  // (mesmo que estivesse paginada/filtrada) e destacada por alguns segundos.
+  // _focoKey serve ao Scrollable.ensureVisible. _foco mantém a denúncia fixa no
+  // lugar (não remover no fim do destaque — senão a lista refluía e o scroll
+  // pulava para o topo). _focoDestaque controla só o anel visual, que some após
+  // o timer sem mover nada. O foco em si só é limpo no pull-to-refresh.
+  OcorrenciaModel? _foco;
+  bool _focoDestaque = false;
+  Timer? _focoTimer;
+  final GlobalKey _focoKey = GlobalKey();
+
+  // Cache da contagem de comentários por ocorrência. A contagem usa aggregation
+  // .count() (uma leitura pontual, não um listener por doc). Guardamos o VALOR
+  // já resolvido (int) — não um stream. Um broadcast stream do future não
+  // reentrega o valor a quem assina depois da emissão: quando o card saía e
+  // voltava à tela (rolagem), o novo StreamBuilder não recebia nada e a
+  // contagem zerava até reabrir os comentários. Com o valor cacheado, a
+  // contagem persiste enquanto o card existe na sessão.
   //
   // Limite superior: em sessões longas (rolar fundo + refresh) as chaves são
   // ids de ocorrência que só crescem. `_latestCommentCache` guarda um listener
   // VIVO do Firestore por entrada, então sem teto vira vazamento de listeners.
   // O cap (FIFO) descarta as entradas mais antigas — as do topo do feed, já
-  // roladas para fora; se voltarem à tela o stream é recriado sob demanda.
+  // roladas para fora; se voltarem à tela recarregam sob demanda.
   static const int _maxStreamCache = 120;
-  final Map<String, Stream<int>> _commentCountCache = {};
+  final Map<String, int> _commentCountCache = {};
+  final Set<String> _commentCountLoading = <String>{};
   final Map<String, Stream<ComentarioModel?>> _latestCommentCache = {};
+  // Último valor emitido por cada stream de "último comentário". Serve de
+  // initialData para o preview do card não sumir ao sair e voltar à tela
+  // (broadcast não reentrega o último valor a quem assina depois).
+  final Map<String, ComentarioModel?> _latestCommentValues = {};
 
-  Stream<int> _commentCountStream(String id) {
-    final cached = _commentCountCache[id];
-    if (cached != null) return cached;
-    _capCache(_commentCountCache);
-    return _commentCountCache[id] = _comentarioRepository
-        .contarComentarios(id)
-        .asStream()
-        .asBroadcastStream();
+  // Retorna a contagem já resolvida (ou null enquanto carrega — o card então
+  // usa occurrence.comments como fallback). Dispara o .count() uma única vez
+  // por id (deduplicado por `_commentCountLoading`) e, ao resolver, faz
+  // setState para o feed exibir o número.
+  int? _commentCount(String id) {
+    if (_commentCountCache.containsKey(id)) return _commentCountCache[id];
+    if (_commentCountLoading.add(id)) {
+      _comentarioRepository
+          .contarComentarios(id)
+          .then((count) {
+            if (!mounted) return;
+            setState(() {
+              _capCache(_commentCountCache);
+              _commentCountCache[id] = count;
+              _commentCountLoading.remove(id);
+            });
+          })
+          .catchError((_) {
+            _commentCountLoading.remove(id);
+          });
+    }
+    return null;
   }
 
   Stream<ComentarioModel?> _latestCommentStream(String id) {
     final cached = _latestCommentCache[id];
     if (cached != null) return cached;
     _capCache(_latestCommentCache);
+    // Efeito colateral no .map: guarda o último valor emitido para servir de
+    // initialData ao card (evita o preview sumir na rolagem de volta). Como o
+    // broadcast mantém a assinatura viva ao Firestore mesmo sem ouvintes, o
+    // valor cacheado continua atualizando enquanto o stream estiver no cache.
     return _latestCommentCache[id] = _comentarioRepository
         .observarUltimoComentario(id)
+        .map((c) {
+          _capCache(_latestCommentValues);
+          _latestCommentValues[id] = c;
+          return c;
+        })
         .asBroadcastStream();
   }
 
@@ -132,6 +177,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
+    _scrollController = widget.scrollController ?? ScrollController();
     _feedStream = _buildFeedStream();
     _scrollController.addListener(_onScroll);
   }
@@ -168,11 +214,15 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _refreshFeed() async {
+    _focoTimer?.cancel();
     setState(() {
       _pageLimit = _pageSize;
       _loadingMore = false;
       _hasPotentialMore = true;
       _feedStream = _buildFeedStream();
+      // Ao atualizar, a denúncia em foco deixa de ficar fixa no topo.
+      _foco = null;
+      _focoDestaque = false;
     });
   }
 
@@ -331,9 +381,54 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _focoTimer?.cancel();
     _searchController.dispose();
+    if (widget.scrollController == null) {
+      _scrollController.dispose();
+    }
     super.dispose();
+  }
+
+  // Foca uma denúncia vinda da fila de verificação: limpa filtros para garantir
+  // que ela apareça, injeta-a no topo (ver _buildFeedState), rola até ela e a
+  // destaca por 3s. Chamado pelo ref.listen do provider em build.
+  void _aplicarFoco(OcorrenciaModel o) {
+    _searchController.clear();
+    setState(() {
+      _selectedType = null;
+      _selectedStatus = null;
+      _searchQuery = '';
+      _periodo = _FeedPeriodo.tudo;
+      _sortBy = _FeedSort.recentes;
+      _foco = o;
+      _focoDestaque = true;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _focoKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+          alignment: 0.08,
+        );
+      } else if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+
+    // Só apaga o destaque visual — a denúncia permanece fixa no lugar para o
+    // scroll não pular. O foco em si é limpo no próximo pull-to-refresh.
+    _focoTimer?.cancel();
+    _focoTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      setState(() => _focoDestaque = false);
+    });
   }
 
   void _carregarDadosAutor(List<OcorrenciaModel> ocorrencias) {
@@ -375,7 +470,6 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     final filtradas = ocorrencias.where((o) {
       if (o.oculto) return false; // ocultada pela autoridade (moderação)
-      if (_hiddenOccurrenceIds.contains(o.id)) return false;
       final matchesSearch =
           query.isEmpty ||
           o.localizacao.toLowerCase().contains(query) ||
@@ -438,7 +532,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Future<void> _openComments(OcorrenciaModel o) async {
+  Future<void> _openComments(OcorrenciaModel o, {String? comentarioIdEmFoco}) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -449,6 +543,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         authService: _authService,
         usuarioService: _usuarioService,
         notificacaoService: _notificacaoService,
+        comentarioIdEmFoco: comentarioIdEmFoco,
       ),
     );
     if (!mounted) return;
@@ -457,7 +552,17 @@ class _HomePageState extends ConsumerState<HomePage> {
     // descartamos só o cache da contagem para o card recontar — assim os novos
     // comentários (inclusive os enviados pela barra de emojis) atualizam o
     // número exibido.
-    setState(() => _commentCountCache.remove(o.id));
+    setState(() {
+      _commentCountCache.remove(o.id);
+      _commentCountLoading.remove(o.id);
+    });
+  }
+
+  Future<void> _abrirComentariosComFoco(
+    OcorrenciaModel o,
+    String comentarioId,
+  ) async {
+    await _openComments(o, comentarioIdEmFoco: comentarioId);
   }
 
   void _openPublicProfile(
@@ -513,59 +618,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  void _ocultarOcorrencia(OcorrenciaModel o) {
-    setState(() => _hiddenOccurrenceIds.add(o.id));
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: const Text('Denúncia ocultada do feed.'),
-          action: SnackBarAction(
-            label: 'Desfazer',
-            onPressed: () {
-              if (!mounted) return;
-              setState(() => _hiddenOccurrenceIds.remove(o.id));
-            },
-          ),
-        ),
-      );
-  }
-
-  Future<void> _toggleSalvarOcorrencia(
-    OcorrenciaModel o, {
-    required bool salvo,
-  }) async {
-    final uid = _authService.currentUser?.uid;
-    if (uid == null) return;
-    final vaiSalvar = !salvo;
-
-    try {
-      await _usuarioService.definirFavorito(
-        uid: uid,
-        ocorrenciaId: o.id,
-        salvar: vaiSalvar,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              vaiSalvar
-                  ? 'Denúncia salva nos favoritos.'
-                  : 'Denúncia removida dos favoritos.',
-            ),
-          ),
-        );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível atualizar os salvos.')),
-      );
-    }
-  }
-
   Future<void> _toggleFixarOcorrencia(OcorrenciaModel o) async {
     final fixar = !o.fixada;
     try {
@@ -594,6 +646,31 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget build(BuildContext context) {
     final uid = _authService.currentUser?.uid;
     final pal = context.pal;
+
+    // A fila de verificação/moderação pede foco em uma denúncia via este provider.
+    // Aplica o foco e zera o provider (no próximo frame) para não reaplicar em rebuilds.
+    ref.listen(feedFocoOcorrenciaProvider, (anterior, atual) {
+      if (atual != null) {
+        _aplicarFoco(atual);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ref.read(feedFocoOcorrenciaProvider.notifier).state = null;
+        });
+      }
+    });
+
+    // Se houver um comentário em foco (vindo da fila de moderação), abre o sheet
+    // de comentários com o ID do comentário destacado.
+    ref.listen(feedFocoComentarioProvider, (anterior, atual) {
+      if (atual != null && _foco != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _abrirComentariosComFoco(_foco!, atual);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref.read(feedFocoComentarioProvider.notifier).state = null;
+          });
+        });
+      }
+    });
+
     return Scaffold(
       backgroundColor: pal.background,
       appBar: AppBar(
@@ -666,10 +743,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (uid != null && ref.watch(isAutoridadeProvider).value == true)
-              _BannerAutoridade(
-                onTap: () => context.push(Routes.filaVerificacao),
-              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Row(
@@ -732,38 +805,30 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildFeed(String? uid) {
     if (uid == null) {
-      return _buildFeedContent(uid, const <String>{}, isAutoridade: false);
+      return _buildFeedContent(uid, isAutoridade: false);
     }
 
     final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
 
+    // Denúncias anônimas não guardam usuarioId no documento público
+    // (S2) — para saber "é minha denúncia" nesse caso, comparamos
+    // com os ponteiros do próprio perfil, não com o campo.
     return StreamBuilder<Set<String>>(
-      stream: _usuarioService.observarFavoritosIds(uid),
+      stream: _ocorrenciaRepository.observarMinhasDenunciasAnonimasIds(uid),
       initialData: const <String>{},
-      builder: (context, snapshot) {
-        // Denúncias anônimas não guardam usuarioId no documento público
-        // (S2) — para saber "é minha denúncia" nesse caso, comparamos
-        // com os ponteiros do próprio perfil, não com o campo.
-        return StreamBuilder<Set<String>>(
-          stream: _ocorrenciaRepository.observarMinhasDenunciasAnonimasIds(uid),
-          initialData: const <String>{},
-          builder: (context, minhasAnonimasSnap) {
-            return _buildFeedContent(
-              uid,
-              snapshot.data ?? const <String>{},
-              isAutoridade: isAutoridade,
-              minhasDenunciasAnonimasIds:
-                  minhasAnonimasSnap.data ?? const <String>{},
-            );
-          },
+      builder: (context, minhasAnonimasSnap) {
+        return _buildFeedContent(
+          uid,
+          isAutoridade: isAutoridade,
+          minhasDenunciasAnonimasIds:
+              minhasAnonimasSnap.data ?? const <String>{},
         );
       },
     );
   }
 
   Widget _buildFeedContent(
-    String? uid,
-    Set<String> favoritosIds, {
+    String? uid, {
     required bool isAutoridade,
     Set<String> minhasDenunciasAnonimasIds = const <String>{},
   }) {
@@ -781,7 +846,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           child: _buildFeedState(
             snapshot,
             uid,
-            favoritosIds,
             isAutoridade: isAutoridade,
             minhasDenunciasAnonimasIds: minhasDenunciasAnonimasIds,
           ),
@@ -792,8 +856,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildFeedState(
     AsyncSnapshot<List<OcorrenciaModel>> snapshot,
-    String? uid,
-    Set<String> favoritosIds, {
+    String? uid, {
     required bool isAutoridade,
     Set<String> minhasDenunciasAnonimasIds = const <String>{},
   }) {
@@ -826,10 +889,24 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     final filtradas = _applyFilters(all);
 
+    // Foco da fila de verificação: injeta a denúncia no topo (usando a versão
+    // já no feed, se carregada — likes/comentários mais frescos) e remove a
+    // duplicata. Garante que ela apareça mesmo paginada/filtrada para fora.
+    final foco = _foco;
+    final exibidas = foco == null
+        ? filtradas
+        : <OcorrenciaModel>[
+            filtradas.firstWhere(
+              (o) => o.id == foco.id,
+              orElse: () => foco,
+            ),
+            ...filtradas.where((o) => o.id != foco.id),
+          ];
+
     return RefreshIndicator(
       key: const ValueKey('feed-content'),
       onRefresh: _refreshFeed,
-      child: filtradas.isEmpty
+      child: exibidas.isEmpty
           ? _EmptyFeedList(
               hasActiveFilters: _hasActiveFilters,
               hasPotentialMore: _hasPotentialMore,
@@ -839,11 +916,12 @@ class _HomePageState extends ConsumerState<HomePage> {
             )
           : _OccurrenceList(
               controller: _scrollController,
-              occurrences: filtradas,
+              occurrences: exibidas,
               hasPotentialMore: _hasPotentialMore,
               loadingMore: _loadingMore,
               onLoadMore: _loadMore,
               itemBuilder: (o) {
+                final emFoco = _foco?.id == o.id;
                 // Anônima: o campo usuarioId sumiu do documento (S2), então
                 // "é minha" vem dos ponteiros do próprio perfil.
                 final isOwner =
@@ -865,13 +943,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                           ? o.usuarioFotoUrl
                           : _fotoCache[o.usuarioId]);
 
-                return OccurrenceCard(
+                final card = OccurrenceCard(
                   occurrence: o,
                   nomeAutor: nomeAutor,
                   fotoAutor: fotoAutor,
-                  commentCountStream: _commentCountStream(o.id),
+                  commentCount: _commentCount(o.id),
                   latestCommentStream: _latestCommentStream(o.id),
-                  saved: favoritosIds.contains(o.id),
+                  latestCommentInitial: _latestCommentValues[o.id],
                   onLike: () => _toggleLike(o),
                   onDislike: () => _toggleDislike(o),
                   onComment: () => _openComments(o),
@@ -886,12 +964,38 @@ class _HomePageState extends ConsumerState<HomePage> {
                   onTogglePin: isAutoridade
                       ? () => _toggleFixarOcorrencia(o)
                       : null,
-                  onSave: () => _toggleSalvarOcorrencia(
-                    o,
-                    salvo: favoritosIds.contains(o.id),
-                  ),
-                  onHide: () => _ocultarOcorrencia(o),
                   onManage: isOwner ? () => _gerenciarOcorrencia(o) : null,
+                );
+
+                // Card em foco (vindo da fila): fica fixo no topo com _focoKey
+                // (alvo do Scrollable.ensureVisible). O anel só aparece enquanto
+                // _focoDestaque; ao apagá-lo o AnimatedContainer some suave SEM
+                // mudar a posição — a borda mantém 2.5px (só a cor vira
+                // transparente), então nada reflui e o scroll não pula.
+                if (!emFoco) return card;
+                return AnimatedContainer(
+                  key: _focoKey,
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeOut,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _focoDestaque
+                          ? AppColors.success
+                          : Colors.transparent,
+                      width: 2.5,
+                    ),
+                    boxShadow: _focoDestaque
+                        ? [
+                            BoxShadow(
+                              color: AppColors.success.withValues(alpha: 0.25),
+                              blurRadius: 12,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: card,
                 );
               },
             ),
@@ -1303,45 +1407,3 @@ class _StatusChip extends StatelessWidget {
 //  Visível no topo do feed apenas para contas com papel 'autoridade'.
 // ─────────────────────────────────────────
 
-class _BannerAutoridade extends StatelessWidget {
-  final VoidCallback onTap;
-  const _BannerAutoridade({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = context.pal;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color: pal.ink,
-        child: Row(
-          children: [
-            const Icon(
-              Icons.shield_outlined,
-              size: 16,
-              color: AppColors.success,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Fila de verificação — toque para ver denúncias pendentes',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: pal.surface,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 12,
-              color: pal.surface.withValues(alpha: 0.54),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

@@ -5,7 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../core/connectivity_provider.dart';
 import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
+import '../features/denuncias/providers/denuncia_providers.dart';
+import '../services/usuario_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/cloudinary_image.dart';
+import '../utils/imagem_cacheada.dart';
 import 'estatisticas_page.dart';
 import 'home_page.dart';
 import 'mapPage/map_page.dart';
@@ -20,30 +24,41 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 0;
+  late ScrollController _scrollController;
+  late ScrollController _scrollControllerEstatisticas;
+  late ScrollController _scrollControllerPerfil;
 
-  // Abas já abertas. Só elas são instanciadas (lazy): assim Mapa,
-  // Estatísticas e Perfil — e os listeners do Firestore deles — só ligam
-  // quando o usuário toca pela primeira vez. O IndexedStack mantém vivas as
-  // já visitadas para preservar o estado ao alternar entre elas.
   final Set<int> _visitadas = {0};
 
-  // Autoridade não cria denúncia: o botão central vira atalho para a fila
-  // de verificação. Cidadão comum mantém o "+" para registrar denúncia.
-  // Espelha o valor mais recente do provider para uso fora do build (em
-  // _onTapItem, que roda a partir de um callback, não de um rebuild).
   bool _isAutoridade = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollControllerEstatisticas = ScrollController();
+    _scrollControllerPerfil = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _scrollControllerEstatisticas.dispose();
+    _scrollControllerPerfil.dispose();
+    super.dispose();
+  }
 
   // Índices: 0=Feed, 1=Mapa, (2 é o botão +), 3=Dados, 4=Perfil
   Widget _pagina(int i) {
     switch (i) {
       case 0:
-        return const HomePage();
+        return HomePage(scrollController: _scrollController);
       case 1:
         return const MapPage();
       case 3:
-        return const EstatisticasPage();
+        return EstatisticasPage(scrollController: _scrollControllerEstatisticas);
       case 4:
-        return const PerfilPage();
+        return PerfilPage(scrollController: _scrollControllerPerfil);
       default:
         return const SizedBox.shrink();
     }
@@ -58,6 +73,63 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       }
       return;
     }
+
+    if (i == 0) {
+      if (_index == 0) {
+        if (_scrollController.offset > 0) {
+          _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+          );
+        } else {
+          setState(() {});
+        }
+      } else {
+        setState(() {
+          _index = i;
+          _visitadas.add(i);
+        });
+      }
+      return;
+    }
+
+    if (i == 3) {
+      if (_index == 3) {
+        if (_scrollControllerEstatisticas.offset > 0) {
+          _scrollControllerEstatisticas.animateTo(
+            0,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+          );
+        }
+      } else {
+        setState(() {
+          _index = i;
+          _visitadas.add(i);
+        });
+      }
+      return;
+    }
+
+    if (i == 4) {
+      if (_index == 4) {
+        if (_scrollControllerPerfil.offset > 0) {
+          _scrollControllerPerfil.animateTo(
+            0,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+          );
+        }
+      } else {
+        setState(() {
+          _index = i;
+          _visitadas.add(i);
+        });
+      }
+      return;
+    }
+
     setState(() {
       _index = i;
       _visitadas.add(i);
@@ -120,13 +192,22 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Espelha o valor mais recente do provider no campo, para que _onTapItem
-    // (chamado a partir de um callback do bottom nav, fora do build) leia o
-    // papel atual sem precisar de outro ref.watch fora da árvore de widgets.
     _isAutoridade = ref.watch(isAutoridadeProvider).value ?? false;
-
-    // Enquanto o provider não emite, assume online (evita piscar o aviso).
     final online = ref.watch(conexaoOnlineProvider).value ?? true;
+
+    final authUser = ref.watch(authStateChangesProvider).value;
+    final usuarioService = UsuarioService();
+
+    // Quando a fila de verificação pede foco em uma denúncia, troca para a aba
+    // do feed (o próprio feed faz o scroll/destaque e limpa o provider).
+    ref.listen(feedFocoOcorrenciaProvider, (anterior, atual) {
+      if (atual != null && _index != 0) {
+        setState(() {
+          _index = 0;
+          _visitadas.add(0);
+        });
+      }
+    });
 
     return Scaffold(
       body: IndexedStack(
@@ -136,17 +217,32 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           (i) => _visitadas.contains(i) ? _pagina(i) : const SizedBox.shrink(),
         ),
       ),
-      // Banner de offline fica acima da barra de navegação: assim não conflita
-      // com a AppBar/SafeArea de cada página.
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           _BannerOffline(visivel: !online),
-          _BottomNav(
-            currentIndex: _index,
-            onTap: _onTapItem,
-            isAutoridade: _isAutoridade,
-          ),
+          if (authUser != null)
+            StreamBuilder(
+              stream: usuarioService.observarPerfil(authUser.uid),
+              builder: (context, perfilSnap) {
+                final fotoUrl = perfilSnap.data?.fotoUrl;
+                return _BottomNav(
+                  currentIndex: _index,
+                  onTap: _onTapItem,
+                  isAutoridade: _isAutoridade,
+                  isCompressed: false,
+                  fotoPerfilUrl: fotoUrl,
+                );
+              },
+            )
+          else
+            _BottomNav(
+              currentIndex: _index,
+              onTap: _onTapItem,
+              isAutoridade: _isAutoridade,
+              isCompressed: false,
+              fotoPerfilUrl: null,
+            ),
         ],
       ),
     );
@@ -198,46 +294,56 @@ class _BottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final bool isAutoridade;
+  final bool isCompressed;
+  final String? fotoPerfilUrl;
 
   const _BottomNav({
     required this.currentIndex,
     required this.onTap,
     required this.isAutoridade,
+    this.isCompressed = false,
+    this.fotoPerfilUrl,
   });
 
   @override
   Widget build(BuildContext context) {
-    final pal = context.pal;
-    return Container(
-      decoration: BoxDecoration(
-        color: pal.surface,
-        border: Border(top: BorderSide(color: pal.border)),
-      ),
+    const height = 56.0;
+    const padding = 8.0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: padding, vertical: padding),
       child: SafeArea(
         top: false,
-        child: SizedBox(
-          height: 64,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _item(0, Icons.home_rounded, Icons.home, 'Feed', pal),
-              _item(1, Icons.location_on_rounded, Icons.location_on, 'Mapa', pal),
-              _botaoCentral(pal),
-              _item(3, Icons.library_books_rounded, Icons.library_books, 'Dados', pal),
-              _item(4, Icons.account_circle_rounded, Icons.account_circle, 'Perfil', pal),
-            ],
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildItem(0, Icons.home_rounded, Icons.home_outlined, 'Feed', 24.0),
+                _buildItem(1, Icons.location_on_rounded, Icons.location_on_outlined, 'Mapa', 24.0),
+                _buildBotaoCentral(24.0),
+                _buildItem(3, Icons.library_books_rounded, Icons.library_books_outlined, 'Dados', 24.0),
+                _buildItemPerfil(),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _item(
+  Widget _buildItem(
     int i,
     IconData icon,
     IconData iconAtivo,
     String label,
-    AppPalette pal,
+    double iconSize,
   ) {
     final ativo = currentIndex == i;
     return Expanded(
@@ -245,25 +351,49 @@ class _BottomNav extends StatelessWidget {
         button: true,
         selected: ativo,
         label: label,
-        child: InkWell(
+        child: GestureDetector(
           onTap: () => onTap(i),
-          borderRadius: BorderRadius.circular(12),
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: ativo ? const Color(0xFF888888) : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: iconSize,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemPerfil() {
+    final ativo = currentIndex == 4;
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: ativo,
+        label: 'Perfil',
+        child: GestureDetector(
+          onTap: () => onTap(4),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                ativo ? iconAtivo : icon,
-                size: 24,
-                color: ativo ? pal.ink : pal.hint,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: ativo ? FontWeight.w600 : FontWeight.w400,
-                  color: ativo ? pal.ink : pal.hint,
+              Container(
+                padding: const EdgeInsets.only(left: 28, right: 48, top: 14, bottom: 14),
+                decoration: BoxDecoration(
+                  color: ativo ? const Color(0xFF888888) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
                 ),
+                child: _buildAvatarPerfil(),
               ),
             ],
           ),
@@ -272,33 +402,51 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _botaoCentral(AppPalette pal) {
+  Widget _buildAvatarPerfil() {
+    if (fotoPerfilUrl != null && fotoPerfilUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 14,
+        backgroundColor: const Color(0xFF9E9E9E),
+        backgroundImage: imagemCacheada(
+          cloudinaryAvatar(fotoPerfilUrl!, radius: 28),
+        ),
+      );
+    }
+    return const CircleAvatar(
+      radius: 14,
+      backgroundColor: Color(0xFF9E9E9E),
+      child: Icon(
+        Icons.account_circle_rounded,
+        size: 24,
+        color: Colors.white,
+      ),
+    );
+  }
+
+  Widget _buildBotaoCentral(double iconSize) {
     // Autoridade: atalho para a fila de verificação (selo). Cidadão: "+".
     final label = isAutoridade
         ? 'Fila de verificação e moderação'
         : 'Nova denúncia';
-    return Expanded(
-      child: Center(
-        child: Semantics(
-          button: true,
-          label: label,
-          child: Tooltip(
-            message: label,
-            child: GestureDetector(
-              onTap: () => onTap(2),
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: isAutoridade ? AppColors.success : pal.ink,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isAutoridade ? Icons.fact_check_outlined : Icons.add_circle_rounded,
-                  color: isAutoridade ? Colors.white : pal.surface,
-                  size: 26,
-                ),
-              ),
+
+    return Semantics(
+      button: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          onTap: () => onTap(2),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isAutoridade ? AppColors.success : Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isAutoridade ? Icons.fact_check_outlined : Icons.add,
+              color: isAutoridade ? Colors.white : Colors.black,
+              size: 24,
             ),
           ),
         ),

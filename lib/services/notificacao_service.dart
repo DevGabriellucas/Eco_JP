@@ -37,6 +37,26 @@ class NotificacaoService {
     }
   }
 
+  Future<void> notificarConquista({
+    required String userId,
+    required String conquistaTitulo,
+  }) async {
+    try {
+      await _ref(userId).add(
+        NotificacaoModel(
+          id: '',
+          tipo: 'conquista',
+          deUsuarioNome: 'EcoJP',
+          ocorrenciaId: '',
+          ocorrenciaTitulo: '',
+          conquistaTitulo: conquistaTitulo,
+        ).toMap(),
+      );
+    } catch (e) {
+      debugPrint('Erro ao criar notificação de conquista: $e');
+    }
+  }
+
   Stream<List<NotificacaoModel>> listar(String uid) {
     return _ref(uid)
         .orderBy('dataCriacao', descending: true)

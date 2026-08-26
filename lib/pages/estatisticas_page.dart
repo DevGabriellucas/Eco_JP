@@ -53,7 +53,9 @@ const _axisLabelColor = Color(0xFF9CA3AF);
 // ─────────────────────────────────────────
 
 class EstatisticasPage extends ConsumerStatefulWidget {
-  const EstatisticasPage({super.key});
+  final ScrollController? scrollController;
+
+  const EstatisticasPage({super.key, this.scrollController});
 
   @override
   ConsumerState<EstatisticasPage> createState() => _EstatisticasPageState();
@@ -197,8 +199,6 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    // Cidadão vê "Dados" (guia + panorama); autoridade vê "Estatísticas".
-    final ehAutoridade = ref.watch(isAutoridadeProvider).value == true;
     return Scaffold(
       backgroundColor: pal.background,
       appBar: AppBar(
@@ -216,11 +216,6 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
                 fontWeight: FontWeight.w700,
                 color: pal.ink,
               ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              ehAutoridade ? 'Estatísticas' : 'Dados',
-              style: TextStyle(fontSize: 15, color: pal.hint),
             ),
           ],
         ),
@@ -261,6 +256,7 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
 
         if (ocorrencias.isEmpty) {
           return ListView(
+            controller: widget.scrollController,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: const [
               SizedBox(height: 16),
@@ -284,6 +280,7 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
         ).zonasMaisAfetadas(limite: 5);
 
         return ListView(
+          controller: widget.scrollController,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           children: [
             _PeriodoSelector(

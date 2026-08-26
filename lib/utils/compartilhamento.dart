@@ -34,9 +34,11 @@ Future<void> compartilharOcorrencia(OcorrenciaModel o) async {
     texto.writeln('\nMidia: $midia');
   }
 
-  await Share.share(
-    texto.toString(),
-    subject: 'Denuncia EcoJP',
+  await SharePlus.instance.share(
+    ShareParams(
+      text: texto.toString(),
+      subject: 'Denuncia EcoJP',
+    ),
   );
 }
 

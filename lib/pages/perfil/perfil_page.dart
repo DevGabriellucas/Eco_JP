@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +8,7 @@ import '../../features/denuncias/providers/denuncia_providers.dart';
 import '../../models/ocorrencia_model.dart';
 import '../../models/usuario_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/notificacao_service.dart';
 import '../../utils/cloudinary_image.dart';
 import '../../utils/imagem_cacheada.dart';
 import '../../utils/conquistas.dart';
@@ -26,7 +28,9 @@ class _Cores {
 }
 
 class PerfilPage extends ConsumerStatefulWidget {
-  const PerfilPage({super.key});
+  final ScrollController? scrollController;
+
+  const PerfilPage({super.key, this.scrollController});
 
   @override
   ConsumerState<PerfilPage> createState() => _PerfilPageState();
@@ -35,11 +39,12 @@ class PerfilPage extends ConsumerStatefulWidget {
 class _PerfilPageState extends ConsumerState<PerfilPage> {
   final _authService = AuthService();
   final _usuarioService = UsuarioService();
+  final _notificacaoService = NotificacaoService();
 
   OcorrenciaRepository get _ocorrenciaRepository =>
       ref.read(ocorrenciaRepositoryProvider);
 
-  int _aba = 0; // 0 = Resumo, 1 = Minhas denúncias, 2 = Salvos
+  int _aba = 0; // 0 = Resumo, 1 = Minhas denúncias
 
   static const _meses = [
     'jan',
@@ -73,6 +78,55 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
   Future<void> _recarregar() async {
     setState(() {});
     await Future<void>.delayed(const Duration(milliseconds: 600));
+  }
+
+  Future<void> _verificarConquistasNovas(_Stats stats) async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+
+    final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
+    final conquistasAtuais = calcularConquistas(
+      denuncias: stats.total,
+      resolvidas: stats.resolvidasOficial,
+      curtidas: stats.curtidas,
+      isAutoridade: isAutoridade,
+    );
+
+    final conquistasDesbloqueadas =
+        conquistasAtuais.where((c) => c.desbloqueada).map((c) => c.titulo).toSet();
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(uid)
+          .collection('meta')
+          .doc('conquistasNotificadas')
+          .get();
+
+      final conquistasNotificadas =
+          Set<String>.from(doc.data()?['items'] ?? []);
+
+      final novasConquistas =
+          conquistasDesbloqueadas.difference(conquistasNotificadas);
+
+      for (final titulo in novasConquistas) {
+        await _notificacaoService.notificarConquista(
+          userId: uid,
+          conquistaTitulo: titulo,
+        );
+      }
+
+      if (novasConquistas.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(uid)
+            .collection('meta')
+            .doc('conquistasNotificadas')
+            .set({'items': conquistasDesbloqueadas.toList()});
+      }
+    } catch (e) {
+      debugPrint('Erro ao verificar conquistas: $e');
+    }
   }
 
   @override
@@ -110,8 +164,6 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                 color: pal.ink,
               ),
             ),
-            const SizedBox(width: 12),
-            Text('Meu Perfil', style: TextStyle(fontSize: 15, color: pal.hint)),
           ],
         ),
         actions: [
@@ -140,10 +192,12 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
             builder: (context, ocSnap) {
               final ocorrencias = ocSnap.data ?? [];
               final stats = _calcularStats(ocorrencias);
+              _verificarConquistasNovas(stats);
 
               return RefreshIndicator(
                 onRefresh: _recarregar,
                 child: ListView(
+                  controller: widget.scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
                   children: [
@@ -155,12 +209,10 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                       const SizedBox(height: 24),
                       _abas(),
                       const SizedBox(height: 16),
-                      if (_aba == 0) ...[
-                        ..._secaoEstatisticas(stats),
-                      ] else if (_aba == 1)
-                        ..._secaoMinhasDenuncias(ocorrencias)
+                      if (_aba == 0)
+                        ..._secaoEstatisticas(stats)
                       else
-                        _secaoSalvos(uid),
+                        ..._secaoMinhasDenuncias(ocorrencias),
                     ],
                   ],
                 ),
@@ -470,7 +522,6 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
         children: [
           Expanded(child: _abaBtn('Resumo', 0)),
           Expanded(child: _abaBtn('Minhas denúncias', 1)),
-          Expanded(child: _abaBtn('Salvos', 2)),
         ],
       ),
     );
@@ -710,89 +761,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     );
   }
 
-  Widget _secaoSalvos(String uid) {
-    return StreamBuilder<Set<String>>(
-      stream: _usuarioService.observarFavoritosIds(uid),
-      initialData: const <String>{},
-      builder: (context, favSnap) {
-        final favoritos = favSnap.data ?? const <String>{};
-        if (favoritos.isEmpty) return _salvosVazio();
-
-        return StreamBuilder<List<OcorrenciaModel>>(
-          stream: _ocorrenciaRepository.observarPorIds(favoritos),
-          builder: (context, ocorrenciasSnap) {
-            final salvas =
-                (ocorrenciasSnap.data ?? const <OcorrenciaModel>[]).toList()
-                  ..sort((a, b) {
-                    final da = a.dataCriacao;
-                    final db = b.dataCriacao;
-                    if (da == null && db == null) return 0;
-                    if (da == null) return 1;
-                    if (db == null) return -1;
-                    return db.compareTo(da);
-                  });
-
-            if (salvas.isEmpty) return _salvosVazio();
-            return Column(
-              children: [
-                for (final o in salvas)
-                  _denunciaCard(
-                    o,
-                    gerenciar: false,
-                    onRemoverSalvo: () => _removerSalvo(uid, o.id),
-                  ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _salvosVazio() {
-    final pal = context.pal;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
-      decoration: BoxDecoration(
-        color: pal.surfaceAlt,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: pal.border),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.bookmark_border, size: 48, color: pal.hint),
-          const SizedBox(height: 12),
-          Text(
-            'Nenhuma denúncia salva ainda',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: pal.hint),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _removerSalvo(String uid, String ocorrenciaId) async {
-    try {
-      await _usuarioService.removerFavorito(uid, ocorrenciaId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Denúncia removida dos salvos.')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível remover dos salvos.')),
-      );
-    }
-  }
-
-  Widget _denunciaCard(
-    OcorrenciaModel o, {
-    bool gerenciar = true,
-    VoidCallback? onRemoverSalvo,
-  }) {
+  Widget _denunciaCard(OcorrenciaModel o) {
     final pal = context.pal;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -856,48 +825,37 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (gerenciar || onRemoverSalvo != null)
-                        GestureDetector(
-                          onTap: gerenciar
-                              ? () => showOcorrenciaActions(
-                                  context: context,
-                                  ocorrencia: o,
-                                  service: _ocorrenciaRepository,
-                                )
-                              : onRemoverSalvo,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
-                              color: pal.ink.withValues(alpha: 0.06),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: pal.border),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  gerenciar
-                                      ? Icons.tune
-                                      : Icons.bookmark_remove_outlined,
-                                  size: 14,
+                      GestureDetector(
+                        onTap: () => showOcorrenciaActions(
+                          context: context,
+                          ocorrencia: o,
+                          service: _ocorrenciaRepository,
+                        ),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: pal.ink.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: pal.border),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.tune, size: 14, color: pal.ink),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Gerenciar denúncia',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                   color: pal.ink,
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  gerenciar
-                                      ? 'Gerenciar denúncia'
-                                      : 'Remover dos salvos',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: pal.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
+                      ),
                     ],
                   ),
                 ),

@@ -32,7 +32,10 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
   }
 
   // Busca a denúncia da notificação e abre a tela de detalhes.
+  // Para notificações de conquista, só marca como lida (sem navegar).
   Future<void> _abrirDenuncia(NotificacaoModel n) async {
+    if (n.tipo == 'conquista') return; // Conquistas não navegam
+
     if (_abrindo) return;
     setState(() => _abrindo = true);
     try {
@@ -155,7 +158,7 @@ class _CabecalhoGrupo extends StatelessWidget {
 }
 
 // Ícone, cor e frase de cada tipo de notificação — comentário/curtida (ação
-// de outro usuário) e status_* (avanço do ciclo oficial pela autoridade).
+// de outro usuário), status_* (avanço do ciclo oficial) e conquista.
 ({IconData icone, Color cor, String frase}) _infoNotificacao(String tipo) {
   switch (tipo) {
     case 'comentario':
@@ -169,6 +172,12 @@ class _CabecalhoGrupo extends StatelessWidget {
         icone: Icons.thumb_up_alt,
         cor: const Color(0xFF4CAF50),
         frase: 'curtiu a sua denúncia',
+      );
+    case 'conquista':
+      return (
+        icone: Icons.star_rounded,
+        cor: const Color(0xFFFFD700),
+        frase: 'nova conquista desbloqueada',
       );
     case 'status_em_analise':
       return (
@@ -232,22 +241,31 @@ class _NotificacaoTile extends StatelessWidget {
           backgroundColor: cor.withValues(alpha: 0.15),
           child: Icon(icone, size: 18, color: cor),
         ),
-        title: RichText(
-          text: TextSpan(
-            style: TextStyle(fontSize: 14, color: pal.ink),
-            children: [
-              TextSpan(
-                text: n.deUsuarioNome,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+        title: n.tipo == 'conquista'
+            ? Text(
+                n.conquistaTitulo ?? 'Conquista desbloqueada',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: pal.ink,
+                  fontWeight: FontWeight.w700,
+                ),
+              )
+            : RichText(
+                text: TextSpan(
+                  style: TextStyle(fontSize: 14, color: pal.ink),
+                  children: [
+                    TextSpan(
+                      text: n.deUsuarioNome,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    TextSpan(text: ' $frase '),
+                    TextSpan(
+                      text: '"${n.ocorrenciaTitulo}"',
+                      style: const TextStyle(fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ),
               ),
-              TextSpan(text: ' $frase '),
-              TextSpan(
-                text: '"${n.ocorrenciaTitulo}"',
-                style: const TextStyle(fontStyle: FontStyle.italic),
-              ),
-            ],
-          ),
-        ),
         subtitle: n.dataCriacao != null
             ? Padding(
                 padding: const EdgeInsets.only(top: 4),

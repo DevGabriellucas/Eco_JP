@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
-import 'detalhe_ocorrencia_page.dart';
 import '../theme/app_theme.dart';
 
 class FilaVerificacaoPage extends ConsumerStatefulWidget {
@@ -55,6 +54,14 @@ class _FilaVerificacaoPageState extends ConsumerState<FilaVerificacaoPage> {
         );
       }
     }
+  }
+
+  // "Abrir" leva a denúncia ao feed (em vez da página de detalhe): define-a
+  // como foco e fecha a fila, voltando à raiz (o HomeShell). O shell troca para
+  // a aba do feed e o feed rola até ela com destaque.
+  void _abrirNoFeed(OcorrenciaModel ocorrencia) {
+    ref.read(feedFocoOcorrenciaProvider.notifier).state = ocorrencia;
+    Navigator.of(context).popUntil((rota) => rota.isFirst);
   }
 
   // Aplica os filtros ativos (tipo + busca) sobre a lista já ordenada.
@@ -126,13 +133,7 @@ class _FilaVerificacaoPageState extends ConsumerState<FilaVerificacaoPage> {
                         separatorBuilder: (context, index) => const SizedBox(height: 10),
                         itemBuilder: (_, i) => _ItemFila(
                           ocorrencia: filtrada[i],
-                          onAbrir: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  DetalheOcorrenciaPage(occurrence: filtrada[i]),
-                            ),
-                          ),
+                          onAbrir: () => _abrirNoFeed(filtrada[i]),
                           onVerificar: () => _marcarVerificada(filtrada[i]),
                         ),
                       ),

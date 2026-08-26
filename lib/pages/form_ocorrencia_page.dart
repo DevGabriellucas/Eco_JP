@@ -9,7 +9,6 @@ import '../features/denuncias/providers/denuncia_providers.dart';
 import '../features/denuncias/providers/geocoding_provider.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/auth_service.dart';
-import '../services/classificacao_ia_service.dart';
 import '../services/cloudinary_service.dart';
 import '../services/rate_limiter.dart';
 import '../services/usuario_service.dart';
@@ -55,10 +54,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
   OcorrenciaRepository get _ocorrenciaRepository =>
       ref.read(ocorrenciaRepositoryProvider);
 
-  final _classificacaoService = ClassificacaoIaService();
   String? _categoria;
   bool _anonima = false;
-  bool _sugerindoCategoria = false;
 
   bool _enviando = false;
   bool _enviado = false;
@@ -926,59 +923,12 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
 
   // ── Seção categoria ───────────────────────────────────────────────────────
 
-  Future<void> _sugerirCategoriaIA() async {
-    final titulo = _tituloCtrl.text.trim();
-    final descricao = _descricaoCtrl.text.trim();
-    if (titulo.isEmpty && descricao.isEmpty) {
-      _snack('Preencha título ou descrição antes de pedir sugestão.');
-      return;
-    }
-    setState(() => _sugerindoCategoria = true);
-    final categoria = await _classificacaoService.sugerirCategoria(
-      titulo: titulo,
-      descricao: descricao,
-    );
-    if (!mounted) return;
-    setState(() => _sugerindoCategoria = false);
-    if (categoria != null) {
-      setState(() => _categoria = categoria);
-    } else {
-      _snack('Não foi possível sugerir agora. Selecione manualmente.');
-    }
-  }
-
   Widget _categoriaSection() {
     final pal = context.pal;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _label('CATEGORIA'),
-            TextButton.icon(
-              onPressed: (_enviando || _sugerindoCategoria)
-                  ? null
-                  : _sugerirCategoriaIA,
-              icon: _sugerindoCategoria
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.auto_awesome, size: 16),
-              label: const Text(
-                'Sugerir com IA',
-                style: TextStyle(fontSize: 12),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: pal.ink,
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 32),
-              ),
-            ),
-          ],
-        ),
+        _label('CATEGORIA'),
         DropdownButtonFormField<String>(
           initialValue: _categoria,
           decoration: _dec(''),

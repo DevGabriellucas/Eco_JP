@@ -255,9 +255,10 @@ class OcorrenciaRepository {
     return controller.stream;
   }
 
-  // Observa um conjunto específico de ocorrências por id (usado nos favoritos
-  // do perfil). Evita baixar a coleção inteira só para filtrar por id. O
-  // Firestore limita `whereIn` a 30 valores; para conjuntos maiores, particiona.
+  // Observa um conjunto específico de ocorrências por id (usado para listar as
+  // denúncias anônimas do próprio usuário). Evita baixar a coleção inteira só
+  // para filtrar por id. O Firestore limita `whereIn` a 30 valores; para
+  // conjuntos maiores, particiona.
   Stream<List<OcorrenciaModel>> observarPorIds(Set<String> ids) {
     if (ids.isEmpty) {
       return Stream.value(const <OcorrenciaModel>[]);

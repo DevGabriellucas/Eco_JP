@@ -21,13 +21,15 @@ class OccurrenceCard extends StatelessWidget {
   final VoidCallback? onReport;
   final VoidCallback? onTogglePin;
   final VoidCallback? onManage;
-  final VoidCallback? onHide;
-  final VoidCallback? onSave;
-  final bool saved;
 
-  // Contador de comentarios em tempo real. Quando nulo, usa occurrence.comments.
-  final Stream<int>? commentCountStream;
+  // Contagem de comentários já resolvida (via .count() pontual). Quando nula
+  // (ainda carregando), usa occurrence.comments como fallback.
+  final int? commentCount;
   final Stream<ComentarioModel?>? latestCommentStream;
+  // Último valor já emitido por [latestCommentStream]. Usado como initialData
+  // para o preview não sumir quando o card sai e volta à tela (broadcast não
+  // reentrega o último valor a quem assina depois).
+  final ComentarioModel? latestCommentInitial;
 
   const OccurrenceCard({
     super.key,
@@ -41,11 +43,9 @@ class OccurrenceCard extends StatelessWidget {
     this.onReport,
     this.onTogglePin,
     this.onManage,
-    this.onHide,
-    this.onSave,
-    this.saved = false,
-    this.commentCountStream,
+    this.commentCount,
     this.latestCommentStream,
+    this.latestCommentInitial,
   });
 
   @override
@@ -112,30 +112,21 @@ class OccurrenceCard extends StatelessWidget {
                   semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
                   animateOnActivate: true,
                 ),
-                StreamBuilder<int>(
-                  stream: commentCountStream,
-                  initialData: o.comments,
-                  builder: (context, snap) => _ActionButton(
-                    icon: Icons.chat_bubble_outline,
-                    iconFilled: Icons.chat_bubble,
-                    count: snap.data ?? o.comments,
-                    active: false,
-                    activeColor: AppColors.info,
-                    onTap: onComment ?? () {},
-                    semanticLabel: 'Comentar',
+                _CommentButton(
+                  count: commentCount ?? o.comments,
+                  onTap: onComment ?? () {},
+                ),
+                Tooltip(
+                  message: 'Compartilhar',
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    icon: Image.asset(
+                      'assets/images/aviao_papel.png',
+                      width: 24,
+                      height: 24,
+                    ),
+                    onPressed: () => compartilharOcorrencia(o),
                   ),
-                ),
-                _IconAction(
-                  tooltip: 'Compartilhar',
-                  icon: Icons.share_outlined,
-                  onTap: () => compartilharOcorrencia(o),
-                ),
-                const Spacer(),
-                _IconAction(
-                  tooltip: saved ? 'Remover dos salvos' : 'Salvar',
-                  icon: saved ? Icons.bookmark : Icons.bookmark_border,
-                  active: saved,
-                  onTap: onSave,
                 ),
               ],
             ),
@@ -165,9 +156,10 @@ class OccurrenceCard extends StatelessWidget {
                   ),
                 ),
                 _CommentPreview(
-                  countStream: commentCountStream,
+                  count: commentCount,
                   initialCount: o.comments,
                   latestCommentStream: latestCommentStream,
+                  latestCommentInitial: latestCommentInitial,
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -233,9 +225,6 @@ class OccurrenceCard extends StatelessWidget {
       case _CardMenuAction.about:
         _showAccountSheet(context);
         break;
-      case _CardMenuAction.hide:
-        onHide?.call();
-        break;
       case _CardMenuAction.report:
         onReport?.call();
         break;
@@ -298,14 +287,16 @@ class _PinnedNotice extends StatelessWidget {
 }
 
 class _CommentPreview extends StatelessWidget {
-  final Stream<int>? countStream;
+  final int? count;
   final int initialCount;
   final Stream<ComentarioModel?>? latestCommentStream;
+  final ComentarioModel? latestCommentInitial;
 
   const _CommentPreview({
-    required this.countStream,
+    required this.count,
     required this.initialCount,
     required this.latestCommentStream,
+    required this.latestCommentInitial,
   });
 
   @override
@@ -314,31 +305,27 @@ class _CommentPreview extends StatelessWidget {
 
     return StreamBuilder<ComentarioModel?>(
       stream: latestCommentStream,
+      initialData: latestCommentInitial,
       builder: (context, latestSnap) {
         final latest = latestSnap.data;
         if (latest == null) return const SizedBox.shrink();
+
+        final total = count ?? initialCount;
 
         return Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              StreamBuilder<int>(
-                stream: countStream,
-                initialData: initialCount,
-                builder: (context, countSnap) {
-                  final count = countSnap.data ?? initialCount;
-                  return Text(
-                    count <= 1
-                        ? 'Ver comentário'
-                        : 'Ver todos os $count comentários',
-                    style: TextStyle(
-                      color: context.pal.muted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  );
-                },
+              Text(
+                total <= 1
+                    ? 'Ver comentário'
+                    : 'Ver todos os $total comentários',
+                style: TextStyle(
+                  color: context.pal.muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 4),
               RichText(
@@ -371,7 +358,7 @@ class _CommentPreview extends StatelessWidget {
   }
 }
 
-enum _CardMenuAction { share, about, hide, report, togglePin, manage }
+enum _CardMenuAction { share, about, report, togglePin, manage }
 
 class _CardHeader extends StatelessWidget {
   final String authorName;
@@ -471,13 +458,6 @@ class _CardHeader extends StatelessWidget {
                   child: _MenuItem(
                     icon: Icons.person_outline,
                     label: 'Sobre esta conta',
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: _CardMenuAction.hide,
-                  child: _MenuItem(
-                    icon: Icons.visibility_off_outlined,
-                    label: 'Ocultar',
                   ),
                 ),
               ];
@@ -1329,29 +1309,52 @@ class _FloatingPlusOne extends StatelessWidget {
   }
 }
 
-class _IconAction extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-  final bool active;
+class _CommentButton extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
 
-  const _IconAction({
-    required this.icon,
-    required this.tooltip,
-    this.onTap,
-    this.active = false,
-  });
+  const _CommentButton({required this.count, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      icon: Icon(icon, size: 24, color: context.pal.ink),
-      onPressed: onTap,
+    final pal = context.pal;
+    return Semantics(
+      button: true,
+      label: 'Comentar, $count',
+      child: Tooltip(
+        message: 'Comentar',
+        child: InkResponse(
+          onTap: onTap,
+          radius: 24,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/icons/comment.png',
+                  width: 24,
+                  height: 24,
+                  color: pal.ink,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: pal.ink,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
+
 
 class _AuthorAvatar extends StatelessWidget {
   final String name;

@@ -21,10 +21,6 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == 'autoridade';
     }
 
-    function isValidStatus(status) {
-      return status in ['Pendente', 'Resolvido', 'Nao resolvido'];
-    }
-
     // Rejeita conteúdo em branco: exige ao menos um caractere não-espaço. O
     // `size() >= N` sozinho aceitaria "   " (só espaços), então um cliente
     // forjado poderia criar denúncias/comentários vazios burlando o trim do
@@ -353,7 +349,7 @@ service cloud.firestore {
     function isValidComment(data) {
       return data.keys().hasOnly([
           'texto', 'userId', 'userName', 'userPhotoUrl', 'dataCriacao',
-          'parentId', 'likedBy', 'likes',
+          'parentId', 'likedBy', 'likes', 'autorAutoridade',
         ])
         && data.texto is string
         && data.texto.size() >= 1
@@ -368,7 +364,8 @@ service cloud.firestore {
         && (!('parentId' in data) || data.parentId == null
           || (data.parentId is string && data.parentId.size() > 0 && data.parentId.size() <= 200))
         && data.likedBy is list && data.likedBy.size() == 0
-        && data.likes is int && data.likes == 0;
+        && data.likes is int && data.likes == 0
+        && (!('autorAutoridade' in data) || data.autorAutoridade is bool);
     }
 
     // Curtir/descurtir comentário: o usuário só adiciona/remove o próprio UID.
@@ -408,20 +405,16 @@ service cloud.firestore {
         && (!('fotoUrl' in data) || isOptionalPublicPhoto(data.fotoUrl));
     }
 
-    function isValidFavorite(data, ocorrenciaId) {
-      return data.keys().hasOnly(['ocorrenciaId', 'salvoEm'])
-        && data.ocorrenciaId == ocorrenciaId
-        && data.salvoEm == request.time
-        && exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId));
-    }
-
     function isValidSocialLink(data, uid) {
       return data.keys().hasOnly(['uid', 'criadoEm'])
         && data.uid == uid
         && data.criadoEm == request.time;
     }
 
-    function isValidNotification(data, donoId) {
+    // Notificação de interação (comentário / curtida / mudança de status): quem
+    // gera é OUTRO usuário, e a denúncia referida precisa existir e pertencer ao
+    // dono que recebe. Protege contra spam de notificação forjada.
+    function isValidInteractionNotification(data, donoId) {
       return data.keys().hasOnly([
           'tipo',
           'deUsuarioNome',
@@ -450,6 +443,28 @@ service cloud.firestore {
         && data.lida == false
         && exists(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId))
         && get(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId)).data.usuarioId == donoId;
+    }
+
+    // Notificação de conquista (gamificação): o próprio usuário grava para si
+    // mesmo ao desbloquear um badge. Sem denúncia associada (ocorrenciaId vazio).
+    function isValidConquistaNotification(data) {
+      return data.keys().hasOnly([
+          'tipo',
+          'deUsuarioNome',
+          'ocorrenciaId',
+          'ocorrenciaTitulo',
+          'conquistaTitulo',
+          'dataCriacao',
+          'lida',
+        ])
+        && data.tipo == 'conquista'
+        && data.deUsuarioNome is string
+        && data.deUsuarioNome.size() <= 80
+        && data.conquistaTitulo is string
+        && data.conquistaTitulo.size() >= 1
+        && data.conquistaTitulo.size() <= 120
+        && data.dataCriacao == request.time
+        && data.lida == false;
     }
 
     function isValidModerationReport(data) {
@@ -566,14 +581,6 @@ service cloud.firestore {
       // LGPD art. 18 — direito à exclusão: o próprio usuário pode apagar seu perfil.
       allow delete: if signedIn() && request.auth.uid == userId;
 
-      match /favoritos/{ocorrenciaId} {
-        allow read: if signedIn() && request.auth.uid == userId;
-        allow create, update: if emailVerificado()
-          && request.auth.uid == userId
-          && isValidFavorite(request.resource.data, ocorrenciaId);
-        allow delete: if signedIn() && request.auth.uid == userId;
-      }
-
       // Ponteiros (só o ID) das próprias denúncias anônimas do usuário (S2).
       // Necessário porque o documento público da ocorrência não guarda mais
       // usuarioId quando anonima==true — sem isso, "Minhas denúncias" não
@@ -607,9 +614,15 @@ service cloud.firestore {
 
     match /notificacoes/{donoId}/items/{notifId} {
       allow read, update, delete: if signedIn() && request.auth.uid == donoId;
-      allow create: if emailVerificado()
-        && request.auth.uid != donoId
-        && isValidNotification(request.resource.data, donoId);
+      allow create: if emailVerificado() && (
+        // Interação: outro usuário notifica o dono da denúncia.
+        (request.auth.uid != donoId
+          && isValidInteractionNotification(request.resource.data, donoId))
+        ||
+        // Conquista: o usuário grava a própria notificação de badge.
+        (request.auth.uid == donoId
+          && isValidConquistaNotification(request.resource.data))
+      );
     }
 
     // Papéis de autoridade. Cada usuário só lê o próprio papel (para o app

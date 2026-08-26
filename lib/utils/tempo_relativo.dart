@@ -1,7 +1,7 @@
 import 'package:intl/intl.dart';
 
 /// Formata uma data como tempo relativo curto em português:
-/// "agora", "há 5 min", "há 2 h", "ontem", "há 3 dias" e, para datas mais
+/// "agora", "5 min", "2 hrs", "ontem", "3 dias", "1 sem" e, para datas mais
 /// antigas que uma semana, a data absoluta (dd/MM/yyyy).
 ///
 /// Usado no feed, nos comentários e nas notificações para deixar o tempo
@@ -15,10 +15,12 @@ String tempoRelativo(DateTime? data, {DateTime? agora}) {
   if (diff.isNegative) return 'agora';
 
   if (diff.inSeconds < 60) return 'agora';
-  if (diff.inMinutes < 60) return 'há ${diff.inMinutes} min';
-  if (diff.inHours < 24) return 'há ${diff.inHours} h';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} min';
+  if (diff.inHours < 24) return '${diff.inHours} hrs';
   if (diff.inDays == 1) return 'ontem';
-  if (diff.inDays < 7) return 'há ${diff.inDays} dias';
+  if (diff.inDays < 7) return '${diff.inDays} dias';
+  if (diff.inDays < 14) return '1 sem';
+  if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} sem';
 
   return DateFormat('dd/MM/yyyy').format(data);
 }
