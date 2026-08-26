@@ -1,0 +1,19 @@
+{
+  "name": "eco-jp-firestore-tests",
+  "version": "1.0.0",
+  "description": "Testes para regras de Firestore do EcoJP",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "emulator": "firebase emulators:start",
+    "emulator:clean": "firebase emulators:start --import ./firestore_export"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "firebase-admin": "^11.11.0",
+    "firebase-functions-test": "^3.0.0",
+    "jest": "^29.7.0"
+  }
+}
