@@ -157,6 +157,10 @@ service cloud.firestore {
           'likedBy',
           'dislikedBy',
           'fixada',
+          // Opcional (não exigido em hasAll): contador de compartilhamentos.
+          // Versões antigas do app não enviam este campo na criação, e exigi-lo
+          // quebraria a publicação para quem ainda não atualizou.
+          'shares',
           // Opcional (não exigido em hasAll): identifica o município da
           // denúncia. Dados novos já enviam; dados antigos ficam sem, sem
           // quebrar leitura — preparação para expansão multi-município.
@@ -189,6 +193,7 @@ service cloud.firestore {
         && data.likes is int && data.likes == 0
         && data.dislikes is int && data.dislikes == 0
         && data.comments is int && data.comments == 0
+        && (!('shares' in data) || (data.shares is int && data.shares == 0))
         && data.likedBy is list && data.likedBy.size() == 0
         && data.dislikedBy is list && data.dislikedBy.size() == 0;
     }
@@ -276,6 +281,17 @@ service cloud.firestore {
             && request.resource.data.likes == resource.data.likes - 1
             && request.resource.data.dislikes == resource.data.dislikes + 1)
         );
+    }
+
+    // Compartilhar: qualquer usuário autenticado soma 1 ao contador. Não há
+    // lista de quem compartilhou (o destino do envio é externo e invisível ao
+    // app), então a regra só garante que o passo seja exatamente +1 — impede
+    // zerar, decrementar ou inflar o número de uma vez. `get('shares', 0)`
+    // cobre documentos criados antes deste campo existir.
+    function isValidShareUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['shares'])
+        && request.resource.data.shares is int
+        && request.resource.data.shares == resource.data.get('shares', 0) + 1;
     }
 
     // Autoridade só pode mexer nos campos de verificação. Ao confirmar, grava
@@ -516,6 +532,9 @@ service cloud.firestore {
         ||
         // Reactions: authenticated user can only add/remove their own UID.
         isValidReactionUpdate()
+        ||
+        // Compartilhamento: soma exatamente 1 ao contador.
+        isValidShareUpdate()
         ||
         // Autoridade pode verificar / desverificar qualquer denúncia.
         (isAutoridade() && isValidVerificacaoUpdate())

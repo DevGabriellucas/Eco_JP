@@ -87,5 +87,7 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>GMSApiKey</key>
+		<string>SUA_CHAVE_DE_API_AQUI</string>
 	</dict>
 </plist>

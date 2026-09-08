@@ -116,18 +116,7 @@ class OccurrenceCard extends StatelessWidget {
                   count: commentCount ?? o.comments,
                   onTap: onComment ?? () {},
                 ),
-                Tooltip(
-                  message: 'Compartilhar',
-                  child: IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: Image.asset(
-                      'assets/images/aviao_papel.png',
-                      width: 24,
-                      height: 24,
-                    ),
-                    onPressed: () => compartilharOcorrencia(o),
-                  ),
-                ),
+                _ShareButton(occurrence: o),
               ],
             ),
           ),
@@ -1355,6 +1344,67 @@ class _CommentButton extends StatelessWidget {
   }
 }
 
+
+/// Botão de compartilhar com contador. É stateful porque o contador sobe
+/// assim que o envio termina — sem depender de um novo snapshot do feed,
+/// que só chegaria segundos depois.
+class _ShareButton extends StatefulWidget {
+  final OcorrenciaModel occurrence;
+
+  const _ShareButton({required this.occurrence});
+
+  @override
+  State<_ShareButton> createState() => _ShareButtonState();
+}
+
+class _ShareButtonState extends State<_ShareButton> {
+  Future<void> _share() async {
+    // compartilharOcorrencia já soma em occurrence.shares; aqui só
+    // repintamos para o novo valor aparecer.
+    await compartilharOcorrencia(widget.occurrence);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final count = widget.occurrence.shares;
+    return Semantics(
+      button: true,
+      label: 'Compartilhar, $count',
+      child: Tooltip(
+        message: 'Compartilhar',
+        child: InkResponse(
+          onTap: _share,
+          radius: 24,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/images/aviao_papel.png',
+                  width: 24,
+                  height: 24,
+                  color: pal.ink,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: pal.ink,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _AuthorAvatar extends StatelessWidget {
   final String name;

@@ -102,6 +102,33 @@ void main() {
     });
   });
 
+  group('incrementarCompartilhamento', () {
+    test('soma 1 a cada chamada, acumulando', () async {
+      final db = FakeFirebaseFirestore();
+      final repo = _repo(db);
+      final ref = await db.collection('ocorrencias').add({'shares': 0});
+
+      await repo.incrementarCompartilhamento(ref.id);
+      expect((await ref.get()).data()!['shares'], 1);
+
+      await repo.incrementarCompartilhamento(ref.id);
+      await repo.incrementarCompartilhamento(ref.id);
+      expect((await ref.get()).data()!['shares'], 3);
+    });
+
+    test('documento sem o campo passa a contar a partir de 1', () async {
+      final db = FakeFirebaseFirestore();
+      final repo = _repo(db);
+      // Denúncia criada antes de 'shares' existir: o increment do Firestore
+      // trata campo ausente como zero.
+      final ref = await db.collection('ocorrencias').add({'titulo': 'Antiga'});
+
+      await repo.incrementarCompartilhamento(ref.id);
+
+      expect((await ref.get()).data()!['shares'], 1);
+    });
+  });
+
   group('observarPorIds (particionamento do whereIn)', () {
     test('conjunto vazio emite lista vazia', () async {
       final repo = _repo(FakeFirebaseFirestore());

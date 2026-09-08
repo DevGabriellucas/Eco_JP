@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.example.eco_jp"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "30.0.16138531"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -23,6 +23,7 @@ void main() {
       expect(map['likes'], 0);
       expect(map['dislikes'], 0);
       expect(map['comments'], 0);
+      expect(map['shares'], 0);
       expect(map['likedBy'], isEmpty);
       expect(map['dislikedBy'], isEmpty);
       expect(map['status'], 'Pendente');
@@ -85,6 +86,17 @@ void main() {
       expect(model.likedBy, isEmpty);
       expect(model.likes, 0);
       expect(model.userLiked, isFalse);
+    });
+
+    test('shares: documento anterior ao campo é lido como zero', () {
+      final semShares = OcorrenciaModel.fromMap(baseMap(), 'doc-1');
+      final comShares = OcorrenciaModel.fromMap(
+        baseMap()..['shares'] = 7,
+        'doc-1',
+      );
+
+      expect(semShares.shares, 0);
+      expect(comShares.shares, 7);
     });
 
     test('statusOficial: string do Firestore vira o enum correspondente', () {

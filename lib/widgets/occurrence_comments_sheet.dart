@@ -65,13 +65,13 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
   ComentarioModel? _replyTo;
   String? _replyParentId;
   bool _sending = false;
-  // Se o usuário logado é órgão/autoridade — carimba o selo no comentário.
+  // If the logged-in user is an authority/agency — stamps the badge on the comment.
   bool _ehAutoridade = false;
-  // Foco em comentário vindo da fila de moderação: destaca por alguns segundos.
+  // Focus on comment from moderation queue: highlights for a few seconds.
   String? _comentarioEmFoco;
   bool _mostraDestaque = false;
   Timer? _focoTimer;
-  // Controla quais comentários têm respostas expandidas
+  // Controls which comments have expanded replies
   final Set<String> _expandedComments = {};
 
   @override
@@ -79,7 +79,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     super.initState();
     _carregarPerfilAtual();
     _carregarPapel();
-    // Se houver comentário em foco, ativa o destaque.
+    // If there's a focused comment, activate the highlight.
     if (widget.comentarioIdEmFoco != null) {
       _comentarioEmFoco = widget.comentarioIdEmFoco;
       _mostraDestaque = true;
@@ -98,7 +98,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       if (!mounted) return;
       setState(() => _ehAutoridade = ehAutoridade);
     } catch (_) {
-      // Sem papel confirmado → comentário comum (sem selo).
+      // No confirmed role → regular comment (no badge).
     }
   }
 
@@ -118,7 +118,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       if (!mounted) return;
       setState(() => _perfilAtual = perfil);
     } catch (_) {
-      // Perfil ausente nao bloqueia comentario; usamos dados do Firebase Auth.
+      // Missing profile doesn't block comment; we use Firebase Auth data.
     }
   }
 
@@ -127,7 +127,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     final user = widget.authService.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Entre na sua conta para comentar.')),
+        const SnackBar(content: Text('Sign in to your account to comment.')),
       );
       return;
     }
@@ -155,9 +155,9 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
         ),
       );
 
-      // Denúncia anônima nunca notifica o dono (S2): o UID real não é
-      // acessível a quem comenta, protegendo o denunciante de correlação
-      // entre denúncias.
+      // Anonymous reports never notify the owner: the real UID is not
+      // accessible to commenters, protecting the reporter from correlation
+      // between reports.
       final dono = widget.occurrence.usuarioId;
       if (!widget.occurrence.anonima && dono != null && dono != user.uid) {
         await widget.notificacaoService.notificar(
@@ -180,8 +180,8 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       if (!mounted) return;
       setState(() => _sending = false);
       final msg = e is RateLimitException
-          ? 'Aguarde ${e.segundosRestantes}s antes de comentar de novo.'
-          : 'Não foi possível comentar agora.';
+          ? 'Wait ${e.segundosRestantes}s before commenting again.'
+          : 'Unable to comment right now.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
@@ -218,7 +218,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível curtir agora.')),
+        const SnackBar(content: Text('Unable to like right now.')),
       );
     }
   }
@@ -238,7 +238,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
               borderRadius: BorderRadius.circular(16),
             ),
             title: Text(
-              'Editar comentário',
+              'Edit comment',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -253,7 +253,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
               textCapitalization: TextCapitalization.sentences,
               style: TextStyle(color: pal.ink),
               decoration: InputDecoration(
-                hintText: 'Escreva seu comentário',
+                hintText: 'Write your comment',
                 hintStyle: TextStyle(color: pal.hint),
                 filled: true,
                 fillColor: pal.surfaceAlt,
@@ -266,7 +266,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
             actions: [
               TextButton(
                 onPressed: saving ? null : () => Navigator.pop(dialogContext),
-                child: const Text('Cancelar'),
+                child: const Text('Cancel'),
               ),
               ElevatedButton(
                 onPressed: saving
@@ -291,7 +291,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text('Salvar'),
+                    : const Text('Save'),
               ),
             ],
           ),
@@ -311,7 +311,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mensagemErro(e, acao: 'editar o comentário'))),
+        SnackBar(content: Text(mensagemErro(e, acao: 'edit the comment'))),
       );
     }
   }
@@ -324,7 +324,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
         backgroundColor: pal.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
-          'Excluir comentário',
+          'Delete comment',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
@@ -332,13 +332,13 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
           ),
         ),
         content: Text(
-          'Tem certeza que deseja excluir este comentário?',
+          'Are you sure you want to delete this comment?',
           style: TextStyle(color: pal.ink),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
@@ -347,7 +347,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
               foregroundColor: Colors.white,
               elevation: 0,
             ),
-            child: const Text('Excluir'),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -363,7 +363,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mensagemErro(e, acao: 'excluir o comentário'))),
+        SnackBar(content: Text(mensagemErro(e, acao: 'delete the comment'))),
       );
     }
   }
@@ -373,7 +373,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     if (user == null) return;
     final result = await showReportContentSheet(
       context,
-      title: 'Denunciar comentário',
+      title: 'Report comment',
     );
     if (result == null) return;
 
@@ -387,12 +387,12 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Comentário enviado para moderação.')),
+        const SnackBar(content: Text('Comment sent for moderation.')),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível denunciar.')),
+        const SnackBar(content: Text('Unable to report.')),
       );
     }
   }
@@ -431,7 +431,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Comentários',
+                        'Comments',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 16,
@@ -441,7 +441,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Fechar',
+                      tooltip: 'Close',
                       icon: Icon(Icons.close, size: 22, color: pal.ink),
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -461,8 +461,8 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                       );
                     }
 
-                    // Comentários ocultados pela autoridade (moderação) não
-                    // aparecem no fluxo público.
+                    // Comments hidden by authority (moderation) do not
+                    // appear in the public feed.
                     final comentarios = (snapshot.data ?? const [])
                         .where((c) => !c.oculto)
                         .toList();
@@ -635,7 +635,7 @@ class _CommentTileState extends State<_CommentTile> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header: Nome + Selo + Tempo + (❤️ pela autoridade se curtiu)
+                // Header: Name + Badge + Time + (❤️ by authority if liked)
                 Row(
                   children: [
                     Expanded(
@@ -677,10 +677,10 @@ class _CommentTileState extends State<_CommentTile> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          // ❤️ pela autoridade (apenas se autoridade curtiu)
+                          // ❤️ by authority (only if authority liked)
                           if (widget.isUserAutority && c.userLiked) ...[
                             const SizedBox(width: 6),
-                            Row(
+                            const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
@@ -688,12 +688,12 @@ class _CommentTileState extends State<_CommentTile> {
                                   size: 12,
                                   color: AppColors.danger,
                                 ),
-                                const SizedBox(width: 3),
+                                SizedBox(width: 3),
                                 Text(
-                                  'pela autoridade',
+                                  'by authority',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: pal.hint,
+                                    color: AppColors.danger,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -706,7 +706,7 @@ class _CommentTileState extends State<_CommentTile> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                // Texto do comentário + Coração curtir
+                // Comment text + Like heart
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -751,16 +751,16 @@ class _CommentTileState extends State<_CommentTile> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                // Ações: Responder + Menu
+                // Actions: Reply + Menu
                 Row(
                   children: [
                     Semantics(
                       button: true,
-                      label: 'Responder comentário',
+                      label: 'Reply to comment',
                       child: GestureDetector(
                         onTap: widget.onReply,
                         child: Text(
-                          'Responder',
+                          'Reply',
                           style: TextStyle(
                             fontSize: 11,
                             color: pal.muted,
@@ -774,7 +774,7 @@ class _CommentTileState extends State<_CommentTile> {
                       width: 24,
                       height: 24,
                       child: PopupMenuButton<_CommentOwnerAction>(
-                        tooltip: 'Opções do comentário',
+                        tooltip: 'Comment options',
                         icon: Icon(Icons.more_horiz, size: 16, color: pal.hint),
                         padding: EdgeInsets.zero,
                         onSelected: (action) {
@@ -796,14 +796,14 @@ class _CommentTileState extends State<_CommentTile> {
                               value: _CommentOwnerAction.edit,
                               child: _CommentMenuItem(
                                 icon: Icons.edit_outlined,
-                                label: 'Editar',
+                                label: 'Edit',
                               ),
                             ),
                             PopupMenuItem(
                               value: _CommentOwnerAction.delete,
                               child: _CommentMenuItem(
                                 icon: Icons.delete_outline,
-                                label: 'Excluir',
+                                label: 'Delete',
                                 danger: true,
                               ),
                             ),
@@ -813,7 +813,7 @@ class _CommentTileState extends State<_CommentTile> {
                               value: _CommentOwnerAction.report,
                               child: _CommentMenuItem(
                                 icon: Icons.flag_outlined,
-                                label: 'Denunciar',
+                                label: 'Report',
                                 danger: true,
                               ),
                             ),
@@ -822,16 +822,16 @@ class _CommentTileState extends State<_CommentTile> {
                     ),
                   ],
                 ),
-                // Ver mais/menos respostas (se houver)
+                // Show/hide replies (if any)
                 if (widget.replyCount > 0) ...[
                   const SizedBox(height: 8),
                   Semantics(
                     button: true,
-                    label: widget.showReplies ? 'Ver menos respostas' : 'Ver mais respostas',
+                    label: widget.showReplies ? 'Hide replies' : 'Show replies',
                     child: GestureDetector(
                       onTap: () => widget.onToggleReplies?.call(!widget.showReplies),
                       child: Text(
-                        widget.showReplies ? 'Ver menos respostas' : 'Ver mais respostas',
+                        widget.showReplies ? 'Hide replies' : 'Show replies',
                         style: TextStyle(
                           fontSize: 11,
                           color: pal.primary,
@@ -901,7 +901,7 @@ class _ReplyBanner extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Respondendo a $name',
+              'Replying to $name',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -912,7 +912,7 @@ class _ReplyBanner extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'Cancelar resposta',
+            tooltip: 'Cancel reply',
             visualDensity: VisualDensity.compact,
             icon: const Icon(Icons.close, size: 18),
             onPressed: onCancel,
@@ -1008,7 +1008,7 @@ class _CommentComposer extends StatelessWidget {
                 textCapitalization: TextCapitalization.sentences,
                 style: TextStyle(color: pal.ink, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Comentar como $userName',
+                  hintText: 'Comment as $userName',
                   hintStyle: TextStyle(color: pal.hint, fontSize: 13),
                   border: InputBorder.none,
                 ),
@@ -1017,7 +1017,7 @@ class _CommentComposer extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           IconButton(
-            tooltip: 'Enviar comentário',
+            tooltip: 'Send comment',
             icon: sending
                 ? const SizedBox(
                     width: 18,
@@ -1048,7 +1048,7 @@ class _EmptyComments extends StatelessWidget {
             Icon(Icons.mode_comment_outlined, size: 52, color: pal.hint),
             const SizedBox(height: 12),
             Text(
-              'Nenhum comentário ainda',
+              'No comments yet',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
@@ -1058,7 +1058,7 @@ class _EmptyComments extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Seja a primeira pessoa a comentar esta denúncia.',
+              'Be the first to comment on this report.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: pal.hint, height: 1.35),
             ),

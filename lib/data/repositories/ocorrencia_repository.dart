@@ -555,6 +555,19 @@ class OcorrenciaRepository {
         );
   }
 
+  // ── COMPARTILHAMENTO ──────────────────────────────────────────────────────
+
+  /// Soma 1 ao contador de compartilhamentos. Diferente de like/dislike, não
+  /// guarda quem compartilhou (não há toggle nem lista): o incremento atômico
+  /// do Firestore basta e dispensa transação.
+  Future<void> incrementarCompartilhamento(String ocorrenciaId) {
+    return comLogDeErro('registrar compartilhamento', () async {
+      await _ocorrenciasRef.doc(ocorrenciaId).update({
+        'shares': FieldValue.increment(1),
+      });
+    });
+  }
+
   // ── LIKE / DISLIKE ────────────────────────────────────────────────────────
   //
   // Regras:

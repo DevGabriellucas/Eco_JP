@@ -33,6 +33,7 @@ class OcorrenciaModel {
   int likes;
   int dislikes;
   int comments;
+  int shares;
   bool userLiked;
   bool userDisliked;
 
@@ -79,6 +80,7 @@ class OcorrenciaModel {
     this.likes = 0,
     this.dislikes = 0,
     this.comments = 0,
+    this.shares = 0,
     this.userLiked = false,
     this.userDisliked = false,
     this.verificada = false,
@@ -117,6 +119,7 @@ class OcorrenciaModel {
       'likes': 0,
       'dislikes': 0,
       'comments': 0,
+      'shares': 0,
       'likedBy': [],
       'dislikedBy': [],
       'fixada': false,
@@ -157,6 +160,7 @@ class OcorrenciaModel {
       likes: map['likes'] ?? likedBy.length,
       dislikes: map['dislikes'] ?? dislikedBy.length,
       comments: map['comments'] ?? 0,
+      shares: map['shares'] ?? 0,
       userLiked: currentUserId != null && likedBy.contains(currentUserId),
       userDisliked: currentUserId != null && dislikedBy.contains(currentUserId),
       verificada: map['verificada'] == true,
