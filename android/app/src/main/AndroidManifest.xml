@@ -1,11 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Necessária para os tiles do Google Maps e as chamadas HTTP (Firestore,
+         geocoding). Em debug o Flutter injeta esta permissão automaticamente,
+         mas em release ela precisa estar declarada aqui. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Localização do usuário: usada pelo geolocator (LocationService) e pelo
+         myLocationEnabled do GoogleMap. Sem elas o geolocator lança
+         "No location permissions are defined in the manifest". -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <application
         android:label="eco_jp"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Preenchido pelo Gradle a partir de MAPS_API_KEY em
+             android/local.properties (gitignored) ou da env var homônima.
+             Ver o bloco manifestPlaceholders em android/app/build.gradle.kts. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="SUA_CHAVE_DE_API_AQUI"/>
+            android:value="${MAPS_API_KEY}"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

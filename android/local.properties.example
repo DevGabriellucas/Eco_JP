@@ -1,0 +1,4 @@
+# Modelo versionado. O arquivo real (android/local.properties) e gitignored e
+# normalmente gerado pelo Flutter com sdk.dir/flutter.sdk. Acrescente a linha
+# abaixo com a chave do Google Cloud Console ("Maps SDK for Android" habilitada):
+MAPS_API_KEY=

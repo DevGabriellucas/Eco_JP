@@ -1,1 +1,4 @@
 #include "Generated.xcconfig"
+// Chave do Google Maps (arquivo gitignored). O "?" torna o include opcional,
+// para o build nao quebrar em maquina sem o arquivo, ex.: PR de fork no CI.
+#include? "Maps.xcconfig"

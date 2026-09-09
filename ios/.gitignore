@@ -32,3 +32,6 @@ Runner/GeneratedPluginRegistrant.*
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# Chave do Google Maps (ver Flutter/Maps.xcconfig.example)
+Flutter/Maps.xcconfig

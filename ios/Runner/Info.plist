@@ -87,7 +87,10 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- Preenchido em tempo de build por MAPS_API_KEY (ios/Flutter/Maps.xcconfig,
+		     gitignored). O SDK não lê esta chave sozinho: quem a registra é a
+		     chamada GMSServices.provideAPIKey no AppDelegate.swift, que lê daqui. -->
 		<key>GMSApiKey</key>
-		<string>SUA_CHAVE_DE_API_AQUI</string>
+		<string>$(MAPS_API_KEY)</string>
 	</dict>
 </plist>
