@@ -9,18 +9,24 @@ import '../utils/imagem_cacheada.dart';
 import '../utils/compartilhamento.dart';
 import '../utils/tempo_relativo.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_motion.dart';
+import 'feed/like_button.dart';
+import 'shared/app_icons.dart';
+import 'shared/shimmer_box.dart';
 
 class OccurrenceCard extends StatelessWidget {
   final OcorrenciaModel occurrence;
   final String? nomeAutor;
   final String? fotoAutor;
-  final VoidCallback onLike;
+  final Future<bool> Function() onLike;
   final VoidCallback onDislike;
   final VoidCallback? onComment;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onReport;
   final VoidCallback? onTogglePin;
   final VoidCallback? onManage;
+  final VoidCallback? onOpenMap;
+  final VoidCallback? onOpenDetail;
 
   // Contagem de comentários já resolvida (via .count() pontual). Quando nula
   // (ainda carregando), usa occurrence.comments como fallback.
@@ -43,6 +49,8 @@ class OccurrenceCard extends StatelessWidget {
     this.onReport,
     this.onTogglePin,
     this.onManage,
+    this.onOpenMap,
+    this.onOpenDetail,
     this.commentCount,
     this.latestCommentStream,
     this.latestCommentInitial,
@@ -58,155 +66,370 @@ class OccurrenceCard extends StatelessWidget {
     final autor = _authorName;
     final pal = context.pal;
 
+    return Material(
+      color: pal.surface,
+      borderRadius: BorderRadius.circular(AppRadius.cardLarge),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpenDetail,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.cardLarge),
+            border: Border.all(color: pal.border.withValues(alpha: 0.65)),
+            boxShadow:
+                Theme.of(context).brightness == Brightness.light
+                    ? AppShadows.card
+                    : const [],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (o.fixada) const _PinnedNotice(),
+              _CardHeader(
+                authorName: autor,
+                authorPhoto: fotoAutor,
+                location: o.localizacao,
+                timeLabel: tempoStr,
+                status: statusEnum,
+                onMenuSelected: (action) => _handleMenuAction(context, action),
+                canManage: onManage != null,
+                canPin: onTogglePin != null,
+                pinned: o.fixada,
+                onAuthorTap: onAuthorTap,
+                canReport: onReport != null,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: o.videoUrl != null && o.videoUrl!.trim().isNotEmpty
+                      ? _FeedVideoPlayer(
+                          url: o.videoUrl!.trim(),
+                          type: typeEnum,
+                          title: o.titulo,
+                          location: o.localizacao,
+                          heroTag: 'occurrence-image-${o.id}',
+                          onOpenDetail: onOpenDetail,
+                        )
+                      : _ImageSlider(
+                          urls: o.imagensUrls,
+                          fallbackUrl: o.imagemUrl,
+                          type: typeEnum,
+                          title: o.titulo,
+                          location: o.localizacao,
+                          onDoubleTapLike: onLike,
+                          alreadyLiked: o.userLiked,
+                          heroTag: 'occurrence-image-${o.id}',
+                          onOpenDetail: onOpenDetail,
+                        ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _CompactCategoryBadge(type: typeEnum),
+                    if (estagio.temAcaoOficial)
+                      _CompactOfficialBadge(stage: estagio),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text(
+                  o.titulo.trim().isEmpty
+                      ? 'Denúncia ambiental'
+                      : o.titulo.trim(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.cardTitle.copyWith(
+                    color: pal.ink,
+                    fontSize: 19,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+                child: _PostText(description: o.descricao),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  children: [
+                    LikeButton(
+                      count: o.likes,
+                      isLiked: o.userLiked,
+                      onToggle: onLike,
+                    ),
+                    _CommentButton(
+                      count: commentCount ?? o.comments,
+                      onTap: onComment ?? () {},
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Compartilhar',
+                      onPressed: () => compartilharOcorrencia(o),
+                      icon: Icon(AppIcons.share, color: pal.muted, size: 24),
+                    ),
+                  ],
+                ),
+              ),
+              if (latestCommentStream != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                  child: InkWell(
+                    onTap: onComment,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    child: _CommentPreview(
+                      count: commentCount,
+                      initialCount: o.comments,
+                      latestCommentStream: latestCommentStream,
+                      latestCommentInitial: latestCommentInitial,
+                    ),
+                  ),
+                ),
+              if ((commentCount ?? o.comments) > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextButton(
+                    onPressed: onComment,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      foregroundColor: pal.muted,
+                    ),
+                    child: Text(
+                      (commentCount ?? o.comments) == 1
+                          ? 'Ver comentário'
+                          : 'Ver mais ${commentCount ?? o.comments} comentários',
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onOpenMap,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: pal.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(46),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                    ),
+                    icon: const Icon(AppIcons.map, size: 19),
+                    label: const Text('Ver no mapa'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Mantido como fallback de layout para integrações antigas do card.
+  // ignore: unused_element
+  Widget _buildCompact(
+    BuildContext context, {
+    required OcorrenciaModel occurrence,
+    required String author,
+    required String timeLabel,
+    required OccurrenceStatus status,
+    required OccurrenceType type,
+    required EstagioOficial officialStage,
+  }) {
+    final pal = context.pal;
+    final images = <String>{
+      ...occurrence.imagensUrls.map((url) => url.trim()),
+      if (occurrence.imagemUrl != null) occurrence.imagemUrl!.trim(),
+    }.where((url) => url.isNotEmpty).toList(growable: false);
+    const String? referenceAsset = null;
+
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: pal.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: pal.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: AppShadows.card,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (o.fixada) const _PinnedNotice(),
-          _CardHeader(
-            authorName: autor,
-            authorPhoto: fotoAutor,
-            location: o.localizacao,
-            onMenuSelected: (action) => _handleMenuAction(context, action),
-            canManage: onManage != null,
-            canPin: onTogglePin != null,
-            pinned: o.fixada,
-            onAuthorTap: onAuthorTap,
-            canReport: onReport != null,
-          ),
-          if (o.videoUrl != null && o.videoUrl!.trim().isNotEmpty)
-            _FeedVideoPlayer(url: o.videoUrl!.trim(), type: typeEnum)
-          else
-            _ImageSlider(
-              urls: o.imagensUrls,
-              fallbackUrl: o.imagemUrl,
-              type: typeEnum,
-              onDoubleTapLike: onLike,
-              alreadyLiked: o.userLiked,
+      child: SizedBox(
+        height: 198,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: 142,
+              child: _CompactMedia(
+                images: images,
+                hasVideo: occurrence.videoUrl?.trim().isNotEmpty == true,
+                type: type,
+                status: status,
+                referenceAsset: referenceAsset,
+                heroTag: 'occurrence-image-${occurrence.id}',
+                alreadyLiked: occurrence.userLiked,
+                onDoubleTapLike: onLike,
+                onOpenDetail: onOpenDetail,
+              ),
             ),
-          _OfficialStatusStrip(estagio: estagio),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 0, 8, 0),
-            child: Row(
-              children: [
-                _ActionButton(
-                  icon: Icons.favorite_border,
-                  iconFilled: Icons.favorite,
-                  count: o.likes,
-                  active: o.userLiked,
-                  activeColor: AppColors.danger,
-                  onTap: onLike,
-                  semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
-                  animateOnActivate: true,
-                ),
-                _CommentButton(
-                  count: commentCount ?? o.comments,
-                  onTap: onComment ?? () {},
-                ),
-                Tooltip(
-                  message: 'Compartilhar',
-                  child: IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: Image.asset(
-                      'assets/images/aviao_papel.png',
-                      width: 24,
-                      height: 24,
-                    ),
-                    onPressed: () => compartilharOcorrencia(o),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RichText(
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  text: TextSpan(
-                    style: TextStyle(
-                      color: pal.ink,
-                      fontSize: 13,
-                      height: 1.35,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: o.titulo,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      if (o.descricao.trim().isNotEmpty)
-                        TextSpan(text: ' ${o.descricao.trim()}'),
-                    ],
-                  ),
-                ),
-                _CommentPreview(
-                  count: commentCount,
-                  initialCount: o.comments,
-                  latestCommentStream: latestCommentStream,
-                  latestCommentInitial: latestCommentInitial,
-                ),
-                const SizedBox(height: 8),
-                Row(
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 5, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.location_on_outlined,
-                      size: 14,
-                      color: pal.muted,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        o.localizacao,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: pal.muted,
-                          fontWeight: FontWeight.w500,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            occurrence.titulo.trim().isEmpty
+                                ? 'Denúncia ambiental'
+                                : occurrence.titulo.trim(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.ink,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              height: 1.12,
+                            ),
+                          ),
                         ),
+                        PopupMenuButton<_CardMenuAction>(
+                          tooltip: 'Mais opções',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 36,
+                            height: 36,
+                          ),
+                          icon: const Icon(Icons.chevron_right_rounded,
+                              color: Color(0xFF23324D), size: 22),
+                          onSelected: (action) =>
+                              _handleMenuAction(context, action),
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: _CardMenuAction.share,
+                              child: Text('Compartilhar'),
+                            ),
+                            if (onReport != null)
+                              const PopupMenuItem(
+                                value: _CardMenuAction.report,
+                                child: Text('Denunciar'),
+                              ),
+                            if (onTogglePin != null)
+                              PopupMenuItem(
+                                value: _CardMenuAction.togglePin,
+                                child: Text(occurrence.fixada
+                                    ? 'Remover destaque'
+                                    : 'Fixar no feed'),
+                              ),
+                            if (onManage != null)
+                              const PopupMenuItem(
+                                value: _CardMenuAction.manage,
+                                child: Text('Gerenciar denúncia'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            author,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          ' · $timeLabel',
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(AppIcons.locationPin,
+                            size: 13, color: Color(0xFF536078)),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            occurrence.localizacao,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF657087),
+                              fontSize: 10.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      occurrence.descricao,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF657087),
+                        fontSize: 10.5,
+                        height: 1.2,
                       ),
+                    ),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Flexible(child: _CompactCategoryBadge(type: type)),
+                        if (officialStage.temAcaoOficial) ...[
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: _CompactOfficialBadge(stage: officialStage),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 1),
+                    Row(
+                      children: [
+                        LikeButton(
+                          count: occurrence.likes,
+                          isLiked: occurrence.userLiked,
+                          onToggle: onLike,
+                        ),
+                        _CompactAction(
+                          icon: AppIcons.comment,
+                          label: '${commentCount ?? occurrence.comments}',
+                          tooltip: 'Comentários',
+                          onTap: onComment ?? () {},
+                        ),
+                        _CompactAction(
+                          icon: AppIcons.share,
+                          tooltip: 'Compartilhar',
+                          onTap: () => compartilharOcorrencia(occurrence),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _TypeChip(type: typeEnum),
-                    _StatusBadge(status: statusEnum),
-                    if (estagio.temAcaoOficial) _EstagioChip(estagio: estagio),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  tempoStr,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: pal.muted,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -250,6 +473,266 @@ class OccurrenceCard extends StatelessWidget {
         authorPhoto: fotoAutor,
         anonymous: occurrence.anonima,
         occurrence: occurrence,
+      ),
+    );
+  }
+}
+
+class _CompactMedia extends StatefulWidget {
+  final List<String> images;
+  final bool hasVideo;
+  final OccurrenceType type;
+  final OccurrenceStatus status;
+  final String? referenceAsset;
+  final String heroTag;
+  final bool alreadyLiked;
+  final Future<bool> Function() onDoubleTapLike;
+  final VoidCallback? onOpenDetail;
+
+  const _CompactMedia({
+    required this.images,
+    required this.hasVideo,
+    required this.type,
+    required this.status,
+    required this.referenceAsset,
+    required this.heroTag,
+    required this.alreadyLiked,
+    required this.onDoubleTapLike,
+    required this.onOpenDetail,
+  });
+
+  @override
+  State<_CompactMedia> createState() => _CompactMediaState();
+}
+
+class _CompactMediaState extends State<_CompactMedia> {
+  late final PageController _pageController;
+  int _currentImage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _like() {
+    if (!widget.alreadyLiked) widget.onDoubleTapLike();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = widget.images.isNotEmpty;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return GestureDetector(
+      onTap: widget.onOpenDetail,
+      onDoubleTap: _like,
+      child: Hero(
+        tag: widget.heroTag,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (hasImage)
+                PageView.builder(
+                  controller: _pageController,
+                  itemCount: widget.images.length,
+                  onPageChanged: (index) =>
+                      setState(() => _currentImage = index),
+                  itemBuilder: (_, index) => Image(
+                    image: imagemCacheada(
+                      cloudinaryOtimizada(
+                        widget.images[index],
+                        larguraLogica: 128,
+                        alturaLogica: 188,
+                        devicePixelRatio: dpr,
+                      ),
+                      cacheWidth: cacheLarguraPx(128, dpr),
+                    ),
+                    fit: BoxFit.cover,
+                    semanticLabel:
+                        'Imagem ${index + 1} de ${widget.images.length} da denúncia de ${widget.type.label}',
+                    loadingBuilder: (_, child, progress) =>
+                        progress == null ? child : const ShimmerBox(),
+                    errorBuilder: (_, error, stack) => _ImagePlaceholder(
+                      type: widget.type,
+                      label: 'Imagem indisponível',
+                    ),
+                  ),
+                )
+              else if (widget.referenceAsset != null)
+                Image.asset(widget.referenceAsset!, fit: BoxFit.cover)
+              else
+                _ImagePlaceholder(
+                  type: widget.type,
+                  label: widget.hasVideo ? 'Vídeo' : 'Sem imagem',
+                ),
+              if (widget.hasVideo)
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: .55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(AppIcons.play,
+                        color: Colors.white, size: 21),
+                  ),
+                ),
+              if (widget.images.length > 1)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: .58),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(AppIcons.camera,
+                            color: Colors.white, size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${_currentImage + 1}/${widget.images.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (widget.referenceAsset == null)
+                Positioned(
+                  left: 8,
+                  top: 8,
+                  child: _HeaderStatusBadge(status: widget.status),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactCategoryBadge extends StatelessWidget {
+  final OccurrenceType type;
+
+  const _CompactCategoryBadge({required this.type});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: type.color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(type.icon, size: 12, color: type.color),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              type.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: type.color,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactOfficialBadge extends StatelessWidget {
+  final EstagioOficial stage;
+
+  const _CompactOfficialBadge({required this.stage});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: stage.color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Text(
+        stage.label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: stage.color,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactAction extends StatelessWidget {
+  final IconData icon;
+  final String? label;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _CompactAction({
+    required this.icon,
+    this.label,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 24,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 23, color: context.pal.muted),
+              if (label != null) ...[
+                const SizedBox(width: 4),
+                Text(
+                  label!,
+                  style: TextStyle(
+                    color: context.pal.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -310,47 +793,29 @@ class _CommentPreview extends StatelessWidget {
         final latest = latestSnap.data;
         if (latest == null) return const SizedBox.shrink();
 
-        final total = count ?? initialCount;
-
         return Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                total <= 1
-                    ? 'Ver comentário'
-                    : 'Ver todos os $total comentários',
-                style: TextStyle(
-                  color: context.pal.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
+          child: RichText(
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(
+              style: TextStyle(
+                color: context.pal.ink,
+                fontSize: 12.5,
+                height: 1.3,
               ),
-              const SizedBox(height: 4),
-              RichText(
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                text: TextSpan(
+              children: [
+                TextSpan(
+                  text: latest.userName,
                   style: TextStyle(
                     color: context.pal.ink,
-                    fontSize: 12.5,
-                    height: 1.3,
+                    fontWeight: FontWeight.w800,
                   ),
-                  children: [
-                    TextSpan(
-                      text: latest.userName,
-                      style: TextStyle(
-                        color: context.pal.ink,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const TextSpan(text: '  '),
-                    TextSpan(text: latest.texto),
-                  ],
                 ),
-              ),
-            ],
+                const TextSpan(text: '  '),
+                TextSpan(text: latest.texto),
+              ],
+            ),
           ),
         );
       },
@@ -360,10 +825,112 @@ class _CommentPreview extends StatelessWidget {
 
 enum _CardMenuAction { share, about, report, togglePin, manage }
 
+class _PostText extends StatefulWidget {
+  final String description;
+
+  const _PostText({required this.description});
+
+  @override
+  State<_PostText> createState() => _PostTextState();
+}
+
+class _PostTextState extends State<_PostText> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final descricao = widget.description.trim();
+    if (descricao.isEmpty) return const SizedBox.shrink();
+    final bodyStyle = AppTextStyles.body.copyWith(
+      color: context.pal.ink.withValues(alpha: 0.88),
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
+      height: 1.45,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final canExpand = _exceedsCollapsedLines(
+          context: context,
+          text: descricao,
+          style: bodyStyle,
+          maxWidth: constraints.maxWidth,
+        );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (descricao.isNotEmpty) ...[
+              AnimatedSize(
+                duration: AppMotion.base,
+                curve: AppMotion.curveEnter,
+                alignment: Alignment.topCenter,
+                child: Text(
+                  descricao,
+                  maxLines: _expanded ? null : 2,
+                  overflow:
+                      _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                  style: bodyStyle,
+                ),
+              ),
+              if (canExpand)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Semantics(
+                    button: true,
+                    label: _expanded
+                        ? 'Recolher descrição da denúncia'
+                        : 'Ver descrição completa da denúncia',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(AppRadius.chip),
+                      onTap: () => setState(() => _expanded = !_expanded),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 2,
+                        ),
+                        child: Text(
+                          _expanded ? 'ver menos' : 'ver mais',
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  bool _exceedsCollapsedLines({
+    required BuildContext context,
+    required String text,
+    required TextStyle style,
+    required double maxWidth,
+  }) {
+    if (text.isEmpty || maxWidth <= 0) return false;
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      maxLines: 2,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout(maxWidth: maxWidth);
+    return painter.didExceedMaxLines;
+  }
+}
+
 class _CardHeader extends StatelessWidget {
   final String authorName;
   final String? authorPhoto;
   final String location;
+  final String timeLabel;
+  final OccurrenceStatus status;
   final bool canManage;
   final bool canReport;
   final bool canPin;
@@ -375,6 +942,8 @@ class _CardHeader extends StatelessWidget {
     required this.authorName,
     required this.authorPhoto,
     required this.location,
+    required this.timeLabel,
+    required this.status,
     required this.canManage,
     required this.canReport,
     required this.canPin,
@@ -387,7 +956,7 @@ class _CardHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final pal = context.pal;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      padding: const EdgeInsets.fromLTRB(16, 13, 6, 12),
       child: Row(
         children: [
           GestureDetector(
@@ -398,9 +967,9 @@ class _CardHeader extends StatelessWidget {
                 _AuthorAvatar(
                   name: authorName,
                   photoUrl: authorPhoto,
-                  radius: 18,
+                  radius: 21,
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
               ],
             ),
           ),
@@ -415,30 +984,47 @@ class _CardHeader extends StatelessWidget {
                     authorName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: pal.ink,
+                    style: AppTextStyles.cardTitle.copyWith(
+                      color: context.pal.ink,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    location,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: pal.muted,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        AppIcons.locationPin,
+                        size: 13,
+                        color: context.pal.muted,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          location.trim().isEmpty
+                              ? timeLabel
+                              : '${location.trim()} · $timeLabel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.metadata.copyWith(
+                            color: context.pal.muted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
+          const SizedBox(width: 8),
+          _HeaderStatusBadge(status: status),
           PopupMenuButton<_CardMenuAction>(
             tooltip: 'Mais opções',
-            icon: Icon(Icons.more_horiz, color: pal.ink, size: 24),
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            icon: Icon(AppIcons.more, color: pal.hint, size: 22),
             elevation: 10,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -506,6 +1092,55 @@ class _CardHeader extends StatelessWidget {
   }
 }
 
+class _HeaderStatusBadge extends StatelessWidget {
+  final OccurrenceStatus status;
+
+  const _HeaderStatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final (foreground, background, icon) = switch (status) {
+      OccurrenceStatus.resolved => (
+          AppColors.statusResolved,
+          AppColors.statusResolved.withValues(alpha: 0.12),
+          AppIcons.verified,
+        ),
+      OccurrenceStatus.inProgress => (
+          AppColors.statusPending,
+          AppColors.statusPending.withValues(alpha: 0.14),
+          AppIcons.pending,
+        ),
+      OccurrenceStatus.unresolved => (
+          AppColors.statusUnresolved,
+          AppColors.statusUnresolved.withValues(alpha: 0.12),
+          AppIcons.unresolved,
+        ),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: foreground),
+          const SizedBox(width: 5),
+          Text(
+            status.label,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MenuItem extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -540,8 +1175,19 @@ class _MenuItem extends StatelessWidget {
 class _FeedVideoPlayer extends StatefulWidget {
   final String url;
   final OccurrenceType type;
+  final String title;
+  final String location;
+  final String heroTag;
+  final VoidCallback? onOpenDetail;
 
-  const _FeedVideoPlayer({required this.url, required this.type});
+  const _FeedVideoPlayer({
+    required this.url,
+    required this.type,
+    required this.title,
+    required this.location,
+    required this.heroTag,
+    this.onOpenDetail,
+  });
 
   @override
   State<_FeedVideoPlayer> createState() => _FeedVideoPlayerState();
@@ -558,15 +1204,12 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..setLooping(true)
       ..setVolume(0)
-      ..initialize()
-          .then((_) {
-            if (!mounted) return;
-            setState(() {});
-            _controller.play();
-          })
-          .catchError((_) {
-            if (mounted) setState(() => _error = true);
-          });
+      ..initialize().then((_) {
+        if (!mounted) return;
+        setState(() {});
+      }).catchError((_) {
+        if (mounted) setState(() => _error = true);
+      });
   }
 
   @override
@@ -593,7 +1236,8 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxWidth.clamp(220.0, 420.0).toDouble();
+        final height =
+            (constraints.maxWidth * 0.75).clamp(220.0, 420.0).toDouble();
 
         if (_error) {
           return SizedBox(
@@ -610,81 +1254,72 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
           return SizedBox(
             height: height,
             width: double.infinity,
-            child: const ColoredBox(
-              color: Color(0xFF111827),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
+            child: const ShimmerBox(),
           );
         }
 
         final size = _controller.value.size;
 
         return GestureDetector(
-          onTap: _togglePlay,
-          child: SizedBox(
-            height: height,
-            width: double.infinity,
-            child: Stack(
-              fit: StackFit.expand,
-              alignment: Alignment.center,
-              children: [
-                ColoredBox(
-                  color: Colors.black,
-                  child: ClipRect(
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: size.width,
-                        height: size.height,
-                        child: VideoPlayer(_controller),
+          onTap: widget.onOpenDetail ?? _togglePlay,
+          child: Hero(
+            tag: widget.heroTag,
+            child: SizedBox(
+              height: height,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                alignment: Alignment.center,
+                children: [
+                  ColoredBox(
+                    color: Colors.black,
+                    child: ClipRect(
+                      child: FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: size.width,
+                          height: size.height,
+                          child: VideoPlayer(_controller),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                AnimatedOpacity(
-                  opacity: _controller.value.isPlaying ? 0 : 1,
-                  duration: const Duration(milliseconds: 150),
-                  child: Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 10,
-                  bottom: 10,
-                  child: Material(
-                    color: Colors.black.withValues(alpha: 0.48),
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      tooltip: _muted ? 'Ativar som' : 'Silenciar',
-                      onPressed: _toggleAudio,
-                      icon: Icon(
-                        _muted ? Icons.volume_off : Icons.volume_up,
+                  AnimatedOpacity(
+                    opacity: _controller.value.isPlaying ? 0 : 1,
+                    duration: const Duration(milliseconds: 150),
+                    child: Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow,
                         color: Colors.white,
-                        size: 20,
+                        size: 32,
                       ),
                     ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: Material(
+                      color: Colors.black.withValues(alpha: 0.48),
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        tooltip: _muted ? 'Ativar som' : 'Silenciar',
+                        onPressed: _toggleAudio,
+                        icon: Icon(
+                          _muted ? Icons.volume_off : Icons.volume_up,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -693,103 +1328,30 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   }
 }
 
-class _OfficialStatusStrip extends StatelessWidget {
-  final EstagioOficial estagio;
-
-  const _OfficialStatusStrip({required this.estagio});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = estagio.color;
-    final active = estagio.temAcaoOficial;
-    final pal = context.pal;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
-      decoration: BoxDecoration(
-        color: active ? color.withValues(alpha: 0.09) : pal.surfaceAlt,
-        border: Border(bottom: BorderSide(color: pal.border)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: active ? 0.16 : 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(estagio.icon, size: 16, color: color),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Status oficial: ${estagio.label}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: active ? color : pal.muted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _description,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: pal.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String get _description {
-    switch (estagio) {
-      case EstagioOficial.pendente:
-        return 'Aguardando analise do orgao responsavel.';
-      case EstagioOficial.emAnalise:
-        return 'O orgao responsavel esta avaliando esta denuncia.';
-      case EstagioOficial.naoConfirmada:
-        return 'Problema nao confirmado no local.';
-      case EstagioOficial.confirmada:
-        return 'Denuncia verificada pela autoridade.';
-      case EstagioOficial.encaminhada:
-        return 'Encaminhada ao orgao responsavel.';
-      case EstagioOficial.resolvida:
-        return 'Tratada e marcada como resolvida.';
-    }
-  }
-}
-
 class _ImageSlider extends StatefulWidget {
   final List<String> urls;
   final String? fallbackUrl;
   final OccurrenceType type;
+  final String title;
+  final String location;
 
   /// Curtir por toque duplo na foto (estilo Instagram). Só curte — nunca
   /// descurte — por isso recebe também [alreadyLiked] para não desfazer.
   final VoidCallback? onDoubleTapLike;
   final bool alreadyLiked;
+  final String heroTag;
+  final VoidCallback? onOpenDetail;
 
   const _ImageSlider({
     required this.urls,
     required this.fallbackUrl,
     required this.type,
+    required this.title,
+    required this.location,
     this.onDoubleTapLike,
     this.alreadyLiked = false,
+    required this.heroTag,
+    this.onOpenDetail,
   });
 
   @override
@@ -812,8 +1374,13 @@ class _ImageSliderState extends State<_ImageSlider>
   }
 
   List<String> get _images {
-    if (widget.urls.isNotEmpty) return widget.urls;
-    if (widget.fallbackUrl != null) return [widget.fallbackUrl!];
+    final urls = widget.urls
+        .map((url) => url.trim())
+        .where((url) => url.isNotEmpty)
+        .toList(growable: false);
+    if (urls.isNotEmpty) return urls;
+    final fallback = widget.fallbackUrl?.trim();
+    if (fallback != null && fallback.isNotEmpty) return [fallback];
     return [];
   }
 
@@ -836,7 +1403,8 @@ class _ImageSliderState extends State<_ImageSlider>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxWidth.clamp(220.0, 420.0).toDouble();
+        final height =
+            (constraints.maxWidth * 0.75).clamp(220.0, 420.0).toDouble();
         final images = _images;
         final dpr = MediaQuery.devicePixelRatioOf(context);
         final larguraImg = constraints.maxWidth;
@@ -854,46 +1422,43 @@ class _ImageSliderState extends State<_ImageSlider>
           child: Stack(
             children: [
               GestureDetector(
-                onDoubleTap: widget.onDoubleTapLike == null
-                    ? null
-                    : _handleDoubleTap,
-                child: PageView.builder(
-                  controller: _controller,
-                  itemCount: images.length,
-                  onPageChanged: (i) => setState(() => _current = i),
-                  itemBuilder: (_, i) => Container(
-                    width: double.infinity,
-                    color: context.pal.surfaceAlt,
-                    alignment: Alignment.center,
-                    child: Image(
-                      image: imagemCacheada(
-                        cloudinaryOtimizada(
-                          images[i],
-                          larguraLogica: larguraImg,
-                          devicePixelRatio: dpr,
-                        ),
-                        cacheWidth: cacheLarguraPx(larguraImg, dpr),
-                      ),
+                onTap: widget.onOpenDetail,
+                onDoubleTap:
+                    widget.onDoubleTapLike == null ? null : _handleDoubleTap,
+                child: Hero(
+                  tag: widget.heroTag,
+                  child: PageView.builder(
+                    controller: _controller,
+                    itemCount: images.length,
+                    onPageChanged: (i) => setState(() => _current = i),
+                    itemBuilder: (_, i) => Container(
                       width: double.infinity,
-                      height: double.infinity,
-                      fit: BoxFit.cover,
-                      // Descrição para leitores de tela: sem isto o Image.network
-                      // é anunciado apenas como "imagem", sem contexto.
-                      semanticLabel: images.length > 1
-                          ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
-                          : 'Foto da denúncia: ${widget.type.label}',
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                      color: context.pal.surfaceAlt,
+                      alignment: Alignment.center,
+                      child: Image(
+                        image: imagemCacheada(
+                          cloudinaryOtimizada(
+                            images[i],
+                            larguraLogica: larguraImg,
+                            devicePixelRatio: dpr,
                           ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) =>
-                          _ImagePlaceholder(type: widget.type),
+                          cacheWidth: cacheLarguraPx(larguraImg, dpr),
+                        ),
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                        // Descrição para leitores de tela: sem isto o Image.network
+                        // é anunciado apenas como "imagem", sem contexto.
+                        semanticLabel: images.length > 1
+                            ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
+                            : 'Foto da denúncia: ${widget.type.label}',
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return const ShimmerBox();
+                        },
+                        errorBuilder: (context, error, stackTrace) =>
+                            _ImagePlaceholder(type: widget.type),
+                      ),
                     ),
                   ),
                 ),
@@ -1011,6 +1576,135 @@ class _HeartBurst extends StatelessWidget {
   }
 }
 
+// Mantido para compatibilidade com apresentações antigas da mídia.
+// ignore: unused_element
+class _ImageTitleOverlay extends StatelessWidget {
+  final String title;
+  final String location;
+  final OccurrenceType type;
+
+  const _ImageTitleOverlay({
+    required this.title,
+    required this.location,
+    required this.type,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cleanTitle =
+        title.trim().isEmpty ? 'Denúncia ambiental' : title.trim();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 52, 16, 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            Colors.black.withValues(alpha: 0.68),
+          ],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            cleanTitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              height: 1.05,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (location.trim().isNotEmpty)
+                _OverlayPill(
+                  icon: type.icon,
+                  label: '${type.label} · ${location.trim()}',
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+                  allowWrap: false,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OverlayPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final double? maxWidth;
+  final bool allowWrap;
+
+  const _OverlayPill({
+    required this.icon,
+    required this.label,
+    this.maxWidth,
+    this.allowWrap = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: maxWidth ?? double.infinity,
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 9,
+          vertical: 5,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.28),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.28),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: AppColors.primary,
+              size: 15,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: allowWrap ? 2 : 1,
+                overflow:
+                    allowWrap ? TextOverflow.visible : TextOverflow.ellipsis,
+                softWrap: allowWrap,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Mantido para compatibilidade com cards que exibem o estágio em bloco.
+// ignore: unused_element
 class _EstagioChip extends StatelessWidget {
   final EstagioOficial estagio;
 
@@ -1022,9 +1716,12 @@ class _EstagioChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: cor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: cor.withValues(alpha: 0.3)),
+        color: Colors.black.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.28),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1037,73 +1734,6 @@ class _EstagioChip extends StatelessWidget {
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
               color: cor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final OccurrenceStatus status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: status.color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: status.color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(status.icon, color: status.color, size: 12),
-          const SizedBox(width: 4),
-          Text(
-            status.label,
-            style: TextStyle(
-              color: status.color,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TypeChip extends StatelessWidget {
-  final OccurrenceType type;
-
-  const _TypeChip({required this.type});
-
-  @override
-  Widget build(BuildContext context) {
-    final badgeColor = type.color;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(type.icon, size: 12, color: badgeColor),
-          const SizedBox(width: 4),
-          Text(
-            type.label,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: badgeColor,
             ),
           ),
         ],
@@ -1136,179 +1766,6 @@ class _ImagePlaceholder extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatefulWidget {
-  final IconData icon;
-  final IconData iconFilled;
-  final int count;
-  final bool active;
-  final Color activeColor;
-  final VoidCallback onTap;
-  final String semanticLabel;
-
-  /// Quando true, o ícone dá um "pop" (bounce) e um "+1" sobe ao passar de
-  /// inativo para ativo. Usado no botão de curtir.
-  final bool animateOnActivate;
-
-  const _ActionButton({
-    required this.icon,
-    required this.iconFilled,
-    required this.count,
-    required this.active,
-    required this.activeColor,
-    required this.onTap,
-    required this.semanticLabel,
-    this.animateOnActivate = false,
-  });
-
-  @override
-  State<_ActionButton> createState() => _ActionButtonState();
-}
-
-class _ActionButtonState extends State<_ActionButton>
-    with TickerProviderStateMixin {
-  late final AnimationController _popController;
-  late final Animation<double> _scale;
-  late final AnimationController _floatController;
-
-  @override
-  void initState() {
-    super.initState();
-    _popController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 320),
-    );
-    // Escala com overshoot: cresce até 1.35 e volta a 1.0.
-    _scale = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 1.0,
-          end: 1.35,
-        ).chain(CurveTween(curve: Curves.easeOut)),
-        weight: 40,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 1.35,
-          end: 1.0,
-        ).chain(CurveTween(curve: Curves.easeIn)),
-        weight: 60,
-      ),
-    ]).animate(_popController);
-    _floatController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 650),
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _ActionButton old) {
-    super.didUpdateWidget(old);
-    // Dispara as animações só na transição inativo → ativo (curtir), nunca ao
-    // descurtir nem quando o count muda por outro caminho.
-    if (widget.animateOnActivate && widget.active && !old.active) {
-      _popController.forward(from: 0);
-      _floatController.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _popController.dispose();
-    _floatController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = context.pal;
-    final color = widget.active ? widget.activeColor : pal.ink;
-    return Semantics(
-      button: true,
-      label: '${widget.semanticLabel}, ${widget.count}',
-      selected: widget.active,
-      child: Tooltip(
-        message: widget.semanticLabel,
-        child: InkResponse(
-          onTap: widget.onTap,
-          radius: 24,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.center,
-                  children: [
-                    ScaleTransition(
-                      scale: _scale,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: Icon(
-                          widget.active ? widget.iconFilled : widget.icon,
-                          key: ValueKey(widget.active),
-                          size: 24,
-                          color: color,
-                        ),
-                      ),
-                    ),
-                    if (widget.animateOnActivate)
-                      _FloatingPlusOne(
-                        controller: _floatController,
-                        color: widget.activeColor,
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${widget.count}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// "+1" que sobe e some ao curtir. Fica escondido enquanto o controlador
-/// estiver zerado (estado de repouso).
-class _FloatingPlusOne extends StatelessWidget {
-  final AnimationController controller;
-  final Color color;
-
-  const _FloatingPlusOne({required this.controller, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        if (controller.isDismissed) return const SizedBox.shrink();
-        final t = controller.value;
-        return Positioned(
-          top: -6 - (t * 18),
-          child: Opacity(opacity: (1.0 - t).clamp(0.0, 1.0), child: child),
-        );
-      },
-      child: Text(
-        '+1',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
 class _CommentButton extends StatelessWidget {
   final int count;
   final VoidCallback onTap;
@@ -1317,7 +1774,6 @@ class _CommentButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pal = context.pal;
     return Semantics(
       button: true,
       label: 'Comentar, $count',
@@ -1325,25 +1781,24 @@ class _CommentButton extends StatelessWidget {
         message: 'Comentar',
         child: InkResponse(
           onTap: onTap,
-          radius: 24,
+          radius: 28,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Image.asset(
-                  'assets/icons/comment.png',
-                  width: 24,
-                  height: 24,
-                  color: pal.ink,
+                const Icon(
+                  AppIcons.comment,
+                  size: 27,
+                  color: AppColors.iconMuted,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '$count',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: pal.ink,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.iconMuted,
                   ),
                 ),
               ],
@@ -1354,7 +1809,6 @@ class _CommentButton extends StatelessWidget {
     );
   }
 }
-
 
 class _AuthorAvatar extends StatelessWidget {
   final String name;
@@ -1373,7 +1827,7 @@ class _AuthorAvatar extends StatelessWidget {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     return CircleAvatar(
       radius: radius,
-      backgroundColor: AppColors.primary.withValues(alpha: 0.14),
+      backgroundColor: AppColors.primarySoft,
       backgroundImage: hasPhoto
           ? imagemCacheada(
               cloudinaryOtimizada(
@@ -1390,7 +1844,7 @@ class _AuthorAvatar extends StatelessWidget {
           : Text(
               _initial,
               style: TextStyle(
-                color: AppColors.successStrong,
+                color: AppColors.primaryDarkText,
                 fontWeight: FontWeight.w800,
                 fontSize: radius * 0.82,
               ),
@@ -1455,7 +1909,7 @@ class _AccountSheet extends StatelessWidget {
                       Text(
                         anonymous
                             ? 'Publicação anônima'
-                            : 'Conta da comunidade EcoJP',
+                            : 'Conta da comunidade Eco Hub',
                         style: TextStyle(
                           fontSize: 12,
                           color: context.pal.muted,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../theme/app_motion.dart';
 
 // ─────────────────────────────────────────
 //  ESTADOS DO FEED
@@ -12,8 +13,9 @@ import '../theme/app_theme.dart';
 /// enquanto as ocorrências são carregadas do Firestore.
 class FeedSkeleton extends StatefulWidget {
   final int itemCount;
+  final Widget? header;
 
-  const FeedSkeleton({super.key, this.itemCount = 4});
+  const FeedSkeleton({super.key, this.itemCount = 4, this.header});
 
   @override
   State<FeedSkeleton> createState() => _FeedSkeletonState();
@@ -22,19 +24,14 @@ class FeedSkeleton extends StatefulWidget {
 class _FeedSkeletonState extends State<FeedSkeleton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _opacity;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-    _opacity = Tween<double>(
-      begin: 0.45,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+      duration: AppMotion.shimmerLoop,
+    )..repeat();
   }
 
   @override
@@ -45,24 +42,28 @@ class _FeedSkeletonState extends State<FeedSkeleton>
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacity,
-      child: ListView.separated(
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) => ListView.separated(
         physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        itemCount: widget.itemCount,
+        itemCount: widget.itemCount + (widget.header == null ? 0 : 1),
         separatorBuilder: (context, index) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => const _SkeletonCard(),
+        itemBuilder: (context, index) {
+          if (widget.header != null && index == 0) return widget.header!;
+          return _SkeletonCard(progress: _controller.value);
+        },
       ),
     );
   }
 }
 
 class _SkeletonCard extends StatelessWidget {
-  const _SkeletonCard();
+  final double progress;
 
-  Widget _bar(
-    Color bone, {
+  const _SkeletonCard({required this.progress});
+
+  Widget _bar({
     required double width,
     double height = 12,
     double radius = 6,
@@ -71,7 +72,15 @@ class _SkeletonCard extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: bone,
+        gradient: LinearGradient(
+          begin: Alignment(-1.8 + progress * 3.6, 0),
+          end: Alignment(-0.8 + progress * 3.6, 0),
+          colors: const [
+            AppColors.primarySoft,
+            Color(0xFFF0FAF5),
+            AppColors.primarySoft,
+          ],
+        ),
         borderRadius: BorderRadius.circular(radius),
       ),
     );
@@ -80,11 +89,11 @@ class _SkeletonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    final bone = pal.surfaceAlt;
+    const bone = AppColors.primarySoft;
     return Container(
       decoration: BoxDecoration(
         color: pal.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -92,14 +101,14 @@ class _SkeletonCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(radius: 18, backgroundColor: bone),
+              const CircleAvatar(radius: 18, backgroundColor: bone),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _bar(bone, width: 120),
+                  _bar(width: 120),
                   const SizedBox(height: 6),
-                  _bar(bone, width: 80, height: 10),
+                  _bar(width: 80, height: 10),
                 ],
               ),
             ],
@@ -107,19 +116,27 @@ class _SkeletonCard extends StatelessWidget {
           const SizedBox(height: 14),
           // Área da imagem
           Container(
-            height: 150,
+            height: 320,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: bone,
-              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                begin: Alignment(-1.8 + progress * 3.6, 0),
+                end: Alignment(-0.8 + progress * 3.6, 0),
+                colors: const [
+                  AppColors.primarySoft,
+                  Color(0xFFF0FAF5),
+                  AppColors.primarySoft,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
           ),
           const SizedBox(height: 14),
-          _bar(bone, width: 200, height: 14),
+          _bar(width: 200, height: 14),
           const SizedBox(height: 8),
-          _bar(bone, width: double.infinity, height: 10),
+          _bar(width: double.infinity, height: 10),
           const SizedBox(height: 6),
-          _bar(bone, width: 240, height: 10),
+          _bar(width: 240, height: 10),
         ],
       ),
     );
@@ -155,15 +172,15 @@ class FeedEmptyState extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
+                color: AppColors.primary.withValues(alpha: 0.19),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 hasActiveFilters ? Icons.search_off : Icons.eco_outlined,
-                size: 40,
-                color: pal.primary,
+                size: 48,
+                color: AppColors.primary.withValues(alpha: 0.30),
               ),
             ),
             const SizedBox(height: 16),
@@ -172,7 +189,7 @@ class FeedEmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
                 color: pal.ink,
               ),
             ),
@@ -180,15 +197,18 @@ class FeedEmptyState extends StatelessWidget {
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: pal.hint),
+              style: TextStyle(fontSize: 14, color: pal.hint),
             ),
             if (hasActiveFilters && onClearFilters != null) ...[
               const SizedBox(height: 16),
-              TextButton.icon(
+              OutlinedButton.icon(
                 onPressed: onClearFilters,
                 icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
                 label: const Text('Limpar filtros'),
-                style: TextButton.styleFrom(foregroundColor: pal.primary),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                ),
               ),
             ],
           ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared/app_icons.dart';
 
 // ─────────────────────────────────────────
 //  TIPOS E STATUS DE OCORRÊNCIA
@@ -45,21 +46,21 @@ extension OccurrenceTypeLabel on OccurrenceType {
   IconData get icon {
     switch (this) {
       case OccurrenceType.lixo:
-        return Icons.delete_outline;
+        return AppIcons.trash;
       case OccurrenceType.queimada:
-        return Icons.local_fire_department_outlined;
+        return AppIcons.fire;
       case OccurrenceType.buraco:
-        return Icons.warning_amber_outlined;
+        return AppIcons.construction;
       case OccurrenceType.arvoresCaidas:
-        return Icons.park_outlined;
+        return AppIcons.tree;
       case OccurrenceType.enchentes:
-        return Icons.water_outlined;
+        return AppIcons.water;
       case OccurrenceType.esgoto:
-        return Icons.water_damage;
+        return AppIcons.water;
       case OccurrenceType.faltaIluminacao:
-        return Icons.lightbulb_outline;
+        return AppIcons.light;
       case OccurrenceType.outros:
-        return Icons.help_outline;
+        return AppIcons.categoryOther;
     }
   }
 
@@ -170,11 +171,11 @@ extension OccurrenceStatusLabel on OccurrenceStatus {
   IconData get icon {
     switch (this) {
       case OccurrenceStatus.resolved:
-        return Icons.check;
+        return AppIcons.verified;
       case OccurrenceStatus.inProgress:
-        return Icons.schedule;
+        return AppIcons.pending;
       case OccurrenceStatus.unresolved:
-        return Icons.close;
+        return AppIcons.unresolved;
     }
   }
 }
@@ -272,7 +273,8 @@ enum EstagioOficial {
 
 extension EstagioOficialInfo on EstagioOficial {
   /// Deriva o estágio a partir dos campos persistidos da ocorrência.
-  static EstagioOficial calcular(bool verificada, StatusOficial? statusOficial) {
+  static EstagioOficial calcular(
+      bool verificada, StatusOficial? statusOficial) {
     if (verificada) {
       if (statusOficial == StatusOficial.resolvida) {
         return EstagioOficial.resolvida;

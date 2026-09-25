@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/router/routes.dart';
@@ -13,6 +14,9 @@ import '../models/comentario_model.dart';
 import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/auth_service.dart';
+import '../services/geolocation/geocoding_service.dart';
+import '../services/geolocation/geolocation_service.dart';
+import '../services/geolocation/geovalidations.dart';
 import '../services/notificacao_service.dart';
 import '../services/usuario_service.dart';
 import '../services/moderacao_service.dart';
@@ -23,8 +27,13 @@ import '../widgets/occurrence_card.dart';
 import '../widgets/occurrence_comments_sheet.dart';
 import '../widgets/ocorrencia_actions.dart';
 import '../widgets/report_content_sheet.dart';
+import '../widgets/transitions/hero_detail_route.dart';
+import 'detalhe_ocorrencia_page.dart';
 import '../utils/mensagem_erro.dart';
 import '../utils/reacao_ocorrencia.dart';
+import '../utils/cloudinary_image.dart';
+import '../utils/imagem_cacheada.dart';
+import '../widgets/shared/app_icons.dart';
 
 /// Ordenação do feed. "Recentes" respeita a ordem vinda do repositório
 /// (fixadas no topo, depois por data); "Mais curtidas" reordena o restante
@@ -50,10 +59,21 @@ enum _FeedPeriodo {
   final Duration? janela;
 }
 
+enum _FeedView { recentes, destaques, comentadas }
+
 class HomePage extends ConsumerStatefulWidget {
   final ScrollController? scrollController;
+  final VoidCallback? onOpenMap;
+  final VoidCallback? onOpenProfile;
+  final VoidCallback? onCreateOccurrence;
 
-  const HomePage({super.key, this.scrollController});
+  const HomePage({
+    super.key,
+    this.scrollController,
+    this.onOpenMap,
+    this.onOpenProfile,
+    this.onCreateOccurrence,
+  });
 
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
@@ -86,6 +106,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   String _searchQuery = '';
   _FeedSort _sortBy = _FeedSort.recentes;
   _FeedPeriodo _periodo = _FeedPeriodo.tudo;
+  _FeedView _feedView = _FeedView.recentes;
+  String _locationLabel = 'Localização';
+  bool _locationLoading = true;
 
   final Map<String, String> _nomeCache = {};
   final Map<String, String?> _fotoCache = {};
@@ -130,19 +153,16 @@ class _HomePageState extends ConsumerState<HomePage> {
   int? _commentCount(String id) {
     if (_commentCountCache.containsKey(id)) return _commentCountCache[id];
     if (_commentCountLoading.add(id)) {
-      _comentarioRepository
-          .contarComentarios(id)
-          .then((count) {
-            if (!mounted) return;
-            setState(() {
-              _capCache(_commentCountCache);
-              _commentCountCache[id] = count;
-              _commentCountLoading.remove(id);
-            });
-          })
-          .catchError((_) {
-            _commentCountLoading.remove(id);
-          });
+      _comentarioRepository.contarComentarios(id).then((count) {
+        if (!mounted) return;
+        setState(() {
+          _capCache(_commentCountCache);
+          _commentCountCache[id] = count;
+          _commentCountLoading.remove(id);
+        });
+      }).catchError((_) {
+        _commentCountLoading.remove(id);
+      });
     }
     return null;
   }
@@ -155,14 +175,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     // initialData ao card (evita o preview sumir na rolagem de volta). Como o
     // broadcast mantém a assinatura viva ao Firestore mesmo sem ouvintes, o
     // valor cacheado continua atualizando enquanto o stream estiver no cache.
-    return _latestCommentCache[id] = _comentarioRepository
-        .observarUltimoComentario(id)
-        .map((c) {
-          _capCache(_latestCommentValues);
-          _latestCommentValues[id] = c;
-          return c;
-        })
-        .asBroadcastStream();
+    return _latestCommentCache[id] =
+        _comentarioRepository.observarUltimoComentario(id).map((c) {
+      _capCache(_latestCommentValues);
+      _latestCommentValues[id] = c;
+      return c;
+    }).asBroadcastStream();
   }
 
   // Remove as entradas mais antigas (o Map do Dart preserva ordem de inserção)
@@ -180,6 +198,39 @@ class _HomePageState extends ConsumerState<HomePage> {
     _scrollController = widget.scrollController ?? ScrollController();
     _feedStream = _buildFeedStream();
     _scrollController.addListener(_onScroll);
+    unawaited(_loadCurrentLocation());
+  }
+
+  Future<void> _loadCurrentLocation() async {
+    final result = await LocationService().getCurrentLatLng();
+    if (!mounted) return;
+
+    if (result is! LatLngSucess) {
+      setState(() => _locationLoading = false);
+      return;
+    }
+
+    final latLng = result.latLng;
+    final address = await GeocodingService().reverseGeocode(
+      latLng.latitude,
+      latLng.longitude,
+    );
+    if (!mounted) return;
+
+    final parts = address
+        .split(',')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    final concise = parts.length > 1
+        ? parts.skip(parts.length - 2).join(', ')
+        : (parts.isEmpty ? 'Localização' : parts.first);
+    setState(() {
+      _locationLabel = address == 'Endereço não encontrado'
+          ? 'Localização atual'
+          : concise;
+      _locationLoading = false;
+    });
   }
 
   Stream<List<OcorrenciaModel>> _buildFeedStream() {
@@ -190,12 +241,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       _selectedType != null ||
       _selectedStatus != null ||
       _searchQuery.isNotEmpty ||
-      _periodo != _FeedPeriodo.tudo;
-
-  /// Filtros avançados ativos (mostrados atrás do botão de filtro): período
-  /// ou ordenação diferente do padrão.
-  bool get _temFiltrosAvancados =>
-      _periodo != _FeedPeriodo.tudo || _sortBy != _FeedSort.recentes;
+      _periodo != _FeedPeriodo.tudo ||
+      _feedView != _FeedView.recentes;
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
@@ -234,12 +281,17 @@ class _HomePageState extends ConsumerState<HomePage> {
       _searchQuery = '';
       _periodo = _FeedPeriodo.tudo;
       _sortBy = _FeedSort.recentes;
+      _feedView = _FeedView.recentes;
     });
   }
 
   Future<void> _abrirFiltrosAvancados() async {
-    final pal = context.pal;
+    // O feed segue a identidade visual clara da Eco Hub, independente do tema
+    // do sistema. As demais telas continuam respeitando a preferência salva.
+    const pal = AppPalette.light;
     // Estado temporário do sheet: só aplica ao feed quando o usuário confirma.
+    var tipoLocal = _selectedType;
+    var statusLocal = _selectedStatus;
     var sortLocal = _sortBy;
     var periodoLocal = _periodo;
 
@@ -272,12 +324,56 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Filtros avançados',
+                      'Filtros',
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
                         color: pal.ink,
                       ),
+                    ),
+                    const SizedBox(height: 18),
+                    _sheetLabel('TIPO DE OCORRÊNCIA', pal),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _FiltroChoice(
+                          label: 'Todos',
+                          selected: tipoLocal == null,
+                          onTap: () => setSheet(() => tipoLocal = null),
+                        ),
+                        ...OccurrenceType.values.map((t) {
+                          return _FiltroChoice(
+                            label: t.label,
+                            icon: t.icon,
+                            selected: tipoLocal == t,
+                            onTap: () => setSheet(() => tipoLocal = t),
+                          );
+                        }),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _sheetLabel('STATUS', pal),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _FiltroChoice(
+                          label: 'Todos',
+                          selected: statusLocal == null,
+                          onTap: () => setSheet(() => statusLocal = null),
+                        ),
+                        ...OccurrenceStatus.values.map((s) {
+                          return _FiltroChoice(
+                            label: s.label,
+                            icon: s.icon,
+                            selected: statusLocal == s,
+                            onTap: () => setSheet(() => statusLocal = s),
+                          );
+                        }),
+                      ],
                     ),
                     const SizedBox(height: 18),
                     _sheetLabel('ORDENAR POR', pal),
@@ -314,6 +410,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                           child: TextButton(
                             onPressed: () {
                               setSheet(() {
+                                tipoLocal = null;
+                                statusLocal = null;
                                 sortLocal = _FeedSort.recentes;
                                 periodoLocal = _FeedPeriodo.tudo;
                               });
@@ -331,6 +429,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                           child: ElevatedButton(
                             onPressed: () {
                               setState(() {
+                                _selectedType = tipoLocal;
+                                _selectedStatus = statusLocal;
                                 _sortBy = sortLocal;
                                 _periodo = periodoLocal;
                               });
@@ -361,14 +461,14 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _sheetLabel(String text, AppPalette pal) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
-      color: pal.hint,
-      letterSpacing: 0.5,
-    ),
-  );
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: pal.hint,
+          letterSpacing: 0.5,
+        ),
+      );
 
   void _retryFeed() {
     setState(() {
@@ -470,22 +570,30 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     final filtradas = ocorrencias.where((o) {
       if (o.oculto) return false; // ocultada pela autoridade (moderação)
-      final matchesSearch =
-          query.isEmpty ||
+      final matchesSearch = query.isEmpty ||
           o.localizacao.toLowerCase().contains(query) ||
           o.titulo.toLowerCase().contains(query) ||
           o.descricao.toLowerCase().contains(query);
-      final matchesType =
-          _selectedType == null ||
+      final matchesType = _selectedType == null ||
           OccurrenceTypeParser.fromString(o.tipoLixo) == _selectedType;
-      final matchesStatus =
-          _selectedStatus == null ||
+      final matchesStatus = _selectedStatus == null ||
           OccurrenceStatusParser.fromString(o.status) == _selectedStatus;
-      final matchesPeriodo =
-          limiteData == null ||
+      final matchesPeriodo = limiteData == null ||
           (o.dataCriacao != null && o.dataCriacao!.isAfter(limiteData));
       return matchesSearch && matchesType && matchesStatus && matchesPeriodo;
     }).toList();
+
+    if (_feedView == _FeedView.destaques) {
+      return filtradas.where((o) => o.fixada).toList();
+    }
+    if (_feedView == _FeedView.comentadas) {
+      filtradas.sort((a, b) {
+        final commentsA = _commentCountCache[a.id] ?? a.comments;
+        final commentsB = _commentCountCache[b.id] ?? b.comments;
+        return commentsB.compareTo(commentsA);
+      });
+      return filtradas;
+    }
 
     // Ordenação por curtidas preserva as fixadas no topo (semântica de
     // destaque); só o restante é reordenado por número de likes.
@@ -498,12 +606,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     return filtradas;
   }
 
-  Future<void> _toggleLike(OcorrenciaModel o) async {
+  Future<bool> _toggleLike(OcorrenciaModel o) async {
     final uid = _authService.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) return false;
     final eu = _authService.currentUser;
     final nome = eu?.displayName ?? eu?.email?.split('@').first;
-    await reagirOcorrencia(
+    return reagirOcorrencia(
       context: context,
       ocorrencia: o,
       uid: uid,
@@ -532,7 +640,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Future<void> _openComments(OcorrenciaModel o, {String? comentarioIdEmFoco}) async {
+  Future<void> _openComments(OcorrenciaModel o,
+      {String? comentarioIdEmFoco}) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -675,130 +784,81 @@ class _HomePageState extends ConsumerState<HomePage> {
       backgroundColor: pal.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        titleSpacing: 20,
+        centerTitle: false,
+        backgroundColor: const Color(0xFF082A1B),
+        surfaceTintColor: Colors.transparent,
+        toolbarHeight: 82,
+        titleSpacing: 16,
         title: Row(
           children: [
-            Text(
-              'EcoJP',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: pal.ink,
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SvgPicture.asset(
+                  'assets/ecohub_logo_draw.svg',
+                  width: 122,
+                  height: 46,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
-          ],
-        ),
-        actions: [
-          if (uid != null)
-            StreamBuilder<int>(
-              stream: _notificacaoService.contarNaoLidas(uid),
-              builder: (context, snap) {
-                final count = snap.data ?? 0;
-                return Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      tooltip: 'Notificações',
-                      icon: Icon(Icons.notifications_none, color: pal.ink),
-                      onPressed: () => context.push(Routes.notificacoes),
-                    ),
-                    if (count > 0)
-                      Positioned(
-                        right: 6,
-                        top: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(
-                            color: AppColors.danger,
-                            shape: BoxShape.circle,
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 16,
-                            minHeight: 16,
-                          ),
-                          child: Text(
-                            count > 9 ? '9+' : '$count',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
+            _HeaderLocationButton(
+              label: _locationLabel,
+              loading: _locationLoading,
+              onTap: widget.onOpenMap ?? () {},
+            ),
+            if (uid != null)
+              StreamBuilder<int>(
+                stream: _notificacaoService.contarNaoLidas(uid),
+                builder: (context, snap) {
+                  final count = snap.data ?? 0;
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      IconButton(
+                        tooltip: 'Notificações',
+                        constraints: const BoxConstraints.tightFor(
+                            width: 38, height: 42),
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(AppIcons.notification,
+                            color: Colors.white, size: 22),
+                        onPressed: () => context.push(Routes.notificacoes),
+                      ),
+                      if (count > 0)
+                        Positioned(
+                          right: 6,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              color: AppColors.danger,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: Text(
+                              count > 9 ? '9+' : '$count',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          const SizedBox(width: 8),
-        ],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(),
+                    ],
+                  );
+                },
+              ),
+          ],
         ),
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _SearchBar(
-                      controller: _searchController,
-                      onChanged: (v) => setState(() => _searchQuery = v),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  _FilterButton(
-                    active: _temFiltrosAvancados,
-                    onTap: _abrirFiltrosAvancados,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _TypeDropdown(
-                selected: _selectedType,
-                onChanged: (v) => setState(() => _selectedType = v),
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 36,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  _StatusChip(
-                    label: 'Todos',
-                    selected: _selectedStatus == null,
-                    color: AppColors.muted,
-                    onTap: () => setState(() => _selectedStatus = null),
-                  ),
-                  ...OccurrenceStatus.values.map(
-                    (s) => _StatusChip(
-                      label: s.label,
-                      selected: _selectedStatus == s,
-                      color: s.color,
-                      onTap: () => setState(
-                        () => _selectedStatus = _selectedStatus == s ? null : s,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(child: _buildFeed(uid)),
-          ],
-        ),
+        child: _buildFeed(uid),
       ),
     );
   }
@@ -836,19 +896,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       stream: _feedStream,
       initialData: _cachedOccurrences.isEmpty ? null : _cachedOccurrences,
       builder: (context, snapshot) {
-        // Cada estado recebe uma ValueKey estável para o AnimatedSwitcher só
-        // animar na TROCA de estado (skeleton → conteúdo), não a cada tick de
-        // dados novos (que mantêm a mesma key 'content').
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
-          switchInCurve: Curves.easeOut,
-          switchOutCurve: Curves.easeIn,
-          child: _buildFeedState(
-            snapshot,
-            uid,
-            isAutoridade: isAutoridade,
-            minhasDenunciasAnonimasIds: minhasDenunciasAnonimasIds,
-          ),
+        return _buildFeedState(
+          snapshot,
+          uid,
+          isAutoridade: isAutoridade,
+          minhasDenunciasAnonimasIds: minhasDenunciasAnonimasIds,
         );
       },
     );
@@ -862,12 +914,16 @@ class _HomePageState extends ConsumerState<HomePage> {
   }) {
     if (snapshot.connectionState == ConnectionState.waiting &&
         _cachedOccurrences.isEmpty) {
-      return const FeedSkeleton(key: ValueKey('feed-skeleton'));
+      return FeedSkeleton(
+        key: const ValueKey('feed-skeleton'),
+        header: _buildHomeFeedHeader(const []),
+      );
     }
 
     if (snapshot.hasError && _cachedOccurrences.isEmpty) {
-      return FeedErrorState(
+      return _FeedErrorList(
         key: const ValueKey('feed-error'),
+        header: _buildHomeFeedHeader(const []),
         onRetry: _retryFeed,
       );
     }
@@ -908,6 +964,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       onRefresh: _refreshFeed,
       child: exibidas.isEmpty
           ? _EmptyFeedList(
+              header: _buildHomeFeedHeader(all),
               hasActiveFilters: _hasActiveFilters,
               hasPotentialMore: _hasPotentialMore,
               loadingMore: _loadingMore,
@@ -915,6 +972,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               onLoadMore: _loadMore,
             )
           : _OccurrenceList(
+              header: _buildHomeFeedHeader(all),
               controller: _scrollController,
               occurrences: exibidas,
               hasPotentialMore: _hasPotentialMore,
@@ -924,24 +982,23 @@ class _HomePageState extends ConsumerState<HomePage> {
                 final emFoco = _foco?.id == o.id;
                 // Anônima: o campo usuarioId sumiu do documento (S2), então
                 // "é minha" vem dos ponteiros do próprio perfil.
-                final isOwner =
-                    uid != null &&
+                final isOwner = uid != null &&
                     (o.anonima
                         ? minhasDenunciasAnonimasIds.contains(o.id)
                         : o.usuarioId == uid);
                 final nomeAutor = o.anonima
                     ? 'Denunciante anônimo'
                     : (o.usuarioNome != null && o.usuarioNome!.trim().isNotEmpty
-                          ? o.usuarioNome!
-                          : (_nomeCache[o.usuarioId]?.isNotEmpty == true
-                                ? _nomeCache[o.usuarioId]
-                                : null));
+                        ? o.usuarioNome!
+                        : (_nomeCache[o.usuarioId]?.isNotEmpty == true
+                            ? _nomeCache[o.usuarioId]
+                            : null));
                 final fotoAutor = o.anonima
                     ? null
                     : ((o.usuarioFotoUrl != null &&
-                              o.usuarioFotoUrl!.isNotEmpty)
-                          ? o.usuarioFotoUrl
-                          : _fotoCache[o.usuarioId]);
+                            o.usuarioFotoUrl!.isNotEmpty)
+                        ? o.usuarioFotoUrl
+                        : _fotoCache[o.usuarioId]);
 
                 final card = OccurrenceCard(
                   occurrence: o,
@@ -956,15 +1013,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                   onAuthorTap: o.anonima || o.usuarioId == null
                       ? null
                       : () => _openPublicProfile(
-                          o,
-                          nomeAutor: nomeAutor,
-                          fotoAutor: fotoAutor,
-                        ),
+                            o,
+                            nomeAutor: nomeAutor,
+                            fotoAutor: fotoAutor,
+                          ),
                   onReport: isOwner ? null : () => _denunciarOcorrencia(o),
-                  onTogglePin: isAutoridade
-                      ? () => _toggleFixarOcorrencia(o)
-                      : null,
+                  onTogglePin:
+                      isAutoridade ? () => _toggleFixarOcorrencia(o) : null,
                   onManage: isOwner ? () => _gerenciarOcorrencia(o) : null,
+                  onOpenMap: widget.onOpenMap,
+                  onOpenDetail: () => Navigator.of(context).push(
+                    HeroDetailRoute<void>(
+                      builder: (_) => DetalheOcorrenciaPage(occurrence: o),
+                    ),
+                  ),
                 );
 
                 // Card em foco (vindo da fila): fica fixo no topo com _focoKey
@@ -985,15 +1047,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                           : Colors.transparent,
                       width: 2.5,
                     ),
-                    boxShadow: _focoDestaque
-                        ? [
-                            BoxShadow(
-                              color: AppColors.success.withValues(alpha: 0.25),
-                              blurRadius: 12,
-                              spreadRadius: 1,
-                            ),
-                          ]
-                        : null,
                   ),
                   child: card,
                 );
@@ -1001,9 +1054,474 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
     );
   }
+
+  int get _activeFilterCount {
+    var count = 0;
+    if (_selectedType != null) count++;
+    if (_selectedStatus != null) count++;
+    if (_periodo != _FeedPeriodo.tudo) count++;
+    if (_sortBy != _FeedSort.recentes) count++;
+    return count;
+  }
+
+  Widget _buildHomeFeedHeader(List<OcorrenciaModel> occurrences) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Expanded(
+              child: _SearchBar(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _searchQuery = value),
+              ),
+            ),
+            const SizedBox(width: 10),
+            _FilterButton(
+              activeCount: _activeFilterCount,
+              onTap: _abrirFiltrosAvancados,
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Text(
+          'Explore por categoria',
+          style: AppTextStyles.sectionTitle.copyWith(color: context.pal.ink),
+        ),
+        const SizedBox(height: 12),
+        _CategoryWrap(
+          selected: _selectedType,
+          onSelected: (type) => setState(() => _selectedType = type),
+        ),
+        if (_activeFilterCount > (_selectedType == null ? 0 : 1)) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (_selectedStatus != null)
+                _ActiveFilterPill(
+                  label: _selectedStatus!.label,
+                  onRemove: () => setState(() => _selectedStatus = null),
+                ),
+              if (_periodo != _FeedPeriodo.tudo)
+                _ActiveFilterPill(
+                  label: _periodo.label,
+                  onRemove: () => setState(() => _periodo = _FeedPeriodo.tudo),
+                ),
+              if (_sortBy != _FeedSort.recentes)
+                _ActiveFilterPill(
+                  label: _sortBy.label,
+                  onRemove: () => setState(() => _sortBy = _FeedSort.recentes),
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+class _HeaderLocationButton extends StatelessWidget {
+  final String label;
+  final bool loading;
+  final VoidCallback onTap;
+
+  const _HeaderLocationButton({
+    required this.label,
+    required this.loading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 132),
+      child: FilledButton.icon(
+        onPressed: onTap,
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.12),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: const Size(44, 38),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+        icon: loading
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.8,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(AppIcons.locationPin, size: 15, color: Colors.white),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 2),
+            const Icon(Icons.keyboard_arrow_down_rounded, size: 15),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryWrap extends StatelessWidget {
+  final OccurrenceType? selected;
+  final ValueChanged<OccurrenceType?> onSelected;
+
+  const _CategoryWrap({required this.selected, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 9,
+      children: [
+        _CategoryChip(
+          label: 'Todos',
+          icon: Icons.grid_view_rounded,
+          selected: selected == null,
+          onTap: () => onSelected(null),
+        ),
+        for (final type in OccurrenceType.values)
+          _CategoryChip(
+            label: type.label,
+            icon: type.icon,
+            selected: selected == type,
+            onTap: () => onSelected(type),
+          ),
+      ],
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    return Material(
+      color: selected ? pal.primary : pal.surface,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected ? pal.primary : pal.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? Colors.white : pal.primary,
+              ),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : pal.ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Mantido para compatibilidade com variações de header ainda existentes.
+// ignore: unused_element
+class _HeaderAvatar extends StatelessWidget {
+  final String name;
+  final String? photoUrl;
+  final VoidCallback onTap;
+
+  const _HeaderAvatar({
+    required this.name,
+    required this.photoUrl,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cleanName = name.trim().isEmpty ? 'U' : name.trim();
+    final initials = cleanName
+        .split(RegExp(r'\s+'))
+        .take(2)
+        .map((part) => part[0].toUpperCase())
+        .join();
+    final hasPhoto = photoUrl != null && photoUrl!.trim().isNotEmpty;
+    return Semantics(
+      button: true,
+      label: 'Abrir perfil',
+      child: InkResponse(
+        onTap: onTap,
+        radius: 24,
+        child: CircleAvatar(
+          radius: 17,
+          backgroundColor: AppColors.primarySoft,
+          backgroundImage: hasPhoto
+              ? imagemCacheada(cloudinaryAvatar(photoUrl!, radius: 17))
+              : null,
+          child: hasPhoto
+              ? null
+              : Text(
+                  initials,
+                  style: const TextStyle(
+                    color: AppColors.primaryDarkText,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// Mantido enquanto filtros antigos ainda podem ser reativados por configuração.
+// ignore: unused_element
+class _FeedTabs extends StatelessWidget {
+  final _FeedView selected;
+  final ValueChanged<_FeedView> onSelected;
+  final VoidCallback onOpenFilters;
+  final int activeFilterCount;
+
+  const _FeedTabs({
+    required this.selected,
+    required this.onSelected,
+    required this.onOpenFilters,
+    required this.activeFilterCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _FeedTab(
+            label: 'Denúncias recentes',
+            selected: selected == _FeedView.recentes,
+            onTap: () => onSelected(_FeedView.recentes),
+          ),
+        ),
+        Expanded(
+          child: _FeedTab(
+            label: 'Em destaque',
+            selected: selected == _FeedView.destaques,
+            onTap: () => onSelected(_FeedView.destaques),
+          ),
+        ),
+        Expanded(
+          child: _FeedTab(
+            label: 'Mais comentadas',
+            selected: selected == _FeedView.comentadas,
+            onTap: () => onSelected(_FeedView.comentadas),
+          ),
+        ),
+        const SizedBox(width: 6),
+        _FilterButton(
+          activeCount: activeFilterCount,
+          onTap: onOpenFilters,
+        ),
+      ],
+    );
+  }
+}
+
+class _FeedTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FeedTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? AppColors.primary : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: selected ? AppColors.primary : context.pal.muted,
+              fontSize: 10.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeedErrorList extends StatelessWidget {
+  final Widget header;
+  final VoidCallback onRetry;
+
+  const _FeedErrorList({
+    super.key,
+    required this.header,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      children: [
+        header,
+        SizedBox(height: 320, child: FeedErrorState(onRetry: onRetry)),
+      ],
+    );
+  }
+}
+
+// Mantido para compatibilidade com a composição anterior do feed.
+// ignore: unused_element
+class _FeedHeader extends StatelessWidget {
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final int activeFilterCount;
+  final OccurrenceType? selectedType;
+  final VoidCallback onRemoveType;
+  final OccurrenceStatus? selectedStatus;
+  final VoidCallback onRemoveStatus;
+  final _FeedPeriodo periodo;
+  final _FeedSort sortBy;
+  final VoidCallback onResetPeriodo;
+  final VoidCallback onResetSort;
+
+  const _FeedHeader({
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.activeFilterCount,
+    required this.selectedType,
+    required this.onRemoveType,
+    required this.selectedStatus,
+    required this.onRemoveStatus,
+    required this.periodo,
+    required this.sortBy,
+    required this.onResetPeriodo,
+    required this.onResetSort,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    return Container(
+      color: pal.background,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.zero,
+            child: _SearchBar(
+              controller: searchController,
+              onChanged: onSearchChanged,
+            ),
+          ),
+          if (activeFilterCount > 0) ...[
+            const SizedBox(height: 10),
+            Padding(
+              padding: EdgeInsets.zero,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (selectedType != null)
+                    _ActiveFilterPill(
+                      label: selectedType!.label,
+                      onRemove: onRemoveType,
+                    ),
+                  if (selectedStatus != null)
+                    _ActiveFilterPill(
+                      label: selectedStatus!.label,
+                      onRemove: onRemoveStatus,
+                    ),
+                  if (periodo != _FeedPeriodo.tudo)
+                    _ActiveFilterPill(
+                      label: periodo.label,
+                      onRemove: onResetPeriodo,
+                    ),
+                  if (sortBy != _FeedSort.recentes)
+                    _ActiveFilterPill(
+                      label: sortBy.label,
+                      onRemove: onResetSort,
+                    ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
 }
 
 class _OccurrenceList extends StatelessWidget {
+  final Widget header;
   final ScrollController controller;
   final List<OcorrenciaModel> occurrences;
   final bool hasPotentialMore;
@@ -1012,6 +1530,7 @@ class _OccurrenceList extends StatelessWidget {
   final Widget Function(OcorrenciaModel occurrence) itemBuilder;
 
   const _OccurrenceList({
+    required this.header,
     required this.controller,
     required this.occurrences,
     required this.hasPotentialMore,
@@ -1026,30 +1545,33 @@ class _OccurrenceList extends StatelessWidget {
       controller: controller,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      itemCount: occurrences.length + 1,
-      separatorBuilder: (_, index) => index >= occurrences.length - 1
+      itemCount: occurrences.length + 2,
+      separatorBuilder: (_, index) => index == 0 || index >= occurrences.length
           ? const SizedBox.shrink()
           : const SizedBox(height: 12),
       itemBuilder: (_, i) {
-        if (i == occurrences.length) {
+        if (i == 0) return header;
+        if (i == occurrences.length + 1) {
           return _PaginationFooter(
             hasPotentialMore: hasPotentialMore,
             loadingMore: loadingMore,
             onLoadMore: onLoadMore,
           );
         }
-        final o = occurrences[i];
-        // RepaintBoundary isola o raster de cada card: a animação do carrossel
-        // (PageView + indicador) e o rebuild de um like/comentário não forçam
-        // os cards vizinhos a repintar. A ValueKey preserva o elemento quando
-        // as fixadas reordenam a lista.
-        return RepaintBoundary(key: ValueKey(o.id), child: itemBuilder(o));
+        final occurrenceIndex = i - 1;
+        final o = occurrences[occurrenceIndex];
+        // Isola cada card para curtidas e imagens não repintarem os vizinhos.
+        return RepaintBoundary(
+          key: ValueKey(o.id),
+          child: itemBuilder(o),
+        );
       },
     );
   }
 }
 
 class _EmptyFeedList extends StatelessWidget {
+  final Widget header;
   final bool hasActiveFilters;
   final bool hasPotentialMore;
   final bool loadingMore;
@@ -1057,6 +1579,7 @@ class _EmptyFeedList extends StatelessWidget {
   final VoidCallback onLoadMore;
 
   const _EmptyFeedList({
+    required this.header,
     required this.hasActiveFilters,
     required this.hasPotentialMore,
     required this.loadingMore,
@@ -1070,6 +1593,7 @@ class _EmptyFeedList extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       children: [
+        header,
         SizedBox(
           height: MediaQuery.of(context).size.height * 0.46,
           child: FeedEmptyState(
@@ -1160,33 +1684,100 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: pal.surface,
+    return ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: pal.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.20),
+            ),
           ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        style: TextStyle(fontSize: 14, color: pal.ink),
-        decoration: InputDecoration(
-          hintText: 'Buscar título, descrição ou local',
-          hintStyle: TextStyle(color: pal.hint, fontSize: 14),
-          prefixIcon: Icon(Icons.search, color: pal.hint, size: 20),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
+          child: TextField(
+            controller: controller,
+            onChanged: onChanged,
+            style: TextStyle(fontSize: 14, color: pal.ink),
+            decoration: InputDecoration(
+              hintText: 'Pesquisar publicações, locais ou temas...',
+              hintStyle: TextStyle(color: pal.hint, fontSize: 14),
+              prefixIcon: Icon(Icons.search, color: pal.hint, size: 20),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+            ),
+          ),
+        ));
+  }
+}
+
+/// Botão que abre os filtros avançados. Ganha um ponto de destaque quando há
+/// algum filtro avançado ativo (período ou ordenação != padrão).
+class _FilterButton extends StatelessWidget {
+  final int activeCount;
+  final VoidCallback onTap;
+
+  const _FilterButton({required this.activeCount, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final active = activeCount > 0;
+    return Material(
+      color: active ? pal.primary : pal.surface,
+      borderRadius: BorderRadius.circular(12),
+      elevation: 0,
+      shadowColor: Colors.black.withValues(alpha: 0.05),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: active
+                  ? pal.primary
+                  : AppColors.primary.withValues(alpha: 0.20),
+            ),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                Icons.tune_rounded,
+                size: 20,
+                color: active ? Colors.white : pal.hint,
+              ),
+              if (active)
+                Positioned(
+                  right: 8,
+                  top: 7,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      color: AppColors.accent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '$activeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -1194,44 +1785,40 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
-/// Botão que abre os filtros avançados. Ganha um ponto de destaque quando há
-/// algum filtro avançado ativo (período ou ordenação != padrão).
-class _FilterButton extends StatelessWidget {
-  final bool active;
-  final VoidCallback onTap;
+class _ActiveFilterPill extends StatelessWidget {
+  final String label;
+  final VoidCallback onRemove;
 
-  const _FilterButton({required this.active, required this.onTap});
+  const _ActiveFilterPill({required this.label, required this.onRemove});
 
   @override
   Widget build(BuildContext context) {
-    final pal = context.pal;
     return Material(
-      color: active ? pal.primary : pal.surface,
-      borderRadius: BorderRadius.circular(14),
-      elevation: 0,
-      shadowColor: Colors.black.withValues(alpha: 0.05),
+      color: AppColors.primarySoft,
+      borderRadius: BorderRadius.circular(99),
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: active
-                ? null
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-          ),
-          child: Icon(
-            Icons.tune,
-            size: 20,
-            color: active ? Colors.white : pal.hint,
+        onTap: onRemove,
+        borderRadius: BorderRadius.circular(99),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.primaryDarkText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 5),
+              const Icon(
+                Icons.close_rounded,
+                size: 14,
+                color: AppColors.primaryDarkText,
+              ),
+            ],
           ),
         ),
       ),
@@ -1294,116 +1881,7 @@ class _FiltroChoice extends StatelessWidget {
   }
 }
 
-class _TypeDropdown extends StatelessWidget {
-  final OccurrenceType? selected;
-  final ValueChanged<OccurrenceType?> onChanged;
-
-  const _TypeDropdown({required this.selected, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = context.pal;
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: pal.surface,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<OccurrenceType?>(
-          value: selected,
-          isExpanded: true,
-          dropdownColor: pal.surface,
-          icon: Icon(Icons.menu, color: pal.hint, size: 20),
-          hint: Text(
-            'Tipo de ocorrência',
-            style: TextStyle(color: pal.hint, fontSize: 14),
-          ),
-          style: TextStyle(fontSize: 14, color: pal.ink),
-          items: [
-            const DropdownMenuItem<OccurrenceType?>(
-              value: null,
-              child: Text('Filtrar por tipo'),
-            ),
-            ...OccurrenceType.values.map(
-              (t) => DropdownMenuItem(
-                value: t,
-                child: Row(
-                  children: [
-                    Icon(t.icon, size: 16, color: t.color),
-                    const SizedBox(width: 8),
-                    Text(t.label, style: TextStyle(color: t.color)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _StatusChip({
-    required this.label,
-    required this.selected,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = context.pal;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? color : pal.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? color : pal.border),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : pal.muted,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ─────────────────────────────────────────
 //  BANNER DE AUTORIDADE
 //  Visível no topo do feed apenas para contas com papel 'autoridade'.
 // ─────────────────────────────────────────
-

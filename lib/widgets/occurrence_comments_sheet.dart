@@ -412,7 +412,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
         child: Container(
           decoration: BoxDecoration(
             color: pal.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
           ),
           child: Column(
             children: [
@@ -429,26 +429,47 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
                 child: Row(
                   children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primarySoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.forum_rounded,
+                        color: AppColors.primary,
+                        size: 19,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        'Comentários',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: pal.ink,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Comentários',
+                            style: TextStyle(
+                              fontSize: 17,
+                              color: pal.ink,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            'Conversa da comunidade',
+                            style: TextStyle(fontSize: 12, color: pal.muted),
+                          ),
+                        ],
                       ),
                     ),
                     IconButton(
                       tooltip: 'Fechar',
-                      icon: Icon(Icons.close, size: 22, color: pal.ink),
+                      icon: Icon(Icons.close_rounded, size: 22, color: pal.ink),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
               ),
-              Divider(height: 1, color: pal.border),
               Expanded(
                 child: StreamBuilder<List<ComentarioModel>>(
                   stream: widget.comentarioRepository.listarComentarios(
@@ -470,9 +491,8 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                       return const _EmptyComments();
                     }
 
-                    final roots = comentarios
-                        .where((c) => c.parentId == null)
-                        .toList();
+                    final roots =
+                        comentarios.where((c) => c.parentId == null).toList();
                     final repliesByParent = <String, List<ComentarioModel>>{};
                     for (final comentario in comentarios) {
                       final parentId = comentario.parentId;
@@ -487,8 +507,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                       itemCount: roots.length,
                       itemBuilder: (context, index) {
                         final root = roots[index];
-                        final replies =
-                            repliesByParent[root.id] ??
+                        final replies = repliesByParent[root.id] ??
                             const <ComentarioModel>[];
                         final isExpanded = _expandedComments.contains(root.id);
                         return Column(
@@ -497,7 +516,8 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                             _CommentTile(
                               comentario: root,
                               isOwn: root.userId == user?.uid,
-                              isEmFoco: _comentarioEmFoco == root.id && _mostraDestaque,
+                              isEmFoco: _comentarioEmFoco == root.id &&
+                                  _mostraDestaque,
                               isUserAutority: _ehAutoridade,
                               replyCount: replies.length,
                               showReplies: isExpanded,
@@ -523,7 +543,8 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                                   child: _CommentTile(
                                     comentario: reply,
                                     isOwn: reply.userId == user?.uid,
-                                    isEmFoco: _comentarioEmFoco == reply.id && _mostraDestaque,
+                                    isEmFoco: _comentarioEmFoco == reply.id &&
+                                        _mostraDestaque,
                                     isUserAutority: _ehAutoridade,
                                     compact: true,
                                     onLike: () => _toggleLike(reply),
@@ -543,7 +564,6 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                   },
                 ),
               ),
-              Divider(height: 1, color: pal.border),
               if (_replyTo != null)
                 _ReplyBanner(
                   name: _replyTo!.userName,
@@ -611,240 +631,266 @@ class _CommentTileState extends State<_CommentTile> {
     final c = widget.comentario;
     return Padding(
       padding: EdgeInsets.only(bottom: widget.compact ? 14 : 18),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
         decoration: widget.isEmFoco
             ? BoxDecoration(
                 border: Border.all(
                   color: pal.primary,
                   width: 2,
                 ),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(16),
               )
             : null,
         padding: widget.isEmFoco ? const EdgeInsets.all(8) : null,
         child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _UserAvatar(
-            name: c.userName,
-            photoUrl: c.userPhotoUrl,
-            radius: widget.compact ? 14 : 18,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header: Nome + Selo + Tempo + (❤️ pela autoridade se curtiu)
-                Row(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                fontSize: widget.compact ? 12.5 : 13,
-                                color: pal.ink,
-                                height: 1.35,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: c.userName,
-                                  style: const TextStyle(fontWeight: FontWeight.w800),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _UserAvatar(
+              name: c.userName,
+              photoUrl: c.userPhotoUrl,
+              radius: widget.compact ? 14 : 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header: Nome + Selo + Tempo + (❤️ pela autoridade se curtiu)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            RichText(
+                              text: TextSpan(
+                                style: TextStyle(
+                                  fontSize: widget.compact ? 12.5 : 13,
+                                  color: pal.ink,
+                                  height: 1.35,
                                 ),
-                                if (c.autorAutoridade)
-                                  const WidgetSpan(
-                                    alignment: PlaceholderAlignment.middle,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(left: 3),
-                                      child: Icon(
-                                        Icons.verified,
-                                        size: 14,
-                                        color: Color(0xFF3B82F6),
+                                children: [
+                                  TextSpan(
+                                    text: c.userName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800),
+                                  ),
+                                  if (c.autorAutoridade)
+                                    const WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: Padding(
+                                        padding: EdgeInsets.only(left: 3),
+                                        child: Icon(
+                                          Icons.verified,
+                                          size: 14,
+                                          color: Color(0xFF3B82F6),
+                                        ),
                                       ),
                                     ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              tempoRelativo(c.dataCriacao),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: pal.hint,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            // ❤️ pela autoridade (apenas se autoridade curtiu)
+                            if (widget.isUserAutority && c.userLiked) ...[
+                              const SizedBox(width: 6),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.favorite,
+                                    size: 12,
+                                    color: AppColors.danger,
                                   ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            tempoRelativo(c.dataCriacao),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: pal.hint,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          // ❤️ pela autoridade (apenas se autoridade curtiu)
-                          if (widget.isUserAutority && c.userLiked) ...[
-                            const SizedBox(width: 6),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.favorite,
-                                  size: 12,
-                                  color: AppColors.danger,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  'pela autoridade',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: pal.hint,
-                                    fontWeight: FontWeight.w600,
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'pela autoridade',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: pal.hint,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                // Texto do comentário + Coração curtir
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        c.texto,
-                        style: TextStyle(
-                          fontSize: widget.compact ? 12.5 : 13,
-                          color: pal.ink,
-                          height: 1.35,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: widget.onLike,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              c.userLiked ? Icons.favorite : Icons.favorite_border,
-                              size: 20,
-                              color: c.userLiked ? AppColors.danger : pal.hint,
-                            ),
-                            if (c.likes > 0) ...[
-                              const SizedBox(width: 4),
-                              Text(
-                                '${c.likes}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: c.userLiked ? AppColors.danger : pal.hint,
-                                ),
+                                ],
                               ),
                             ],
                           ],
                         ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Texto do comentário + Coração curtir
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                    decoration: BoxDecoration(
+                      color: widget.compact ? pal.surface : pal.surfaceAlt,
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                // Ações: Responder + Menu
-                Row(
-                  children: [
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            c.texto,
+                            style: TextStyle(
+                              fontSize: widget.compact ? 12.5 : 13.5,
+                              color: pal.ink,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: widget.onLike,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AnimatedScale(
+                                  scale: c.userLiked ? 1.08 : 1,
+                                  duration: const Duration(milliseconds: 160),
+                                  child: Icon(
+                                    c.userLiked
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded,
+                                    size: 21,
+                                    color: c.userLiked
+                                        ? AppColors.danger
+                                        : pal.hint,
+                                  ),
+                                ),
+                                if (c.likes > 0) ...[
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${c.likes}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: c.userLiked
+                                          ? AppColors.danger
+                                          : pal.hint,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  // Ações: Responder + Menu
+                  Row(
+                    children: [
+                      Semantics(
+                        button: true,
+                        label: 'Responder comentário',
+                        child: GestureDetector(
+                          onTap: widget.onReply,
+                          child: Text(
+                            'Responder',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: pal.muted,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: PopupMenuButton<_CommentOwnerAction>(
+                          tooltip: 'Opções do comentário',
+                          icon:
+                              Icon(Icons.more_horiz, size: 16, color: pal.hint),
+                          padding: EdgeInsets.zero,
+                          onSelected: (action) {
+                            switch (action) {
+                              case _CommentOwnerAction.edit:
+                                widget.onEdit();
+                                break;
+                              case _CommentOwnerAction.delete:
+                                widget.onDelete();
+                                break;
+                              case _CommentOwnerAction.report:
+                                widget.onReport();
+                                break;
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            if (widget.isOwn) ...const [
+                              PopupMenuItem(
+                                value: _CommentOwnerAction.edit,
+                                child: _CommentMenuItem(
+                                  icon: Icons.edit_outlined,
+                                  label: 'Editar',
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _CommentOwnerAction.delete,
+                                child: _CommentMenuItem(
+                                  icon: Icons.delete_outline,
+                                  label: 'Excluir',
+                                  danger: true,
+                                ),
+                              ),
+                            ],
+                            if (!widget.isOwn)
+                              const PopupMenuItem(
+                                value: _CommentOwnerAction.report,
+                                child: _CommentMenuItem(
+                                  icon: Icons.flag_outlined,
+                                  label: 'Denunciar',
+                                  danger: true,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Ver mais/menos respostas (se houver)
+                  if (widget.replyCount > 0) ...[
+                    const SizedBox(height: 8),
                     Semantics(
                       button: true,
-                      label: 'Responder comentário',
+                      label: widget.showReplies
+                          ? 'Ver menos respostas'
+                          : 'Ver mais respostas',
                       child: GestureDetector(
-                        onTap: widget.onReply,
+                        onTap: () =>
+                            widget.onToggleReplies?.call(!widget.showReplies),
                         child: Text(
-                          'Responder',
+                          widget.showReplies
+                              ? 'Ver menos respostas'
+                              : 'Ver mais respostas',
                           style: TextStyle(
                             fontSize: 11,
-                            color: pal.muted,
+                            color: pal.primary,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                     ),
-                    const Spacer(),
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: PopupMenuButton<_CommentOwnerAction>(
-                        tooltip: 'Opções do comentário',
-                        icon: Icon(Icons.more_horiz, size: 16, color: pal.hint),
-                        padding: EdgeInsets.zero,
-                        onSelected: (action) {
-                          switch (action) {
-                            case _CommentOwnerAction.edit:
-                              widget.onEdit();
-                              break;
-                            case _CommentOwnerAction.delete:
-                              widget.onDelete();
-                              break;
-                            case _CommentOwnerAction.report:
-                              widget.onReport();
-                              break;
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          if (widget.isOwn) ...const [
-                            PopupMenuItem(
-                              value: _CommentOwnerAction.edit,
-                              child: _CommentMenuItem(
-                                icon: Icons.edit_outlined,
-                                label: 'Editar',
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _CommentOwnerAction.delete,
-                              child: _CommentMenuItem(
-                                icon: Icons.delete_outline,
-                                label: 'Excluir',
-                                danger: true,
-                              ),
-                            ),
-                          ],
-                          if (!widget.isOwn)
-                            const PopupMenuItem(
-                              value: _CommentOwnerAction.report,
-                              child: _CommentMenuItem(
-                                icon: Icons.flag_outlined,
-                                label: 'Denunciar',
-                                danger: true,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
                   ],
-                ),
-                // Ver mais/menos respostas (se houver)
-                if (widget.replyCount > 0) ...[
-                  const SizedBox(height: 8),
-                  Semantics(
-                    button: true,
-                    label: widget.showReplies ? 'Ver menos respostas' : 'Ver mais respostas',
-                    child: GestureDetector(
-                      onTap: () => widget.onToggleReplies?.call(!widget.showReplies),
-                      child: Text(
-                        widget.showReplies ? 'Ver menos respostas' : 'Ver mais respostas',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: pal.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -1024,7 +1070,8 @@ class _CommentComposer extends StatelessWidget {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.send, color: AppColors.successStrong, size: 22),
+                : const Icon(Icons.send,
+                    color: AppColors.successStrong, size: 22),
             onPressed: sending ? null : onSend,
           ),
         ],

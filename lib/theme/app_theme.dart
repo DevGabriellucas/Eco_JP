@@ -8,23 +8,110 @@ import 'package:google_fonts/google_fonts.dart';
 /// [AppPalette] via `context.pal`, que troca de valor entre claro e escuro.
 abstract final class AppColors {
   static const ink = Color(0xFF1A1A1A);
-  static const muted = Color(0xFF6B7280);
-  static const hint = Color(0xFF8A8A8A);
-  static const background = Color(0xFFF4F6F3);
+  static const muted = Color(0xFF757575);
+  static const hint = Color(0xFFA8A8A8);
+  static const background = Color(0xFFFFFFFF);
+  static const backgroundAlt = Color(0xFFF7F9F8);
   static const surface = Colors.white;
-  static const border = Color(0xFFD8DED6);
-  static const primary = Color(0xFF1F7A4D);
+  static const border = Color(0xFFEEEEEE);
+  static const primary = Color(0xFF099C5E);
+  static const primarySoft = Color(0xFFE8F7EF);
+  static const primaryDarkText = Color(0xFF066840);
+  static const accent = Color(0xFFE58A3A);
+  static const accentSoft = Color(0xFFFDF0E3);
   // Verde de marca aclarado para o tema escuro (o primary padrão fica escuro
   // demais sobre superfícies escuras). Exposto via `context.pal.primary`.
   static const primaryLight = Color(0xFF43C589);
-  static const primaryDark = Color(0xFF145A38);
-  static const success = Color(0xFF22C55E);
+  static const primaryDark = Color(0xFF066840);
+  static const success = Color(0xFF099C5E);
   // Verde de marca mais fechado — usado em selos "verificado/resolvido" e em
   // ações de confirmação (enviar comentário, seguir). Igual nos dois temas.
-  static const successStrong = Color(0xFF16A34A);
-  static const warning = Color(0xFFF97316);
-  static const danger = Color(0xFFEF4444);
-  static const info = Color(0xFF2563EB);
+  static const successStrong = Color(0xFF066840);
+  static const warning = Color(0xFFE58A3A);
+  static const danger = Color(0xFFC43D3D);
+  static const info = Color(0xFF3478F6);
+  static const iconMuted = Color(0xFF858585);
+  static const statusPending = Color(0xFFF2B84B);
+  static const statusResolved = Color(0xFF3CCB7F);
+  static const statusUnresolved = Color(0xFFE05B5B);
+  static const likeActive = Color(0xFFE0435B);
+  static const likeInactive = Color(0xFF9AA0A6);
+  static const imageOverlayEnd = Color(0xB3000000);
+}
+
+abstract final class AppSpacing {
+  static const xs = 4.0;
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+  static const xl = 24.0;
+  static const screen = 16.0;
+  static const section = 24.0;
+  static const compact = 8.0;
+  static const item = 12.0;
+}
+
+abstract final class AppRadius {
+  static const sm = 8.0;
+  static const md = 14.0;
+  static const lg = 20.0;
+  static const cardLarge = 18.0;
+  static const card = 16.0;
+  static const cardSmall = 14.0;
+  static const button = 12.0;
+  static const badge = 8.0;
+  static const chip = 20.0;
+}
+
+abstract final class AppShadows {
+  static List<BoxShadow> get card => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.07),
+          blurRadius: 12,
+          offset: const Offset(0, 2),
+        ),
+      ];
+
+  static List<BoxShadow> get fab => [
+        BoxShadow(
+          color: AppColors.primary.withValues(alpha: 0.35),
+          blurRadius: 16,
+          offset: const Offset(0, 4),
+        ),
+      ];
+}
+
+abstract final class AppTextStyles {
+  static const screenTitle = TextStyle(
+    fontSize: 22,
+    fontWeight: FontWeight.w700,
+    color: AppColors.ink,
+  );
+  static const sectionTitle = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    color: AppColors.ink,
+  );
+  static const cardTitle = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    color: AppColors.ink,
+  );
+  static const body = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    color: AppColors.ink,
+  );
+  static const metadata = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    color: AppColors.muted,
+  );
+  static const micro = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    color: AppColors.muted,
+  );
 }
 
 /// Tokens neutros que mudam entre claro e escuro. Acesse via `context.pal`.
@@ -54,13 +141,13 @@ class AppPalette extends ThemeExtension<AppPalette> {
   });
 
   static const light = AppPalette(
-    background: Color(0xFFF4F6F3),
+    background: Color(0xFFFFFFFF),
     surface: Color(0xFFFFFFFF),
-    surfaceAlt: Color(0xFFEDEDED),
+    surfaceAlt: Color(0xFFF7F9F8),
     ink: Color(0xFF1A1A1A),
-    muted: Color(0xFF6B7280),
-    hint: Color(0xFF8A8A8A),
-    border: Color(0xFFD8DED6),
+    muted: Color(0xFF757575),
+    hint: Color(0xFFA8A8A8),
+    border: Color(0xFFEEEEEE),
     primary: AppColors.primary,
   );
 
@@ -121,9 +208,6 @@ extension AppPaletteContext on BuildContext {
 }
 
 abstract final class AppTheme {
-  // Poppins nos títulos (personalidade) e Inter no corpo (legibilidade em
-  // telas pequenas). Definido no tema central: qualquer `Text` que só ajusta
-  // tamanho/peso herda essas famílias automaticamente.
   static final TextTheme _textThemeLight = _buildTextTheme(
     Typography.material2021().black,
     AppPalette.light.ink,
@@ -134,40 +218,23 @@ abstract final class AppTheme {
   );
 
   static TextTheme _buildTextTheme(TextTheme base, Color color) {
-    final heading = GoogleFonts.poppinsTextTheme(base);
-    final body = GoogleFonts.interTextTheme(base);
-    return base
-        .copyWith(
-          displayLarge: heading.displayLarge,
-          displayMedium: heading.displayMedium,
-          displaySmall: heading.displaySmall,
-          headlineLarge: heading.headlineLarge,
-          headlineMedium: heading.headlineMedium,
-          headlineSmall: heading.headlineSmall,
-          titleLarge: heading.titleLarge,
-          titleMedium: heading.titleMedium,
-          titleSmall: heading.titleSmall,
-          bodyLarge: body.bodyLarge,
-          bodyMedium: body.bodyMedium,
-          bodySmall: body.bodySmall,
-          labelLarge: body.labelLarge,
-          labelMedium: body.labelMedium,
-          labelSmall: body.labelSmall,
-        )
-        .apply(bodyColor: color, displayColor: color);
+    return GoogleFonts.interTextTheme(base).apply(
+      bodyColor: color,
+      displayColor: color,
+    );
   }
 
   static ThemeData light() => _build(
-    brightness: Brightness.light,
-    palette: AppPalette.light,
-    textTheme: _textThemeLight,
-  );
+        brightness: Brightness.light,
+        palette: AppPalette.light,
+        textTheme: _textThemeLight,
+      );
 
   static ThemeData dark() => _build(
-    brightness: Brightness.dark,
-    palette: AppPalette.dark,
-    textTheme: _textThemeDark,
-  );
+        brightness: Brightness.dark,
+        palette: AppPalette.dark,
+        textTheme: _textThemeDark,
+      );
 
   static ThemeData _build({
     required Brightness brightness,
@@ -208,9 +275,9 @@ abstract final class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.poppins(
+        titleTextStyle: GoogleFonts.inter(
           color: palette.ink,
-          fontSize: 18,
+          fontSize: 22,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -227,21 +294,17 @@ abstract final class AppTheme {
           vertical: 14,
         ),
         hintStyle: GoogleFonts.inter(color: palette.hint, fontSize: 14),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+        enabledBorder: UnderlineInputBorder(
           borderSide: BorderSide(color: palette.border),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: palette.ink, width: 1.5),
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: palette.primary, width: 1.5),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.danger),
+        errorBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: AppColors.danger),
         ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.danger, width: 1.5),
+        focusedErrorBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: AppColors.danger, width: 1.5),
         ),
       ),
       // Botão de alto contraste que inverte com o tema: fundo "ink" com texto
@@ -249,41 +312,41 @@ abstract final class AppTheme {
       // legível nos dois casos.
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: palette.ink,
+          backgroundColor: AppColors.primary,
           foregroundColor: palette.surface,
           elevation: 0,
           minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: palette.ink,
-          side: BorderSide(color: palette.ink),
+          foregroundColor: palette.primary,
+          side: BorderSide(color: palette.primary),
           minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: palette.primary,
-          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: palette.ink,
+        backgroundColor: AppColors.primary,
         foregroundColor: palette.surface,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: palette.ink,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         contentTextStyle: TextStyle(color: palette.surface),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(

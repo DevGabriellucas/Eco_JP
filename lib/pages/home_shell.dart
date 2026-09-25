@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,10 +9,13 @@ import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../features/denuncias/providers/denuncia_providers.dart';
 import '../services/usuario_service.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../utils/cloudinary_image.dart';
 import '../utils/imagem_cacheada.dart';
+import '../widgets/shared/app_icons.dart';
 import 'estatisticas_page.dart';
+import 'form_ocorrencia_page.dart';
 import 'home_page.dart';
 import 'mapPage/map_page.dart';
 import 'perfil/perfil_page.dart';
@@ -52,11 +57,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   Widget _pagina(int i) {
     switch (i) {
       case 0:
-        return HomePage(scrollController: _scrollController);
+        return HomePage(
+          scrollController: _scrollController,
+          onOpenMap: () => _onTapItem(1),
+          onOpenProfile: () => _onTapItem(4),
+          onCreateOccurrence: () => _onTapItem(2),
+        );
       case 1:
         return const MapPage();
       case 3:
-        return EstatisticasPage(scrollController: _scrollControllerEstatisticas);
+        return EstatisticasPage(
+            scrollController: _scrollControllerEstatisticas);
       case 4:
         return PerfilPage(scrollController: _scrollControllerPerfil);
       default:
@@ -69,7 +80,28 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       if (_isAutoridade) {
         _abrirMenuAutoridade();
       } else {
-        context.push(Routes.formOcorrencia);
+        Navigator.of(context).push(
+          PageRouteBuilder<void>(
+            transitionDuration: AppMotion.slow,
+            reverseTransitionDuration: AppMotion.base,
+            pageBuilder: (_, animation, secondaryAnimation) =>
+                const FormOcorrenciaPage(),
+            transitionsBuilder: (_, animation, secondaryAnimation, child) {
+              final curved = CurvedAnimation(
+                parent: animation,
+                curve: AppMotion.curveEnter,
+                reverseCurve: AppMotion.curveExit,
+              );
+              return SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.12),
+                  end: Offset.zero,
+                ).animate(curved),
+                child: FadeTransition(opacity: curved, child: child),
+              );
+            },
+          ),
+        );
       }
       return;
     }
@@ -210,12 +242,21 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     });
 
     return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: List.generate(
-          5,
-          (i) => _visitadas.contains(i) ? _pagina(i) : const SizedBox.shrink(),
-        ),
+      body: Stack(
+        children: [0, 1, 3, 4].map((i) {
+          final active = _index == i;
+          return Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !active,
+              child: TickerMode(
+                enabled: active,
+                child: active && _visitadas.contains(i)
+                    ? KeyedSubtree(key: ValueKey(i), child: _pagina(i))
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          );
+        }).toList(),
       ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -307,29 +348,57 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const height = 56.0;
-    const padding = 8.0;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final capsuleColor = dark
+        ? const Color(0xE6193428)
+        : const Color(0xE6E8F7EF);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: padding, vertical: padding),
-      child: SafeArea(
-        top: false,
-        child: Container(
-          height: height,
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            height: 72,
+            decoration: BoxDecoration(
+              color: capsuleColor,
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(
+                color: dark
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : AppColors.primary.withValues(alpha: 0.16),
+              ),
+            ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildItem(0, Icons.home_rounded, Icons.home_outlined, 'Feed', 24.0),
-                _buildItem(1, Icons.location_on_rounded, Icons.location_on_outlined, 'Mapa', 24.0),
-                _buildBotaoCentral(24.0),
-                _buildItem(3, Icons.library_books_rounded, Icons.library_books_outlined, 'Dados', 24.0),
-                _buildItemPerfil(),
+                _buildItem(
+                  context,
+                  0,
+                  AppIcons.homeActive,
+                  AppIcons.home,
+                  'Início',
+                  24,
+                ),
+                _buildItem(
+                  context,
+                  1,
+                  AppIcons.mapActive,
+                  AppIcons.map,
+                  'Mapa',
+                  24,
+                ),
+                _buildBotaoCentral(context, 24),
+                _buildItem(
+                  context,
+                  3,
+                  AppIcons.dataActive,
+                  AppIcons.data,
+                  'Dados',
+                  24,
+                ),
+                _buildItemPerfil(context),
               ],
             ),
           ),
@@ -338,7 +407,51 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
+  Widget _navContent({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required bool ativo,
+    required double iconSize,
+  }) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = dark ? const Color(0xFF70E6A6) : AppColors.primary;
+    final inactiveColor = dark
+        ? Colors.white.withValues(alpha: 0.68)
+        : const Color(0xFF456353);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: ativo
+            ? (dark
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.white.withValues(alpha: 0.78))
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: iconSize, color: ativo ? activeColor : inactiveColor),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
+              color: ativo ? activeColor : inactiveColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildItem(
+    BuildContext context,
     int i,
     IconData icon,
     IconData iconAtivo,
@@ -351,23 +464,15 @@ class _BottomNav extends StatelessWidget {
         button: true,
         selected: ativo,
         label: label,
-        child: GestureDetector(
+        child: _PressableNavTap(
           onTap: () => onTap(i),
           child: Center(
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: ativo ? const Color(0xFF888888) : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: iconSize,
-                  color: Colors.white,
-                ),
-              ),
+            child: _navContent(
+              context: context,
+              icon: ativo ? icon : iconAtivo,
+              label: label,
+              ativo: ativo,
+              iconSize: iconSize,
             ),
           ),
         ),
@@ -375,82 +480,147 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _buildItemPerfil() {
+  Widget _buildItemPerfil(BuildContext context) {
     final ativo = currentIndex == 4;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = dark ? const Color(0xFF70E6A6) : AppColors.primary;
+    final inactiveColor = dark
+        ? Colors.white.withValues(alpha: 0.68)
+        : const Color(0xFF456353);
     return Expanded(
       child: Semantics(
         button: true,
         selected: ativo,
         label: 'Perfil',
-        child: GestureDetector(
+        child: _PressableNavTap(
           onTap: () => onTap(4),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.only(left: 28, right: 48, top: 14, bottom: 14),
-                decoration: BoxDecoration(
-                  color: ativo ? const Color(0xFF888888) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            decoration: BoxDecoration(
+              color: ativo
+                  ? (dark
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : Colors.white.withValues(alpha: 0.78))
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildAvatarPerfil(context, ativo),
+                const SizedBox(height: 3),
+                Text(
+                  'Perfil',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
+                    color: ativo ? activeColor : inactiveColor,
+                  ),
                 ),
-                child: _buildAvatarPerfil(),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildAvatarPerfil() {
+  Widget _buildAvatarPerfil(BuildContext context, bool ativo) {
     if (fotoPerfilUrl != null && fotoPerfilUrl!.isNotEmpty) {
       return CircleAvatar(
         radius: 14,
-        backgroundColor: const Color(0xFF9E9E9E),
+        backgroundColor: ativo ? AppColors.primary : context.pal.surfaceAlt,
         backgroundImage: imagemCacheada(
           cloudinaryAvatar(fotoPerfilUrl!, radius: 28),
         ),
       );
     }
-    return const CircleAvatar(
+    return CircleAvatar(
       radius: 14,
-      backgroundColor: Color(0xFF9E9E9E),
+      backgroundColor: ativo ? AppColors.primary : context.pal.surfaceAlt,
       child: Icon(
-        Icons.account_circle_rounded,
+        ativo ? AppIcons.profileActive : AppIcons.profile,
         size: 24,
         color: Colors.white,
       ),
     );
   }
 
-  Widget _buildBotaoCentral(double iconSize) {
+  Widget _buildBotaoCentral(BuildContext context, double iconSize) {
     // Autoridade: atalho para a fila de verificação (selo). Cidadão: "+".
-    final label = isAutoridade
-        ? 'Fila de verificação e moderação'
-        : 'Nova denúncia';
+    final label =
+        isAutoridade ? 'Fila de verificação e moderação' : 'Nova denúncia';
 
     return Semantics(
       button: true,
       label: label,
       child: Tooltip(
         message: label,
-        child: GestureDetector(
+        child: _PressableNavTap(
           onTap: () => onTap(2),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: isAutoridade ? AppColors.success : Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isAutoridade ? Icons.fact_check_outlined : Icons.add,
-              color: isAutoridade ? Colors.white : Colors.black,
-              size: 24,
+          child: SizedBox(
+            width: 64,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Transform.translate(
+                  offset: const Offset(0, -5),
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.24),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      isAutoridade ? Icons.fact_check_outlined : AppIcons.add,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                ),
+                Transform.translate(
+                  offset: const Offset(0, -3),
+                  child: Text(
+                    isAutoridade ? 'Fila' : 'Denunciar',
+                    style: TextStyle(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF70E6A6)
+                          : AppColors.primary,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PressableNavTap extends StatelessWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _PressableNavTap({required this.child, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: child,
     );
   }
 }
