@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/auth_brand.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -119,11 +120,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         vertical: 14,
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: pal.border),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: pal.ink, width: 1.5),
                       ),
                     ),
@@ -193,14 +194,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pal = context.pal;
     final double screenWidth = MediaQuery.of(context).size.width;
-    final double logoSize = (screenWidth * 0.32).clamp(110.0, 150.0);
     const double baseWidth = 430.0;
     final double paddingLateral = (38.0 / baseWidth) * screenWidth;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A1018),
+      backgroundColor: AuthBrand.background,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -209,33 +208,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ),
       body: Stack(
         children: [
-          // 1. Imagem de Fundo (20% opacidade)
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.2,
-              child: Image.asset(
-                'assets/images/joaopessoa.jpg',
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                errorBuilder: (context, error, stackTrace) =>
-                    Container(color: const Color(0xFF0A1018)),
-              ),
-            ),
-          ),
-
-          // 2. Gradiente Suavizado
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x33FFFFFF), Color(0x4D000000)],
-                  stops: [0.28, 0.80],
-                ),
-              ),
-            ),
-          ),
+          const Positioned.fill(child: AuthBackground()),
 
           // 3. Conteúdo
           Positioned.fill(
@@ -263,23 +236,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               onTap: () {
                                 context.go(Routes.inicial);
                               },
-                              child: SvgPicture.asset(
-                                'assets/icons/seta.svg',
-                                width: 44,
-                                height: 44,
-                              ),
+                              child: const SizedBox(
+                                  width: 48,
+                                  height: 48,
+                                  child: Icon(Icons.arrow_back,
+                                      color: Colors.white)),
                             ),
                             Center(
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
+                                  vertical: 20,
                                 ),
                                 child: SizedBox(
-                                  width: logoSize,
-                                  height: logoSize,
-                                  child: Image.asset(
-                                    'assets/images/logo_ecojp.png',
-                                    fit: BoxFit.contain,
+                                  height: (screenWidth - 32) * 124 / 611,
+                                  child: OverflowBox(
+                                    minWidth: screenWidth - 32,
+                                    maxWidth: screenWidth - 32,
+                                    alignment: Alignment.center,
+                                    child:
+                                        const EcoHubWordmark(trimPadding: true),
                                   ),
                                 ),
                               ),
@@ -287,10 +262,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                color: pal.surface,
+                                color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(28),
                               ),
-                              padding: const EdgeInsets.all(24.0),
+                              padding: const EdgeInsets.symmetric(vertical: 24),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
@@ -318,7 +293,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                             ? Icons.visibility_off_outlined
                                             : Icons.visibility_outlined,
                                         size: 18,
-                                        color: pal.hint,
+                                        color: AuthBrand.hint,
                                       ),
                                       onPressed: () => setState(
                                         () => _senhaVisivel = !_senhaVisivel,
@@ -331,7 +306,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       child: Text(
                                         _errorMessage!,
                                         style: const TextStyle(
-                                          color: Colors.red,
+                                          color: Color(0xFFFFB4AB),
                                           fontSize: 12,
                                         ),
                                       ),
@@ -341,32 +316,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     width: double.infinity,
                                     height: 48,
                                     child: ElevatedButton(
-                                      onPressed: _isLoading
-                                          ? null
-                                          : _handleLogin,
+                                      onPressed:
+                                          _isLoading ? null : _handleLogin,
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: pal.ink,
-                                        foregroundColor: pal.surface,
-                                        disabledBackgroundColor: pal.ink
+                                        backgroundColor: AuthBrand.ink,
+                                        foregroundColor: AuthBrand.background,
+                                        disabledBackgroundColor: AuthBrand.ink
                                             .withValues(alpha: 0.6),
                                         elevation: 0,
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(50),
                                         ),
                                         textStyle: const TextStyle(
-                                          fontFamily: 'Roboto',
+                                          fontFamily: 'Inter',
                                           fontSize: 15,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                       child: _isLoading
-                                          ? SizedBox(
+                                          ? const SizedBox(
                                               width: 20,
                                               height: 20,
                                               child: CircularProgressIndicator(
-                                                color: pal.surface,
+                                                color: AuthBrand.background,
                                                 strokeWidth: 2,
                                               ),
                                             )
@@ -376,15 +349,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   const SizedBox(height: 16),
                                   GestureDetector(
                                     onTap: _handleEsqueceuSenha,
-                                    child: Text(
+                                    child: const Text(
                                       'Esqueceu a senha?',
                                       style: TextStyle(
-                                        fontFamily: 'Roboto',
+                                        fontFamily: 'Inter',
                                         fontSize: 15,
                                         fontWeight: FontWeight.w400,
-                                        color: pal.ink,
+                                        color: AuthBrand.ink,
                                         decoration: TextDecoration.underline,
-                                        decorationColor: pal.ink,
+                                        decorationColor: AuthBrand.ink,
                                       ),
                                     ),
                                   ),
@@ -398,12 +371,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       child: OutlinedButton(
                                         onPressed:
                                             (_isLoading || _isLoadingGoogle)
-                                            ? null
-                                            : _handleLoginGoogle,
+                                                ? null
+                                                : _handleLoginGoogle,
                                         style: OutlinedButton.styleFrom(
-                                          backgroundColor: pal.surface,
-                                          side: BorderSide(
-                                            color: pal.border,
+                                          backgroundColor: AuthBrand.surface,
+                                          side: const BorderSide(
+                                            color: AuthBrand.border,
                                             width: 1,
                                           ),
                                           shape: RoundedRectangleBorder(
@@ -418,14 +391,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                           elevation: 0,
                                         ),
                                         child: _isLoadingGoogle
-                                            ? SizedBox(
+                                            ? const SizedBox(
                                                 width: 20,
                                                 height: 20,
                                                 child:
                                                     CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: pal.ink,
-                                                    ),
+                                                  strokeWidth: 2,
+                                                  color: AuthBrand.ink,
+                                                ),
                                               )
                                             : Row(
                                                 mainAxisSize: MainAxisSize.min,
@@ -436,16 +409,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                                     height: 20,
                                                   ),
                                                   const SizedBox(width: 12),
-                                                  Text(
+                                                  const Flexible(
+                                                      child: Text(
                                                     'Logar com Google',
                                                     style: TextStyle(
-                                                      fontFamily: 'Roboto',
+                                                      fontFamily: 'Inter',
                                                       fontSize: 14,
                                                       fontWeight:
                                                           FontWeight.w500,
-                                                      color: pal.ink,
+                                                      color: AuthBrand.ink,
                                                     ),
-                                                  ),
+                                                  )),
                                                 ],
                                               ),
                                       ),
@@ -458,24 +432,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                         context.push(Routes.cadastro);
                                       },
                                       child: RichText(
-                                        text: TextSpan(
+                                        text: const TextSpan(
                                           style: TextStyle(
-                                            fontFamily: 'Roboto',
+                                            fontFamily: 'Inter',
                                             fontSize: 15,
                                             fontWeight: FontWeight.w400,
-                                            color: pal.ink,
+                                            color: AuthBrand.ink,
                                           ),
                                           children: [
-                                            const TextSpan(
+                                            TextSpan(
                                               text: 'Não tem conta? ',
                                             ),
                                             TextSpan(
                                               text: 'Cadastre-se',
                                               style: TextStyle(
+                                                color: AuthBrand.green,
                                                 fontWeight: FontWeight.w600,
                                                 decoration:
                                                     TextDecoration.underline,
-                                                decorationColor: pal.ink,
+                                                decorationColor: AuthBrand.ink,
                                               ),
                                             ),
                                           ],
@@ -504,11 +479,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: TextStyle(
-        fontFamily: 'Roboto',
+      style: const TextStyle(
+        fontFamily: 'Inter',
         fontSize: 15,
         fontWeight: FontWeight.w500,
-        color: context.pal.ink,
+        color: AuthBrand.ink,
       ),
     );
   }
@@ -520,18 +495,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     bool obscure = false,
     Widget? suffix,
   }) {
-    final pal = context.pal;
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
-      style: TextStyle(fontFamily: 'Roboto', fontSize: 14, color: pal.ink),
+      style: const TextStyle(
+          fontFamily: 'Inter', fontSize: 14, color: AuthBrand.ink),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(
-          fontFamily: 'Roboto',
+        hintStyle: const TextStyle(
+          fontFamily: 'Inter',
           fontSize: 14,
-          color: pal.hint,
+          color: AuthBrand.hint,
           fontWeight: FontWeight.w400,
         ),
         suffixIcon: suffix,
@@ -540,23 +515,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           vertical: 14,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: pal.border, width: 1),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AuthBrand.border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: pal.ink, width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AuthBrand.green, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Colors.red, width: 1),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFFFB4AB), width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Colors.red, width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFFFB4AB), width: 1.5),
         ),
         filled: true,
-        fillColor: pal.surface,
+        fillColor: AuthBrand.surface,
         isDense: true,
       ),
     );
