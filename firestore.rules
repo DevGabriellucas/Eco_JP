@@ -618,7 +618,11 @@ service cloud.firestore {
           && request.auth.uid == userId
           && request.auth.uid != alvoUid
           && isValidSocialLink(request.resource.data, alvoUid);
-        allow delete: if signedIn() && request.auth.uid == userId;
+        // Qualquer um dos dois lados desfaz o vínculo: quem segue (deixar de
+        // seguir) ou quem é seguido (ao excluir a conta, para não deixar um
+        // ponteiro órfão apontando para um perfil que não existe mais).
+        allow delete: if signedIn()
+          && (request.auth.uid == userId || request.auth.uid == alvoUid);
       }
 
       match /seguidores/{seguidorUid} {
@@ -627,8 +631,41 @@ service cloud.firestore {
           && request.auth.uid == seguidorUid
           && request.auth.uid != userId
           && isValidSocialLink(request.resource.data, seguidorUid);
-        allow delete: if signedIn() && request.auth.uid == seguidorUid;
+        // Simétrico ao /seguindo acima: o seguidor desfaz, e o dono do perfil
+        // também pode remover (exclusão de conta / remover seguidor).
+        allow delete: if signedIn()
+          && (request.auth.uid == seguidorUid || request.auth.uid == userId);
       }
+    }
+
+    // Índice de unicidade de nome de exibição. O ID do documento é o slug do
+    // nome (minúsculas, sem acentos — ver slugify em lib/utils/texto.dart).
+    //
+    // Existe por dois motivos. Custo: a checagem anterior lia a coleção
+    // `usuarios` inteira a cada cadastro, O(n) em leituras. Correção: aquela
+    // checagem também não era atômica — dois cadastros simultâneos com o mesmo
+    // nome passavam os dois.
+    //
+    // A atomicidade está em `allow update: if false`. Um set() sobre um slug já
+    // reservado é avaliado como update e negado, então só quem chega primeiro
+    // escreve. Não há transação no cliente.
+    //
+    // Limitação conhecida: nada aqui prova que o slug reservado corresponde ao
+    // campo `nome` do perfil, porque no cadastro a reserva precede a criação do
+    // perfil. Uma conta pode reservar um nome que não usa. Fechar isso exige
+    // uma Cloud Function com trigger em usuarios/{uid} — ver
+    // docs/adr/0001-backend-firebase-vs-supabase.md.
+    match /nomes_reservados/{slug} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'nome', 'criadoEm'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() >= 1
+        && request.resource.data.nome.size() <= 40
+        && request.resource.data.criadoEm == request.time;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
     match /notificacoes/{donoId}/items/{notifId} {

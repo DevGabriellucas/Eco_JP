@@ -397,3 +397,81 @@ describe('perfis de usuario', () => {
     );
   });
 });
+
+describe('reserva de nome (nomes_reservados)', () => {
+  const reserva = (uid, nome = 'Alice') => ({
+    uid,
+    nome,
+    criadoEm: serverTimestamp(),
+  });
+
+  test('usuario reserva um slug livre para si', async () => {
+    const db = verifiedContext(testEnv, 'alice');
+    await assertSucceeds(
+      db.collection('nomes_reservados').doc('alice').set(reserva('alice')),
+    );
+  });
+
+  test('NAO reserva declarando outro dono', async () => {
+    const db = verifiedContext(testEnv, 'alice');
+    await assertFails(
+      db.collection('nomes_reservados').doc('bob').set(reserva('bob')),
+    );
+  });
+
+  // Este e o teste que sustenta a atomicidade: a reserva nao usa transacao,
+  // ela depende de `allow update: if false`. Um set() sobre um slug ja tomado
+  // e avaliado como update e precisa falhar, senao dois cadastros simultaneos
+  // com o mesmo nome passariam os dois.
+  test('NAO sobrescreve slug ja reservado por outra conta', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx
+        .firestore()
+        .collection('nomes_reservados')
+        .doc('alice')
+        .set({ uid: 'alice', nome: 'Alice', criadoEm: new Date() });
+    });
+    const db = verifiedContext(testEnv, 'bob');
+    await assertFails(
+      db.collection('nomes_reservados').doc('alice').set(reserva('bob')),
+    );
+  });
+
+  test('NAO reserva com campos fora do formato', async () => {
+    const db = verifiedContext(testEnv, 'alice');
+    await assertFails(
+      db.collection('nomes_reservados').doc('alice').set({
+        uid: 'alice',
+        nome: 'Alice',
+        criadoEm: serverTimestamp(),
+        papel: 'autoridade',
+      }),
+    );
+  });
+
+  test('dono libera a propria reserva', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx
+        .firestore()
+        .collection('nomes_reservados')
+        .doc('alice')
+        .set({ uid: 'alice', nome: 'Alice', criadoEm: new Date() });
+    });
+    const db = verifiedContext(testEnv, 'alice');
+    await assertSucceeds(
+      db.collection('nomes_reservados').doc('alice').delete(),
+    );
+  });
+
+  test('NAO libera reserva de outra conta', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx
+        .firestore()
+        .collection('nomes_reservados')
+        .doc('alice')
+        .set({ uid: 'alice', nome: 'Alice', criadoEm: new Date() });
+    });
+    const db = verifiedContext(testEnv, 'bob');
+    await assertFails(db.collection('nomes_reservados').doc('alice').delete());
+  });
+});

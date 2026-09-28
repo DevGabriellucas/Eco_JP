@@ -157,6 +157,23 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
 
     setState(() => _salvando = true);
     try {
+      // Renomear não passava por nenhuma checagem de unicidade: era possível
+      // editar o perfil e assumir o nome de outra conta, contornando a
+      // validação que só existia no cadastro. A troca move a reserva e falha
+      // sem alterar nada se o nome novo já for de outra conta.
+      final nomeNovo = _nomeCtrl.text.trim();
+      if (UsuarioService.idDoNome(nomeNovo) == null) {
+        throw const _NomeInvalido('Use ao menos uma letra ou número no nome');
+      }
+      final trocou = await _usuarioService.trocarNome(
+        uid: widget.perfilAtual.uid,
+        nomeAntigo: widget.perfilAtual.nome,
+        nomeNovo: nomeNovo,
+      );
+      if (!trocou) {
+        throw const _NomeInvalido('Esse nome já está em uso. Escolha outro.');
+      }
+
       String? fotoUrl = widget.perfilAtual.fotoUrl;
 
       if (_novaFotoBytes != null && _novaFoto != null) {
@@ -167,7 +184,7 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
       }
 
       final atualizado = widget.perfilAtual.copyWith(
-        nome: _nomeCtrl.text.trim(),
+        nome: nomeNovo,
         bio: _bioCtrl.text.trim(),
         bairro: _bairroCtrl.text.trim(),
         fotoUrl: fotoUrl,
@@ -185,6 +202,13 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Perfil atualizado!')));
       Navigator.pop(context);
+    } on _NomeInvalido catch (e) {
+      // Recusa esperada, não falha técnica: mostra só a orientação, sem o
+      // texto da exceção.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.mensagem), backgroundColor: _Cores.error),
+      );
     } catch (e) {
       debugPrint('Erro ao salvar perfil: $e');
       if (!mounted) return;
@@ -390,4 +414,13 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
       ),
     );
   }
+}
+
+/// Recusa de nome esperada (já em uso ou sem slug possível). Separada de erro
+/// técnico para o catch mostrar a orientação ao usuário em vez do stack.
+class _NomeInvalido implements Exception {
+  const _NomeInvalido(this.mensagem);
+  final String mensagem;
+  @override
+  String toString() => mensagem;
 }

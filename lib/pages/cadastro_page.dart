@@ -69,6 +69,18 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
       return;
     }
 
+    // O nome vira o ID da reserva de unicidade, e esse ID é o slug do nome.
+    // Um nome só de pontuação não gera slug e não teria como ser reservado —
+    // recusa aqui, antes de criar a conta, em vez de falhar depois.
+    if (UsuarioService.idDoNome(_nomeController.text) == null) {
+      const msg = 'Use ao menos uma letra ou número no nome';
+      setState(() => _errorMessage = msg);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(msg)));
+      return;
+    }
+
     if (!_aceitouTermos) {
       setState(
         () => _errorMessage = 'Você precisa aceitar os termos para continuar',
@@ -114,7 +126,7 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     final consentService = ref.read(consentServiceProvider);
     final nome = _nomeController.text.trim();
 
-    // Cria a conta PRIMEIRO: a checagem de nome único lê a coleção `usuarios`,
+    // Cria a conta PRIMEIRO: a reserva do nome escreve em `nomes_reservados`,
     // que as Firestore Rules só liberam para usuários autenticados. Por isso a
     // validação de nome vem depois da criação (com rollback se o nome colidir).
     final result = await authService.cadastrar(
@@ -138,9 +150,14 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     if (uid == null) return;
 
     try {
-      // Nome já em uso por outra conta: desfaz este cadastro para não deixar
-      // conta órfã. O redirect reage ao delete voltando à tela inicial.
-      if (await _usuarioService.nomeEmUso(nome, ignorarUid: uid)) {
+      // Reserva o nome antes de criar o perfil. Substitui a checagem anterior,
+      // que lia a coleção `usuarios` inteira e ainda assim deixava dois
+      // cadastros simultâneos ficarem com o mesmo nome — a reserva é atômica
+      // pelas Rules (ver match /nomes_reservados em firestore.rules).
+      //
+      // Nome indisponível: desfaz este cadastro para não deixar conta órfã. O
+      // redirect reage ao delete voltando à tela inicial.
+      if (!await _usuarioService.reservarNome(nome, uid)) {
         await result.user?.delete();
         if (!mounted) return;
         setState(() {

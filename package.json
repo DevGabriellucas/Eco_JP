@@ -6,7 +6,12 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "emulator": "firebase emulators:start",
-    "emulator:clean": "firebase emulators:start --import ./firestore_export"
+    "emulator:clean": "firebase emulators:start --import ./firestore_export",
+    "loadtest:seed": "node loadtest/seed.mjs",
+    "loadtest:curtidas": "k6 run loadtest/k6/curtidas.js",
+    "loadtest:denuncias": "k6 run loadtest/k6/denuncias.js",
+    "loadtest:feed": "k6 run loadtest/k6/feed.js",
+    "backfill:nomes": "node scripts/backfill_nomes_reservados.mjs"
   },
   "keywords": [],
   "author": "",

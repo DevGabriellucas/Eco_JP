@@ -151,8 +151,11 @@ class _ConfiguracoesContaPageState
           'Esta ação é permanente e não pode ser desfeita.\n\n'
           'Serão apagados:\n'
           '• Seu perfil e dados cadastrais\n'
-          '• Todas as suas denúncias\n'
-          '• Suas notificações\n\n'
+          '• Todas as suas denúncias, inclusive as anônimas\n'
+          '• Suas notificações\n'
+          '• Seus vínculos de seguir e ser seguido\n\n'
+          'Comentários feitos em denúncias de outras pessoas permanecem, '
+          'sem vínculo visível com você.\n\n'
           'Deseja continuar?',
           style: TextStyle(color: pal.ink, height: 1.5),
         ),
@@ -182,55 +185,67 @@ class _ConfiguracoesContaPageState
     if (uid == null) return;
 
     setState(() => _excluindo = true);
-    var authResult = await _authService.excluirContaAuth();
 
-    if (authResult.message == 'requires-recent-login' && mounted) {
-      setState(() => _excluindo = false);
-      authResult = await _pedirReautenticacao();
-      if (!mounted) return;
-      if (!authResult.success) return;
-      setState(() => _excluindo = true);
-      authResult = await _authService.excluirContaAuth();
-    }
-
-    if (!authResult.success) {
+    // ORDEM CRÍTICA: os DADOS saem antes da CONTA.
+    //
+    // Todas as regras de exclusão do Firestore exigem `request.auth.uid`
+    // (firestore.rules:601, 621, 630, 635, 681) e `user.delete()` descarta o
+    // token da sessão. Na ordem anterior (conta primeiro), cada escrita falhava
+    // com permission-denied e NENHUM dado era apagado — a obrigação da LGPD
+    // art. 18 não era cumprida para nenhum usuário.
+    //
+    // O modo de falha desta ordem é benigno: se a conta do Auth não puder ser
+    // removida depois, os dados pessoais já foram eliminados (que é a obrigação
+    // legal) e resta apenas uma credencial de acesso vazia, que o usuário pode
+    // remover entrando de novo. O inverso — conta apagada e dados retidos — é
+    // irreversível pelo usuário e viola a lei.
+    try {
+      await _usuarioService.excluirTodosDados(uid);
+    } catch (e, stack) {
+      await FirebaseCrashlytics.instance.recordError(
+        e,
+        stack,
+        reason: 'Falha ao excluir dados do Firestore (conta preservada)',
+        information: ['uid: $uid'],
+      );
       if (mounted) {
         setState(() => _excluindo = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(authResult.message ?? 'Erro ao excluir conta.'),
+          const SnackBar(
+            content: Text(
+              'Não foi possível apagar seus dados agora. Sua conta foi '
+              'preservada — verifique a conexão e tente novamente.',
+            ),
+            duration: Duration(seconds: 6),
           ),
         );
       }
       return;
     }
 
-    // A conta Auth já foi removida neste ponto e essa etapa não tem retry: se
-    // a exclusão dos dados falhar (rede, permissão), o perfil/denúncias/
-    // notificações ficam órfãos no Firestore — obrigação legal (LGPD art. 18)
-    // não cumprida. Registra no Crashlytics para localizar a conta depois e
-    // avisa o usuário em vez de seguir em frente como se tivesse dado certo.
-    var dadosExcluidos = true;
-    try {
-      await _usuarioService.excluirTodosDados(uid);
-    } catch (e, stack) {
-      dadosExcluidos = false;
-      await FirebaseCrashlytics.instance.recordError(
-        e,
-        stack,
-        reason: 'Falha ao excluir dados do Firestore após excluir conta Auth',
-        information: ['uid: $uid'],
-      );
+    // Dados já eliminados. Agora remove a credencial de acesso.
+    var authResult = await _authService.excluirContaAuth();
+
+    if (authResult.message == 'requires-recent-login' && mounted) {
+      setState(() => _excluindo = false);
+      authResult = await _pedirReautenticacao();
+      if (!mounted) return;
+      if (authResult.success) {
+        setState(() => _excluindo = true);
+        authResult = await _authService.excluirContaAuth();
+      }
     }
 
     if (mounted) {
       setState(() => _excluindo = false);
-      if (!dadosExcluidos) {
+      if (!authResult.success) {
+        // Dados apagados, credencial remanescente. Avisa em vez de prometer
+        // uma limpeza automática que não existe.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Sua conta foi encerrada, mas houve uma falha ao apagar seus '
-              'dados. Nossa equipe foi notificada e concluirá a exclusão.',
+              'Seus dados foram apagados. Para remover também o acesso, entre '
+              'novamente e repita a exclusão.',
             ),
             duration: Duration(seconds: 6),
           ),
