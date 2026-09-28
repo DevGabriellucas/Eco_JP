@@ -4,7 +4,7 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**EcoJP** é um aplicativo móvel Flutter que permite que cidadãos denunciem problemas ambientais na Paraíba (buracos, lixo, queimadas, enchentes, etc.) com segurança, privacidade e conformidade com a LGPD. Desenvolvido como projeto de extensão da UFPB com possível adoção pelo Ministério Público da Paraíba (MPPB).
+**EcoJP** é um aplicativo móvel Flutter que permite que cidadãos denunciem problemas ambientais na Paraíba (buracos, lixo, queimadas, enchentes, etc.) com segurança, privacidade e conformidade com a LGPD. Nasceu como projeto de disciplina no Unipê (Centro Universitário de João Pessoa) e evoluiu para produto: está inscrito no Prêmio de Inovação CSED 2026 e em fase de piloto com um escritório de advocacia.
 
 ---
 
@@ -311,8 +311,7 @@ Este projeto está licenciado sob a MIT License — veja [LICENSE](LICENSE) para
 ## 👥 Equipe
 
 - **Desenvolvedor**: Gabriel Lucas
-- **Instituição**: UFPB (Universidade Federal da Paraíba)
-- **Stakeholder**: Ministério Público da Paraíba (MPPB)
+- **Instituição**: Unipê — Centro Universitário de João Pessoa
 
 ---
 

@@ -2,8 +2,7 @@
 
 > Documento de planejamento da evolução do EcoJP de protótipo acadêmico para
 > aplicação de nível profissional, com segurança forte e conformidade legal,
-> visando uso como projeto de extensão (UNIPE/UFPB) e possível adoção pelo
-> Ministério Público da Paraíba (MPPB).
+> visando uso como produto (Unipê), com piloto junto a parceiros externos.
 
 **Janela de trabalho:** 16/06/2026 → 10/08/2026 (~8 semanas)
 **Meta:** ao voltar das férias (início de agosto), apresentar uma versão
@@ -32,7 +31,7 @@ maturidade institucional** — não sobre reescrever o que funciona.
 ## 2. Princípios que guiam o upgrade
 
 1. **Segurança por padrão** — nada confia no cliente; tudo é validado no servidor.
-2. **Conformidade com a LGPD** — requisito legal para qualquer coisa ligada ao MPPB.
+2. **Conformidade com a LGPD** — requisito legal para qualquer produto que trate dados de cidadãos.
 3. **Sem regressão** — cada mudança entra com testes; CI verde é obrigatório.
 4. **Rastreabilidade** — denúncias e mudanças de status têm histórico auditável.
 5. **Incremental** — o app continua funcionando em todas as etapas.
@@ -91,7 +90,7 @@ fica aberta. Esta é a tranca que falta para "segurança contra vazamento".
       do CNMP), este é um diferencial de segurança para quem teme retaliação.
 
 **Por quê:** localização + foto + identidade são dados pessoais. Órgão público
-no Brasil **exige** LGPD; sem isso, a adoção pelo MPPB não avança.
+no Brasil **exige** LGPD; sem isso, nenhuma adoção institucional avança.
 
 ---
 
@@ -121,10 +120,10 @@ no Brasil **exige** LGPD; sem isso, a adoção pelo MPPB não avança.
       sempre pode trocar a categoria antes de enviar.
       *(Pendente: habilitar a API no Console do Firebase — Build → AI Logic
       → Get started — antes de testar em produção; tier gratuito tem aviso de
-      uso de prompts para treinamento, considerar tier pago se o MPPB adotar.)*
+      uso de prompts para treinamento, considerar tier pago em caso de adoção institucional.)*
 
 **Por quê:** é o que separa "rede social de reclamações" de "canal oficial".
-O MPPB precisa enxergar um fluxo confiável de triagem.
+Um órgão ou escritório parceiro precisa enxergar um fluxo confiável de triagem.
 
 ---
 
@@ -149,7 +148,7 @@ Firestore antes de escalar para milhares de usuários.
 - [ ] Revisão de UX/acessibilidade das telas principais.
 - [ ] Ampliar cobertura de testes nas regras novas (moderação, LGPD).
 - [ ] Atualizar `README.md` e `CONFIGURACAO.md`.
-- [ ] Preparar roteiro de demonstração para UNIPE/UFPB/MPPB.
+- [ ] Preparar roteiro de demonstração para o Unipê e para parceiros externos.
 
 ---
 

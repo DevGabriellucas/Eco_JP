@@ -8,11 +8,11 @@ import '../../theme/app_theme.dart';
 /// Versão dos documentos legais. Ao alterar o conteúdo da política ou dos
 /// termos de forma relevante, incremente esta versão (formato data ISO) para
 /// que o app peça um novo consentimento aos usuários já cadastrados.
-const String kVersaoDocumentosLegais = '2026-06-17';
+const String kVersaoDocumentosLegais = '2026-09-10';
 
 const String kPoliticaPrivacidade = '''
 POLÍTICA DE PRIVACIDADE — EcoJP
-Versão 2026-06-17
+Versão 2026-09-10
 
 O EcoJP valoriza a sua privacidade. Esta política explica quais dados coletamos, como os usamos e quais são os seus direitos, em conformidade com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).
 
@@ -25,39 +25,41 @@ O EcoJP valoriza a sua privacidade. Esta política explica quais dados coletamos
 2. COMO USAMOS OS DADOS
 • Para autenticar o seu acesso ao aplicativo.
 • Para exibir as denúncias no feed, no mapa e nas estatísticas.
-• Para identificar o autor de cada denúncia e comentário, exceto quando a denúncia é feita de forma anônima.
-• Para sugerir automaticamente a categoria da denúncia (ver item 4).
+• Para identificar o autor de cada denúncia e comentário, exceto quando a denúncia é feita de forma anônima (ver item 3).
 • Para melhorar a experiência no aplicativo.
 
-3. DENÚNCIA ANÔNIMA
-Ao registrar uma denúncia, você pode marcá-la como anônima. Nesse caso, o seu nome e a sua foto NÃO são gravados na denúncia e não aparecem para nenhum outro usuário, nem para os órgãos públicos. Mantemos internamente apenas o vínculo técnico necessário para que você possa gerenciar e excluir a sua própria denúncia.
+3. DENÚNCIA ANÔNIMA — LEIA COM ATENÇÃO
+Ao registrar uma denúncia, você pode marcá-la como anônima. É importante que você entenda exatamente o que isso significa:
 
-4. INTELIGÊNCIA ARTIFICIAL
-Para sugerir a categoria de uma denúncia, o título e a descrição (e, quando aplicável, a foto) podem ser enviados ao serviço de IA do Google (Gemini) por meio do Firebase AI Logic. A sugestão é apenas um auxílio — você sempre decide a categoria final antes de enviar.
+• Perante os demais usuários do aplicativo: o seu nome e a sua foto NÃO são gravados no registro público da denúncia e não aparecem para nenhum outro usuário, em nenhuma hipótese.
 
-5. COMPARTILHAMENTO
-As denúncias registradas ficam visíveis para os demais usuários autenticados do aplicativo e para órgãos públicos cadastrados como autoridade, que realizam a triagem e o acompanhamento oficial (verificação, encaminhamento e resolução). Denúncias anônimas são compartilhadas sem o nome e a foto do autor. Não vendemos os seus dados a terceiros.
+• Perante o órgão público responsável: o vínculo entre você e a denúncia é mantido em uma área de acesso restrito, separada do registro público. Esse vínculo permite que VOCÊ gerencie e exclua a sua própria denúncia e permite que o órgão público cadastrado como autoridade identifique o autor quando isso for necessário ao andamento oficial do caso — por exemplo, para solicitar informações complementares ou dar seguimento legal à denúncia.
 
-6. ARMAZENAMENTO E SEGURANÇA
-As imagens e vídeos são armazenados no Cloudinary; os demais dados, no Google Cloud Firestore (Firebase). O acesso ao back-end é protegido pelo Firebase App Check, que impede o uso fora do aplicativo oficial.
+• Em resumo: a denúncia anônima protege a sua identidade diante da comunidade de usuários, mas NÃO diante do órgão público que recebe e apura a denúncia. Se você não deseja que o órgão público possa identificá-lo em nenhuma circunstância, não registre a denúncia por este aplicativo.
 
-7. RETENÇÃO
-Mantemos os seus dados enquanto a sua conta existir. Ao excluir a sua conta, apagamos o seu perfil, as suas denúncias e as suas notificações. Comentários feitos em denúncias de outras pessoas podem permanecer sem vínculo visível com a sua conta.
+4. COMPARTILHAMENTO
+As denúncias registradas ficam visíveis para os demais usuários autenticados do aplicativo e para órgãos públicos cadastrados como autoridade, que realizam a triagem e o acompanhamento oficial (verificação, encaminhamento e resolução). Denúncias anônimas são exibidas sem o nome e a foto do autor, observado o item 3 acima. Não vendemos os seus dados a terceiros.
 
-8. SEUS DIREITOS (LGPD)
+5. ARMAZENAMENTO E SEGURANÇA
+As imagens e vídeos são armazenados no Cloudinary; os demais dados, no Google Cloud Firestore (Firebase). O acesso ao back-end é restringido pelo Firebase App Check, que limita o uso das nossas APIs a instâncias legítimas do aplicativo oficial, e por regras de segurança que validam cada leitura e escrita no servidor.
+
+6. RETENÇÃO
+Mantemos os seus dados enquanto a sua conta existir. Ao excluir a sua conta, apagamos o seu perfil, o seu registro de consentimento, as suas denúncias (inclusive as anônimas), as suas notificações e os seus vínculos de seguir/ser seguido. Comentários feitos por você em denúncias de outras pessoas são mantidos, sem vínculo visível com a sua conta, para preservar o contexto das discussões — conforme o art. 18, IV, da LGPD, que admite a anonimização como alternativa à eliminação.
+
+7. SEUS DIREITOS (LGPD)
 A qualquer momento, você pode:
 • Acessar e corrigir os dados do seu perfil.
 • Excluir as suas denúncias.
 • Registrar denúncias de forma anônima.
 • Solicitar a exclusão da sua conta e de todos os seus dados.
 
-9. CONTATO
+8. CONTATO
 Para exercer seus direitos ou esclarecer dúvidas, entre em contato com o Encarregado de Proteção de Dados (DPO) pelo e-mail de suporte do EcoJP.
 ''';
 
 const String kTermosDeUso = '''
 TERMOS DE USO — EcoJP
-Versão 2026-06-17
+Versão 2026-09-10
 
 Ao criar uma conta e usar o EcoJP, você concorda com os termos abaixo.
 
