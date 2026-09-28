@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,9 +30,31 @@ void main() async {
           cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
         );
 
-        // Firebase App Check activation comentado temporariamente
-        // Requer configuração de provedores específicos por plataforma
-        // await FirebaseAppCheck.instance.activate();
+        // App Check: attesta que as chamadas ao Firestore vêm de uma instância
+        // legítima do app oficial, e não de um script com a chave extraída do
+        // APK. Sem isso, qualquer pessoa que descompile o binário consegue
+        // consumir a cota de leitura do projeto (ver Política de Privacidade,
+        // item 5, que declara esta proteção ao usuário).
+        //
+        // Em debug usamos o provedor de depuração: ele imprime um token no
+        // console na primeira execução, que precisa ser registrado em
+        // Firebase Console → App Check → Apps → Gerenciar tokens de depuração.
+        // Sem esse registro, o app de desenvolvimento é bloqueado quando a
+        // imposição (enforcement) estiver ligada no Console.
+        //
+        // IMPORTANTE: ativar aqui NÃO impõe nada sozinho. A imposição é um
+        // botão no Console (App Check → APIs → Cloud Firestore → Impor). Ligue
+        // esse botão só depois de confirmar, na aba de métricas do Console, que
+        // as requisições já chegam com token válido — caso contrário o app em
+        // produção para de funcionar de uma vez.
+        await FirebaseAppCheck.instance.activate(
+          providerAndroid: kDebugMode
+              ? const AndroidDebugProvider()
+              : const AndroidPlayIntegrityProvider(),
+          providerApple: kDebugMode
+              ? const AppleDebugProvider()
+              : const AppleAppAttestWithDeviceCheckFallbackProvider(),
+        );
 
         // Crashlytics: desativado em debug (evita poluir o console com
         // crashes de desenvolvimento) e captura erros do Flutter framework +
