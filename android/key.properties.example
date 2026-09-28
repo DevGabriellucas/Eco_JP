@@ -1,0 +1,29 @@
+# Credenciais de assinatura de release do EcoJP.
+#
+# COPIE este arquivo para `android/key.properties` e preencha com os seus
+# valores. O arquivo real é gitignored (android/.gitignore:12) e NUNCA deve ser
+# versionado nem enviado por e-mail/WhatsApp.
+#
+# ─── Como gerar o keystore ────────────────────────────────────────────────
+#
+#   keytool -genkey -v -keystore ecojp-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias ecojp
+#
+# Guarde o arquivo .jks e as senhas em local seguro (gerenciador de senhas +
+# backup offline). Se você perder essa chave e NÃO estiver usando o Play App
+# Signing, perde a capacidade de publicar atualizações do app para sempre —
+# não existe recuperação, nem pelo suporte do Google.
+#
+# Recomendação: ative o Play App Signing ao criar o app no Play Console. O
+# Google passa a guardar a chave de assinatura definitiva, e esta chave aqui
+# vira apenas a chave de upload, que PODE ser trocada em caso de perda.
+#
+# ─── Onde colocar o .jks ──────────────────────────────────────────────────
+#
+# storeFile aceita caminho relativo à pasta `android/`. Guardar o .jks FORA do
+# repositório é mais seguro (ex.: ../../chaves/ecojp-release.jks).
+
+storeFile=../../chaves/ecojp-release.jks
+storePassword=COLOQUE_A_SENHA_DO_KEYSTORE
+keyAlias=ecojp
+keyPassword=COLOQUE_A_SENHA_DA_CHAVE

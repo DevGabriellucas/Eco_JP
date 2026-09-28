@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
-        android:label="eco_jp"
+        android:label="EcoJP"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!-- Preenchido pelo Gradle a partir de MAPS_API_KEY em

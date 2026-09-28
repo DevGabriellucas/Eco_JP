@@ -22,8 +22,20 @@ val mapsApiKey: String = run {
         ?: ""
 }
 
+// Assinatura de release. As credenciais ficam em android/key.properties
+// (gitignored, NUNCA versionado). Sem esse arquivo — em CI de fork ou em
+// checkout limpo — o build de release cai na chave de debug, que continua
+// servindo para `flutter run --release` local mas é recusada pela Play Store.
+val keystoreProperties = Properties().apply {
+    val arquivo = rootProject.file("key.properties")
+    if (arquivo.exists()) {
+        arquivo.inputStream().use { load(it) }
+    }
+}
+val temKeystoreDeRelease = keystoreProperties.getProperty("storeFile") != null
+
 android {
-    namespace = "com.example.eco_jp"
+    namespace = "br.com.ecojp.app"
     compileSdk = 36
     ndkVersion = "30.0.16138531"
 
@@ -33,8 +45,10 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.eco_jp"
+        // Identificador definitivo e permanente na Play Store. Não pode mudar
+        // depois da primeira publicação — trocá-lo cria um app novo, sem os
+        // usuários e sem as avaliações do anterior.
+        applicationId = "br.com.ecojp.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
@@ -46,11 +60,26 @@ android {
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
+    signingConfigs {
+        if (temKeystoreDeRelease) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (temKeystoreDeRelease) {
+                signingConfigs.getByName("release")
+            } else {
+                // Fallback só para desenvolvimento. Um AAB assinado com a chave
+                // de debug é REJEITADO no upload para a Play Store.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
