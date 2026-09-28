@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Teste de carga (k6)
+loadtest/tokens.json
+loadtest/resultados/
+node_modules
