@@ -1,52 +1,87 @@
 name: Release
 
-# Dispara ao empurrar uma tag SemVer (ex.: v1.0.0). Ver o esquema de versão e o
-# checklist de segredos na DOCUMENTACAO_TECNICA (ETAPA 17.9).
+# Dispara ao empurrar uma tag SemVer (ex.: v1.0.0). A versão do app sai da
+# própria tag (build-name) e o build-number do número da execução.
 on:
   push:
     tags: ['v*']
 
+# Padrão mínimo; só o job que publica a GitHub Release ganha contents: write.
 permissions:
-  contents: write # necessário para criar a GitHub Release
+  contents: read
 
 jobs:
-  release:
-    name: Build e publicar release
+  # Mesmo portão de qualidade do CI: sem ele qualquer tag publicava um APK,
+  # mesmo com análise ou testes quebrados.
+  quality:
+    name: Análise e testes
     runs-on: ubuntu-latest
-    env:
-      FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-      FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
-
     steps:
       - name: Checkout do código
-        uses: actions/checkout@v4
-
-      # Injeta a config REAL do Firebase (se os segredos existirem) ANTES do
-      # setup — como o setup só gera placeholders "se não existir", o release
-      # usa a config real e o APK/web conectam ao projeto de produção. Sem os
-      # segredos, cai no placeholder (build ainda compila, mas não conecta).
-      - name: Injetar config real do Firebase (se disponível)
-        run: |
-          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
-            echo "google-services.json real injetado."
-          fi
-          if [ -n "$FIREBASE_OPTIONS_DART" ]; then
-            printf '%s' "$FIREBASE_OPTIONS_DART" > lib/firebase_options.dart
-            echo "firebase_options.dart real injetado."
-          fi
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Configurar Flutter (setup compartilhado)
         uses: ./.github/actions/flutter-setup
         with:
           maps-api-key: ${{ secrets.MAPS_API_KEY }}
 
+      - name: Verificar formatação
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Análise estática
+        run: flutter analyze
+
+      - name: Testes unitários
+        run: flutter test
+
+  release:
+    name: Build e publicar release
+    runs-on: ubuntu-latest
+    needs: quality
+    permissions:
+      contents: write # necessário para criar a GitHub Release
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Configurar Flutter (setup compartilhado)
+        uses: ./.github/actions/flutter-setup
+        with:
+          maps-api-key: ${{ secrets.MAPS_API_KEY }}
+
+      # Chave de upload da Play Store. Sem ela o Gradle recusa o build de
+      # release (ver android/app/build.gradle.kts) em vez de assinar com uma
+      # chave de debug efêmera — o que gerava um APK com assinatura diferente
+      # a cada tag (quem tinha a versão anterior não conseguia atualizar, o
+      # login Google dava ApiException 10 e o App Check recusava o app).
+      - name: Configurar assinatura de release
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Segredo ANDROID_KEYSTORE_BASE64 ausente — release não pode ser assinada."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
       - name: Build APK release
-        run: flutter build apk --release
+        run: >
+          flutter build apk --release
+          --build-name="${GITHUB_REF_NAME#v}"
+          --build-number="${{ github.run_number }}"
 
       - name: Criar GitHub Release (notas automáticas)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           generate_release_notes: true
           files: |
