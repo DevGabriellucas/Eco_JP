@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../utils/imagem_privacidade.dart';
+import '../../../utils/video_privacidade.dart';
 
 /// Estado e lógica das mídias de uma denúncia: até 3 fotos e um vídeo opcional.
 ///
@@ -57,8 +58,14 @@ class MediaController extends ChangeNotifier {
     if (_disposed) return null;
     // Remove EXIF (inclui GPS embutido na foto) antes de qualquer outra
     // validação — sem isso, a localização exata poderia vazar mesmo em
-    // denúncia marcada como anônima.
-    final bytes = await removerMetadadosImagem(bytesOriginais);
+    // denúncia marcada como anônima. Se a limpeza não for possível, a foto é
+    // recusada (nunca enviamos o original).
+    final Uint8List bytes;
+    try {
+      bytes = await removerMetadadosImagem(bytesOriginais);
+    } on ImagemInvalidaException {
+      return 'Não foi possível processar esta foto. Tente outra.';
+    }
     if (_disposed) return null;
     if (bytes.length > maxFotoBytes) {
       return 'Foto muito grande (máx. 8 MB). Tente outra.';
@@ -106,7 +113,10 @@ class MediaController extends ChangeNotifier {
       maxDuration: const Duration(seconds: 30),
     );
     if (_disposed || v == null) return null;
-    final bytes = await v.readAsBytes();
+    final bytesOriginais = await v.readAsBytes();
+    if (_disposed) return null;
+    // Remove a localização gravada pela câmera (moov/udta/©xyz e afins).
+    final bytes = await removerMetadadosVideo(bytesOriginais);
     if (_disposed) return null;
     if (bytes.length > maxVideoBytes) {
       return 'Vídeo muito grande (máx. 50 MB). Tente outro.';

@@ -16,8 +16,11 @@ class ConsentService {
       FirebaseFirestore.instance.collection('consentimentos');
 
   /// Verifica se o usuário precisa consentir (nunca consentiu ou consentiu
-  /// uma versão antiga dos documentos). Em caso de erro de rede, assume que
-  /// NÃO precisa, para não travar o acesso por falha transitória.
+  /// uma versão antiga dos documentos).
+  ///
+  /// Sem como confirmar (erro de rede sem cache), assume que PRECISA: antes
+  /// liberava o acesso, e quem nunca consentiu entrava no app sem aceite
+  /// (falha aberta). Aceitar de novo apenas regrava o mesmo registro.
   Future<bool> precisaConsentir(String uid) async {
     try {
       final doc = await _ref.doc(uid).get();
@@ -25,7 +28,7 @@ class ConsentService {
       return doc.data()?['versao'] != kVersaoDocumentosLegais;
     } catch (e) {
       debugPrint('Erro ao verificar consentimento: $e');
-      return false;
+      return true;
     }
   }
 

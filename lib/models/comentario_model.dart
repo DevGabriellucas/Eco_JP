@@ -24,6 +24,9 @@ class ComentarioModel {
   // selo azul estilo redes sociais ao lado do nome.
   final bool autorAutoridade;
 
+  /// Uma conta de autoridade curtiu o comentário (selo visível a todos).
+  final bool curtidoPorAutoridade;
+
   ComentarioModel({
     required this.id,
     required this.userId,
@@ -37,21 +40,24 @@ class ComentarioModel {
     this.userLiked = false,
     this.oculto = false,
     this.autorAutoridade = false,
+    this.curtidoPorAutoridade = false,
   }) : likedBy = likedBy ?? [];
 
   Map<String, dynamic> toMap() => {
-    'userId': userId,
-    'userName': userName,
-    'userPhotoUrl': userPhotoUrl,
-    'texto': texto,
-    'dataCriacao': FieldValue.serverTimestamp(),
-    'parentId': parentId,
-    'likedBy': <String>[],
-    'likes': 0,
-    // Só grava o campo quando true, para não poluir os comentários comuns e
-    // manter compatibilidade com a regra (campo opcional).
-    if (autorAutoridade) 'autorAutoridade': true,
-  };
+        'userId': userId,
+        'userName': userName,
+        'userPhotoUrl': userPhotoUrl,
+        'texto': texto,
+        'dataCriacao': FieldValue.serverTimestamp(),
+        'parentId': parentId,
+        'likedBy': <String>[],
+        'likes': 0,
+        // Consultas públicas filtram oculto == false (ver firestore.rules).
+        'oculto': false,
+        // Só grava o campo quando true, para não poluir os comentários comuns e
+        // manter compatibilidade com a regra (campo opcional).
+        if (autorAutoridade) 'autorAutoridade': true,
+      };
 
   factory ComentarioModel.fromMap(
     Map<String, dynamic> map,
@@ -74,6 +80,7 @@ class ComentarioModel {
       userLiked: currentUserId != null && likedBy.contains(currentUserId),
       oculto: map['oculto'] == true,
       autorAutoridade: map['autorAutoridade'] == true,
+      curtidoPorAutoridade: map['curtidoPorAutoridade'] == true,
     );
   }
 }

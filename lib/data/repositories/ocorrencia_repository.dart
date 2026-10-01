@@ -41,26 +41,77 @@ class OcorrenciaRepository {
 
   String? get _currentUserId => _auth.currentUser?.uid;
 
+  /// Ocorrências visíveis ao público. As regras só liberam consultas
+  /// filtradas por `oculto == false` (conteúdo ocultado pela moderação fica
+  /// legível só para o dono e a autoridade).
+  Query<Map<String, dynamic>> get _visiveis =>
+      _ocorrenciasRef.where('oculto', isEqualTo: false);
+
   // ── CREATE ────────────────────────────────────────────────────────────────
 
-  Future<void> cadastrarOcorrencia(OcorrenciaModel ocorrencia) async {
+  String get _chaveLimiteDenuncia => 'denuncia_${_currentUserId ?? "anon"}';
+
+  /// Tempo máximo esperando a confirmação do servidor. Sem rede, o SDK
+  /// mantém a escrita na fila local e só confirma quando a conexão volta;
+  /// passado esse prazo tratamos a denúncia como enviada (pendente de sync).
+  static const Duration prazoConfirmacaoEnvio = Duration(seconds: 20);
+
+  /// ID para uma denúncia nova, gerado no cliente. O formulário gera um por
+  /// envio e o reaproveita nas novas tentativas: se a primeira já chegou ao
+  /// servidor, a segunda não cria uma duplicata.
+  String novoIdOcorrencia() => _ocorrenciasRef.doc().id;
+
+  /// Lança [RateLimitException] se o usuário enviou outra denúncia há pouco.
+  /// Chamado ANTES dos uploads — senão a mídia sobe e só depois o envio é
+  /// recusado, deixando arquivos órfãos no Cloudinary.
+  void verificarLimiteDenuncia() {
+    _rateLimiter.verificar(_chaveLimiteDenuncia, RateLimiter.intervaloDenuncia);
+  }
+
+  /// Grava a denúncia com o ID [id] (ver [novoIdOcorrencia]).
+  ///
+  /// Denúncia anônima: documento público, `dono/info` e o ponteiro em
+  /// `minhas_denuncias_anonimas` vão num único WriteBatch — ou gravam os três
+  /// ou nenhum. Em escritas separadas, uma queda de rede no meio deixava a
+  /// denúncia sem dono, e as regras aceitavam o primeiro usuário que
+  /// gravasse `dono/info`, permitindo que outra conta "sequestrasse" a
+  /// denúncia.
+  ///
+  /// Retorna `false` se o servidor não confirmou dentro de
+  /// [prazoConfirmacaoEnvio] (a escrita segue na fila offline do SDK).
+  Future<bool> cadastrarOcorrencia(
+    OcorrenciaModel ocorrencia, {
+    required String id,
+  }) async {
     // Anti-spam client-side: bloqueia envios em rajada do mesmo usuário.
     // Proteção real fica no servidor (Blaze/Cloud Functions), ver RateLimiter.
-    _rateLimiter.checarERegistrar(
-      'denuncia_${_currentUserId ?? "anon"}',
-      RateLimiter.intervaloDenuncia,
-    );
+    verificarLimiteDenuncia();
     return comLogDeErro('salvar ocorrência', () async {
+      final docRef = _ocorrenciasRef.doc(id);
+
+      // Nova tentativa depois de uma falha de rede: se a anterior já chegou
+      // ao servidor, regravar seria um update (negado pelas regras). Nesse
+      // caso a denúncia já está publicada.
+      final existente = await docRef
+          .get(const GetOptions(source: Source.server))
+          .then<bool>((s) => s.exists)
+          .catchError((_) => false);
+      if (existente) {
+        _rateLimiter.registrar(_chaveLimiteDenuncia);
+        return true;
+      }
+
       // Higieniza os textos livres no choke point de persistência (remove
       // controle/zero-width/bidi; título e localização viram linha única).
       final dados = ocorrencia.toMap();
       dados['titulo'] = sanitizarLinhaUnica(dados['titulo'] as String);
       dados['descricao'] = sanitizarTexto(dados['descricao'] as String);
-      dados['localizacao'] = sanitizarLinhaUnica(dados['localizacao'] as String);
-      if (dados['usuarioNome'] is String) {
-        dados['usuarioNome'] = sanitizarLinhaUnica(dados['usuarioNome'] as String);
-      }
-      final doc = await _ocorrenciasRef.add(dados);
+      dados['localizacao'] =
+          sanitizarLinhaUnica(dados['localizacao'] as String);
+      // usuarioNome NÃO é higienizado aqui: as regras exigem que seja
+      // idêntico ao `nome` do perfil, que já foi higienizado ao salvar.
+
+      final batch = _firestore.batch()..set(docRef, dados);
 
       // Denúncia anônima: o UID real não vai no documento público (toMap()
       // já grava usuarioId como null nesse caso) — guardamos numa subcoleção
@@ -68,23 +119,34 @@ class OcorrenciaRepository {
       // contra correlacionar denúncias anônimas pelo autor, S2). Também
       // gravamos um ponteiro no perfil do dono, senão "Minhas denúncias" não
       // consegue mais encontrar essa denúncia (o campo usuarioId sumiu dela).
-      if (ocorrencia.anonima && ocorrencia.usuarioId != null) {
-        final uid = ocorrencia.usuarioId!;
-        await doc.collection('dono').doc('info').set({'usuarioId': uid});
-        await _firestore
-            .collection('usuarios')
-            .doc(uid)
-            .collection('minhas_denuncias_anonimas')
-            .doc(doc.id)
-            .set({});
+      if (ocorrencia.anonima) {
+        final uid = _currentUserId;
+        if (uid == null) throw StateError('Sessão expirada');
+        batch
+          ..set(docRef.collection('dono').doc('info'), {'usuarioId': uid})
+          ..set(
+            _firestore
+                .collection('usuarios')
+                .doc(uid)
+                .collection('minhas_denuncias_anonimas')
+                .doc(id),
+            <String, dynamic>{},
+          );
       }
 
+      var confirmado = true;
+      try {
+        await batch.commit().timeout(prazoConfirmacaoEnvio);
+      } on TimeoutException {
+        confirmado = false;
+      }
+      // Registra só depois de gravar: uma falha não deve bloquear o reenvio.
+      _rateLimiter.registrar(_chaveLimiteDenuncia);
+
       unawaited(
-        _analytics.denunciaCriada(
-          categoria: ocorrencia.tipoLixo,
-          anonima: ocorrencia.anonima,
-        ),
+        _analytics.denunciaCriada(categoria: ocorrencia.tipoLixo),
       );
+      return confirmado;
     });
   }
 
@@ -92,7 +154,7 @@ class OcorrenciaRepository {
 
   Stream<List<OcorrenciaModel>> listarOcorrenciasLimitadas(int limit) {
     final uid = _currentUserId;
-    return _ocorrenciasRef
+    return _visiveis
         .orderBy('dataCriacao', descending: true)
         .limit(limit)
         .snapshots()
@@ -142,26 +204,26 @@ class OcorrenciaRepository {
 
     controller = StreamController<List<OcorrenciaModel>>(
       onListen: () {
-        recentesSub = _ocorrenciasRef
+        recentesSub = _visiveis
             .orderBy('dataCriacao', descending: true)
             .limit(limit)
             .snapshots()
             .listen((snapshot) {
-              recentes
-                ..clear()
-                ..addAll(parse(snapshot));
-              emitir();
-            }, onError: controller.addError);
+          recentes
+            ..clear()
+            ..addAll(parse(snapshot));
+          emitir();
+        }, onError: controller.addError);
 
-        fixadasSub = _ocorrenciasRef
+        fixadasSub = _visiveis
             .where('fixada', isEqualTo: true)
             .snapshots()
             .listen((snapshot) {
-              fixadas
-                ..clear()
-                ..addAll(parse(snapshot));
-              emitir();
-            }, onError: controller.addError);
+          fixadas
+            ..clear()
+            ..addAll(parse(snapshot));
+          emitir();
+        }, onError: controller.addError);
       },
       onCancel: () async {
         await recentesSub?.cancel();
@@ -172,6 +234,43 @@ class OcorrenciaRepository {
     return controller.stream;
   }
 
+  /// Total de denúncias visíveis, por agregação `count()` (uma leitura, sem
+  /// baixar documentos). Usado para rotular as visões limitadas a
+  /// [tetoAgregado].
+  Future<int> contarVisiveis() async {
+    final snap = await _visiveis.count().get();
+    return snap.count ?? 0;
+  }
+
+  /// Página seguinte do feed: até [limite] denúncias visíveis criadas antes
+  /// de [antesDe], lidas uma vez com `get()`.
+  ///
+  /// Antes cada "carregar mais" recriava o listener com `limit(N+10)` e relia
+  /// o feed inteiro (custo quadrático na rolagem). Agora só a primeira página
+  /// é um listener ([listarFeedComFixadas]); as demais são leituras pontuais.
+  ///
+  /// [doCache] indica que a resposta veio do cache local (sem rede): uma
+  /// página vazia nesse caso não significa fim do feed.
+  Future<({List<OcorrenciaModel> itens, bool doCache})> buscarPaginaFeed({
+    required DateTime antesDe,
+    required int limite,
+  }) async {
+    final uid = _currentUserId;
+    // Mesmo índice composto do feed (oculto + dataCriacao desc).
+    final snap = await _visiveis
+        .where('dataCriacao', isLessThan: Timestamp.fromDate(antesDe))
+        .orderBy('dataCriacao', descending: true)
+        .limit(limite)
+        .get();
+    return (
+      itens: [
+        for (final doc in snap.docs)
+          OcorrenciaModel.fromMap(doc.data(), doc.id, currentUserId: uid),
+      ],
+      doCache: snap.metadata.isFromCache,
+    );
+  }
+
   static int _ordenarFeed(OcorrenciaModel a, OcorrenciaModel b) {
     if (a.fixada != b.fixada) return a.fixada ? -1 : 1;
     final dataA = a.dataCriacao ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -179,12 +278,13 @@ class OcorrenciaRepository {
     return dataB.compareTo(dataA);
   }
 
+  /// Denúncias não-anônimas de [usuarioId]. O próprio dono vê também as
+  /// ocultadas pela moderação; para outra pessoa (perfil público) só as
+  /// visíveis — é o que as regras permitem listar.
   Stream<List<OcorrenciaModel>> listarPorUsuario(String usuarioId) {
     final uid = _currentUserId;
-    return _ocorrenciasRef
-        .where('usuarioId', isEqualTo: usuarioId)
-        .snapshots()
-        .map(
+    final base = usuarioId == uid ? _ocorrenciasRef : _visiveis;
+    return base.where('usuarioId', isEqualTo: usuarioId).snapshots().map(
           (snapshot) => snapshot.docs
               .map(
                 (doc) => OcorrenciaModel.fromMap(
@@ -222,6 +322,13 @@ class OcorrenciaRepository {
     StreamSubscription? subIds;
     StreamSubscription<List<OcorrenciaModel>>? subAnonimas;
 
+    // Erros (ex.: permission-denied logo após o logout) vão para o
+    // StreamController em vez de estourar como exceção não tratada — antes
+    // viravam crash "fatal" no Crashlytics.
+    void repassarErro(Object e, StackTrace s) {
+      if (!controller.isClosed) controller.addError(e, s);
+    }
+
     void emitirAnonimas(Set<String> ids) {
       subAnonimas?.cancel();
       subAnonimas = observarPorIds(ids).listen((anonimas) {
@@ -231,7 +338,7 @@ class OcorrenciaRepository {
         };
         final lista = merged.values.toList()..sort(_ordenarFeed);
         controller.add(lista);
-      });
+      }, onError: repassarErro);
     }
 
     controller = StreamController<List<OcorrenciaModel>>(
@@ -239,11 +346,11 @@ class OcorrenciaRepository {
         subNaoAnonimas = naoAnonimas.listen((lista) {
           ultimasNaoAnonimas = lista;
           emitirAnonimas(ultimosIdsAnonimos);
-        });
+        }, onError: repassarErro);
         subIds = anonimasIds.listen((ids) {
           ultimosIdsAnonimos = ids;
           emitirAnonimas(ids);
-        });
+        }, onError: repassarErro);
       },
       onCancel: () async {
         await subNaoAnonimas?.cancel();
@@ -253,6 +360,34 @@ class OcorrenciaRepository {
     );
 
     return controller.stream;
+  }
+
+  /// Todas as denúncias do usuário, anônimas incluídas, lidas uma vez direto
+  /// do servidor. Para a exportação de dados (LGPD art. 18): a versão
+  /// anterior usava [listarPorUsuario], que não acha as anônimas (sem
+  /// usuarioId no documento), e `.first` da stream podia vir do cache local
+  /// incompleto.
+  Future<List<OcorrenciaModel>> buscarMinhasDenunciasNoServidor(
+      String uid) async {
+    const servidor = GetOptions(source: Source.server);
+    final naoAnonimas =
+        await _ocorrenciasRef.where('usuarioId', isEqualTo: uid).get(servidor);
+    final ponteiros = await _firestore
+        .collection('usuarios')
+        .doc(uid)
+        .collection('minhas_denuncias_anonimas')
+        .get(servidor);
+    final anonimas = await Future.wait(
+      ponteiros.docs.map((p) => _ocorrenciasRef.doc(p.id).get(servidor)),
+    );
+    final lista = [
+      for (final doc in naoAnonimas.docs)
+        OcorrenciaModel.fromMap(doc.data(), doc.id, currentUserId: uid),
+      for (final doc in anonimas)
+        if (doc.exists)
+          OcorrenciaModel.fromMap(doc.data()!, doc.id, currentUserId: uid),
+    ]..sort(_ordenarFeed);
+    return lista;
   }
 
   // Observa um conjunto específico de ocorrências por id (usado para listar as
@@ -267,24 +402,25 @@ class OcorrenciaRepository {
     final lista = ids.toList();
     final lotes = <List<String>>[];
     for (var i = 0; i < lista.length; i += 30) {
-      lotes.add(lista.sublist(i, i + 30 > lista.length ? lista.length : i + 30));
+      lotes
+          .add(lista.sublist(i, i + 30 > lista.length ? lista.length : i + 30));
     }
 
     final streams = lotes.map(
-      (lote) => _ocorrenciasRef
-          .where(FieldPath.documentId, whereIn: lote)
-          .snapshots()
-          .map(
-            (snap) => snap.docs
-                .map(
-                  (doc) => OcorrenciaModel.fromMap(
-                    doc.data(),
-                    doc.id,
-                    currentUserId: uid,
-                  ),
-                )
-                .toList(),
-          ),
+      // Anônimas: o documento não tem usuarioId, então a listagem só passa
+      // nas regras com o filtro de visíveis (as ocultadas somem da lista).
+      (lote) =>
+          _visiveis.where(FieldPath.documentId, whereIn: lote).snapshots().map(
+                (snap) => snap.docs
+                    .map(
+                      (doc) => OcorrenciaModel.fromMap(
+                        doc.data(),
+                        doc.id,
+                        currentUserId: uid,
+                      ),
+                    )
+                    .toList(),
+              ),
     );
 
     // Combina os lotes num único stream de lista concatenada.
@@ -323,8 +459,16 @@ class OcorrenciaRepository {
   }
 
   // Busca uma única ocorrência pelo id (usado ao tocar numa notificação).
+  /// A denúncia [id], ou `null` se não existe ou foi ocultada pela moderação
+  /// (as regras negam a leitura a quem não é dono nem autoridade).
   Future<OcorrenciaModel?> buscarPorId(String id) async {
-    final doc = await _ocorrenciasRef.doc(id).get();
+    final DocumentSnapshot<Map<String, dynamic>> doc;
+    try {
+      doc = await _ocorrenciasRef.doc(id).get();
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') return null;
+      rethrow;
+    }
     if (!doc.exists || doc.data() == null) return null;
     return OcorrenciaModel.fromMap(
       doc.data()!,
@@ -340,42 +484,57 @@ class OcorrenciaRepository {
     String nome,
     String? fotoUrl,
   ) async {
-    final snapshot = await _ocorrenciasRef
-        .where('usuarioId', isEqualTo: uid)
-        .get();
-    if (snapshot.docs.isEmpty) return;
-    final batch = _firestore.batch();
-    var temAtualizacao = false;
-    for (final doc in snapshot.docs) {
-      // Denúncia anônima nunca recebe nome/foto, mesmo após edição de perfil.
-      if (doc.data()['anonima'] == true) continue;
-      temAtualizacao = true;
-      batch.update(doc.reference, {
-        'usuarioNome': nome,
-        'usuarioFotoUrl': fotoUrl,
-      });
+    final snapshot =
+        await _ocorrenciasRef.where('usuarioId', isEqualTo: uid).get();
+    // Denúncia anônima nunca recebe nome/foto, mesmo após edição de perfil.
+    final docs =
+        snapshot.docs.where((d) => d.data()['anonima'] != true).toList();
+    // WriteBatch aceita no máximo 500 escritas; quem tem mais denúncias que
+    // isso fazia o commit único falhar.
+    for (var i = 0; i < docs.length; i += 450) {
+      final batch = _firestore.batch();
+      for (final doc in docs.skip(i).take(450)) {
+        batch.update(doc.reference, {
+          'usuarioNome': nome,
+          'usuarioFotoUrl': fotoUrl,
+        });
+      }
+      await batch.commit();
     }
-    if (temAtualizacao) await batch.commit();
   }
 
-  // Anexa um evento imutável à linha do tempo de auditoria da ocorrência.
-  // Chamado dentro do MESMO batch da mudança de status (verificação / status
-  // oficial), para que o registro seja atômico com a ação que ele descreve.
-  // As Rules só deixam a autoridade criar e nunca editar/apagar (append-only).
-  void _registrarHistorico(
+  // Anexa um evento imutável à linha do tempo de auditoria da ocorrência,
+  // no MESMO batch da mudança que ele descreve, e devolve o ID do evento —
+  // gravado em `ultimoEventoId` no documento. As regras exigem esse evento
+  // (getAfter) em toda ação oficial: antes a auditoria era opcional e o
+  // campo `por` era texto livre.
+  String _registrarHistorico(
     WriteBatch batch,
     String id,
     String statusChave, {
-    String? por,
+    required String por,
   }) {
-    final evento = <String, dynamic>{
+    final ref = _ocorrenciasRef.doc(id).collection('historico').doc();
+    batch.set(ref, {
       'status': statusChave,
+      'por': por,
       'data': FieldValue.serverTimestamp(),
-    };
-    if (por != null && por.trim().isNotEmpty) {
-      evento['por'] = por.trim();
+    });
+    return ref.id;
+  }
+
+  /// Nome do perfil da autoridade logada — as regras exigem que `por` e
+  /// `verificadaPorNome` sejam exatamente esse nome (antes a fila gravava o
+  /// texto fixo 'Autoridade').
+  Future<String> _nomeDaAutoridade() async {
+    final uid = _currentUserId;
+    if (uid == null) throw StateError('Sessão expirada');
+    final doc = await _firestore.collection('usuarios').doc(uid).get();
+    final nome = doc.data()?['nome'] as String?;
+    if (nome == null || nome.trim().isEmpty) {
+      throw StateError('Perfil da autoridade sem nome');
     }
-    batch.set(_ocorrenciasRef.doc(id).collection('historico').doc(), evento);
+    return nome;
   }
 
   // Linha do tempo (auditoria) das ações oficiais sobre a ocorrência.
@@ -443,56 +602,84 @@ class OcorrenciaRepository {
 
   // ── VERIFICAÇÃO OFICIAL (autoridade) ──────────────────────────────────────
 
-  /// Marca/desmarca uma denúncia como verificada por autoridade.
-  /// Ao confirmar (verificar: true), limpa qualquer statusOficial intermediário.
-  Future<void> definirVerificacao(
-    String id, {
-    required bool verificar,
-    required String nomeAutoridade,
-    String? autoridadeUid,
-  }) {
+  /// Marca/desmarca uma denúncia como verificada pela autoridade logada e
+  /// devolve o nome gravado no selo. Ao confirmar, limpa qualquer
+  /// statusOficial intermediário; ao desmarcar, zera o ciclo oficial e
+  /// registra o evento "revertida".
+  Future<String> definirVerificacao(String id, {required bool verificar}) {
     return comLogDeErro('definir verificação', () async {
+      final nome = await _nomeDaAutoridade();
+      final batch = _firestore.batch();
       if (verificar) {
-        final batch = _firestore.batch();
+        final evento = _registrarHistorico(batch, id, 'verificada', por: nome);
         batch.update(_ocorrenciasRef.doc(id), {
           'verificada': true,
-          'verificadaPor': autoridadeUid ?? _currentUserId,
-          'verificadaPorNome': nomeAutoridade,
+          'verificadaPor': _currentUserId,
+          'verificadaPorNome': nome,
           'verificadaEm': FieldValue.serverTimestamp(),
           'statusOficial': null,
+          'ultimoEventoId': evento,
         });
-        _registrarHistorico(batch, id, 'verificada', por: nomeAutoridade);
-        await batch.commit();
       } else {
-        // Ao remover a verificação, zera também o ciclo oficial.
-        await _ocorrenciasRef.doc(id).update({
+        final evento = _registrarHistorico(batch, id, 'revertida', por: nome);
+        batch.update(_ocorrenciasRef.doc(id), {
           'verificada': false,
           'statusOficial': null,
+          'ultimoEventoId': evento,
         });
       }
+      await batch.commit();
+      return nome;
     });
   }
 
-  /// Define o status do ciclo oficial da autoridade. [status] null reverte.
-  /// Grava o carimbo de tempo de auditoria ao encaminhar/resolver.
-  Future<void> definirStatusOficial(String id, StatusOficial? status) {
+  /// Avança o ciclo oficial para [status], com o carimbo de tempo de
+  /// auditoria ao encaminhar/resolver. Para desfazer use [reverterStatusOficial].
+  Future<void> definirStatusOficial(String id, StatusOficial status) {
     return comLogDeErro('definir status oficial', () async {
-      final data = <String, dynamic>{'statusOficial': status?.valor};
+      final nome = await _nomeDaAutoridade();
+      final batch = _firestore.batch();
+      final evento = _registrarHistorico(batch, id, status.valor, por: nome);
+      final data = <String, dynamic>{
+        'statusOficial': status.valor,
+        'ultimoEventoId': evento,
+      };
       if (status == StatusOficial.encaminhada) {
         data['encaminhadaEm'] = FieldValue.serverTimestamp();
       } else if (status == StatusOficial.resolvida) {
         data['resolvidaEm'] = FieldValue.serverTimestamp();
       }
-      final batch = _firestore.batch();
       batch.update(_ocorrenciasRef.doc(id), data);
-      // Reverter (status == null) não gera evento — é um "desfazer".
-      if (status != null) {
-        _registrarHistorico(batch, id, status.valor);
-      }
       await batch.commit();
-      if (status != null) {
-        unawaited(_analytics.statusAvancado(statusOficial: status.valor));
-      }
+      unawaited(_analytics.statusAvancado(statusOficial: status.valor));
+    });
+  }
+
+  /// Desfaz o último passo do ciclo oficial a partir de [atual]: resolvida
+  /// volta a encaminhada (limpando `resolvidaEm`); os demais voltam ao
+  /// estágio base (pendente ou confirmada, conforme `verificada`).
+  ///
+  /// Ação própria, com evento "revertida" e sem notificar o cidadão. Antes
+  /// "Reverter para encaminhada" chamava o fluxo de encaminhar: gravava novo
+  /// `encaminhadaEm`, um evento "encaminhada" falso, notificava o cidadão e
+  /// mantinha `resolvidaEm` contando nas métricas.
+  Future<void> reverterStatusOficial(String id,
+      {required StatusOficial atual}) {
+    return comLogDeErro('reverter status oficial', () async {
+      final nome = await _nomeDaAutoridade();
+      final batch = _firestore.batch();
+      final evento = _registrarHistorico(batch, id, 'revertida', por: nome);
+      batch.update(
+        _ocorrenciasRef.doc(id),
+        atual == StatusOficial.resolvida
+            ? {
+                'statusOficial': StatusOficial.encaminhada.valor,
+                'resolvidaEm': null,
+                'ultimoEventoId': evento,
+              }
+            : {'statusOficial': null, 'ultimoEventoId': evento},
+      );
+      await batch.commit();
     });
   }
 
@@ -548,8 +735,10 @@ class OcorrenciaRepository {
               )
               .toList()
             ..sort((a, b) {
-              final dataA = a.dataCriacao ?? DateTime.fromMillisecondsSinceEpoch(0);
-              final dataB = b.dataCriacao ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final dataA =
+                  a.dataCriacao ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final dataB =
+                  b.dataCriacao ?? DateTime.fromMillisecondsSinceEpoch(0);
               return dataA.compareTo(dataB); // mais antigas primeiro
             }),
         );
@@ -557,14 +746,22 @@ class OcorrenciaRepository {
 
   // ── COMPARTILHAMENTO ──────────────────────────────────────────────────────
 
-  /// Soma 1 ao contador de compartilhamentos. Diferente de like/dislike, não
-  /// guarda quem compartilhou (não há toggle nem lista): o incremento atômico
-  /// do Firestore basta e dispensa transação.
-  Future<void> incrementarCompartilhamento(String ocorrenciaId) {
+  /// Soma 1 ao contador de compartilhamentos, uma vez por usuário: o +1 vai
+  /// no mesmo batch que cria `compartilhamentos/{uid}`, e as regras negam se
+  /// esse registro já existir. Retorna `false` quando o usuário já tinha
+  /// compartilhado (o contador não muda).
+  Future<bool> incrementarCompartilhamento(String ocorrenciaId) {
     return comLogDeErro('registrar compartilhamento', () async {
-      await _ocorrenciasRef.doc(ocorrenciaId).update({
-        'shares': FieldValue.increment(1),
-      });
+      final uid = _currentUserId;
+      if (uid == null) return false;
+      final ref = _ocorrenciasRef.doc(ocorrenciaId);
+      final registro = ref.collection('compartilhamentos').doc(uid);
+      if ((await registro.get()).exists) return false;
+      final batch = _firestore.batch()
+        ..update(ref, {'shares': FieldValue.increment(1)})
+        ..set(registro, {'uid': uid, 'criadoEm': FieldValue.serverTimestamp()});
+      await batch.commit();
+      return true;
     });
   }
 
@@ -618,6 +815,15 @@ class OcorrenciaRepository {
           'likes': likedBy.length,
           'dislikes': dislikedBy.length,
         });
+        // Carimbo exigido pelas regras (intervalo mínimo entre reações).
+        txn.set(
+          _firestore
+              .collection('usuarios')
+              .doc(userId)
+              .collection('meta')
+              .doc('reacao'),
+          {'ultima': FieldValue.serverTimestamp()},
+        );
       });
     });
   }

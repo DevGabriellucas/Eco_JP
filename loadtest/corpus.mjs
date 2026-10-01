@@ -50,7 +50,7 @@ for (let inicio = 0; inicio < TOTAL; inicio += 500) {
       usuarioId: null, usuarioNome: null, usuarioFotoUrl: null,
       imagemUrl: FOTO, imagensUrls: [FOTO], anonima: true,
       likes: 0, dislikes: 0, comments: 0, shares: 0,
-      likedBy: [], dislikedBy: [], fixada: false,
+      likedBy: [], dislikedBy: [], fixada: false, oculto: false,
     });
   }
   await lote.commit();

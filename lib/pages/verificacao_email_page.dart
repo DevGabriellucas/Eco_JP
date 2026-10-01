@@ -9,8 +9,8 @@ import '../theme/app_theme.dart';
 /// Tela exibida quando o usuário entrou com e-mail/senha mas ainda não
 /// confirmou o e-mail. Bloqueia o acesso ao app até a confirmação.
 ///
-/// Envia o link automaticamente ao abrir, checa a confirmação em segundo plano
-/// e oferece reenvio (com tempo de espera) e troca de conta.
+/// O link sai no cadastro; aqui a confirmação é checada em segundo plano, com
+/// reenvio (com tempo de espera) e troca de conta.
 class VerificacaoEmailPage extends ConsumerStatefulWidget {
   const VerificacaoEmailPage({super.key});
 
@@ -31,7 +31,10 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
   @override
   void initState() {
     super.initState();
-    _enviarInicial();
+    // Não envia e-mail ao abrir: o cadastro já envia assim que a conta tem
+    // nome, e reenviar a cada abertura da tela (ou a cada login de conta não
+    // confirmada) estourava o limite do Firebase e invalidava o link
+    // anterior. Quem precisar usa "Reenviar".
     // O status de verificação não chega pelo authStateChanges, então checamos
     // periodicamente enquanto a tela está aberta.
     _poll = Timer.periodic(
@@ -45,12 +48,6 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
     _poll?.cancel();
     _cooldownTimer?.cancel();
     super.dispose();
-  }
-
-  Future<void> _enviarInicial() async {
-    final result = await _authService.enviarEmailVerificacao();
-    if (!mounted) return;
-    if (result.success) _iniciarCooldown();
   }
 
   void _iniciarCooldown() {
@@ -94,7 +91,7 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Ainda nao recebemos a confirmacao. Abra o link no seu e-mail e tente de novo.',
+            'Ainda não recebemos a confirmação. Abra o link no seu e-mail e tente de novo.',
           ),
         ),
       );
@@ -155,7 +152,7 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
                       ),
                       children: [
                         const TextSpan(
-                          text: 'Enviamos um link de confirmacao para\n',
+                          text: 'Enviamos um link de confirmação para\n',
                         ),
                         TextSpan(
                           text: email,
@@ -167,7 +164,8 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
                         const TextSpan(
                           text:
                               '.\n\nAbra o e-mail, toque no link e volte aqui. '
-                              'A tela libera o acesso automaticamente.',
+                              'A tela libera o acesso automaticamente. '
+                              'Não chegou? Confira o spam ou peça outro abaixo.',
                         ),
                       ],
                     ),
@@ -177,9 +175,8 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
                   SizedBox(
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _verificando
-                          ? null
-                          : () => _checarVerificacao(),
+                      onPressed:
+                          _verificando ? null : () => _checarVerificacao(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: pal.ink,
                         foregroundColor: pal.surface,

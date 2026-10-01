@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../widgets/aviso_recorte.dart';
+
 import '../data/repositories/ocorrencia_repository.dart';
 import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/ocorrencia_model.dart';
@@ -32,6 +34,7 @@ class _DadosPublicosViewState extends ConsumerState<DadosPublicosView> {
 
   List<RotaColetaModel> _rotas = [];
   bool _carregandoRotas = true;
+  bool _erroRotas = false;
   String _buscaBairro = '';
 
   @override
@@ -51,8 +54,16 @@ class _DadosPublicosViewState extends ConsumerState<DadosPublicosView> {
         _rotas = rotas;
         _carregandoRotas = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _carregandoRotas = false);
+    } catch (e) {
+      // Mostra o erro em vez de fingir que não há bairros: foi assim que o
+      // asset fora do pubspec passou despercebido.
+      debugPrint('Erro ao carregar o cronograma de coleta: $e');
+      if (mounted) {
+        setState(() {
+          _carregandoRotas = false;
+          _erroRotas = true;
+        });
+      }
     }
   }
 
@@ -91,9 +102,18 @@ class _DadosPublicosViewState extends ConsumerState<DadosPublicosView> {
       builder: (context, snapshot) {
         final ocorrencias = snapshot.data ?? const [];
         final carregando = snapshot.connectionState == ConnectionState.waiting;
-        return _DashboardCidade(
-          ocorrencias: ocorrencias,
-          carregando: carregando,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _DashboardCidade(
+              ocorrencias: ocorrencias,
+              carregando: carregando,
+            ),
+            AvisoRecorte(
+              carregadas: ocorrencias.length,
+              repositorio: ref.read(ocorrenciaRepositoryProvider),
+            ),
+          ],
         );
       },
     );
@@ -107,8 +127,8 @@ class _DadosPublicosViewState extends ConsumerState<DadosPublicosView> {
     final filtrados = termo.isEmpty
         ? const <String>[]
         : _bairrosOrdenados
-              .where((b) => removerAcentos(b).toLowerCase().contains(termo))
-              .toList();
+            .where((b) => removerAcentos(b).toLowerCase().contains(termo))
+            .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,6 +172,11 @@ class _DadosPublicosViewState extends ConsumerState<DadosPublicosView> {
               ),
             ),
           )
+        else if (_erroRotas)
+          const _AvisoGuia(
+            texto: 'Não foi possível carregar o cronograma de coleta. Consulte '
+                'joaopessoa.pb.gov.br.',
+          )
         else if (termo.isEmpty)
           const _AvisoGuia(
             texto:
@@ -160,8 +185,7 @@ class _DadosPublicosViewState extends ConsumerState<DadosPublicosView> {
           )
         else if (filtrados.isEmpty)
           _AvisoGuia(
-            texto:
-                'Nenhum bairro encontrado com "$_buscaBairro". Confira a '
+            texto: 'Nenhum bairro encontrado com "$_buscaBairro". Confira a '
                 'grafia ou consulte joaopessoa.pb.gov.br.',
           )
         else
@@ -216,7 +240,8 @@ class _DashboardCidade extends StatelessWidget {
 
     final total = ocorrencias.length;
     final resolvidas = ocorrencias
-        .where((o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
+        .where(
+            (o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
         .length;
     final taxa = total == 0 ? 0 : (resolvidas * 100 / total).round();
 
@@ -234,7 +259,6 @@ class _DashboardCidade extends StatelessWidget {
           subtitulo: 'Denúncias ambientais em João Pessoa',
         ),
         const SizedBox(height: 12),
-
         if (carregando && total == 0)
           const _CardPublico(
             child: Center(
@@ -752,9 +776,8 @@ class _DicaCardState extends State<_DicaCard> {
           ),
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 200),
-            crossFadeState: _aberto
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
+            crossFadeState:
+                _aberto ? CrossFadeState.showSecond : CrossFadeState.showFirst,
             firstChild: const SizedBox(width: double.infinity),
             secondChild: Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),

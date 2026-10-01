@@ -6,6 +6,7 @@ import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../models/usuario_model.dart';
 import '../services/usuario_service.dart';
+import '../utils/texto.dart';
 import 'legal/documentos_legais.dart';
 import '../theme/app_theme.dart';
 
@@ -104,9 +105,20 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     // Exige pelo menos "razoável" no medidor (score 2 de 4) — o mínimo do
     // próprio Firebase é só 6 caracteres, insuficiente contra senhas comuns.
     if (_forcaSenha(_passwordController.text) < 2) {
-      const msg =
-          'Escolha uma senha mais forte: use letras maiúsculas e '
+      const msg = 'Escolha uma senha mais forte: use letras maiúsculas e '
           'minúsculas, números ou símbolos.';
+      setState(() => _errorMessage = msg);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(msg)));
+      return;
+    }
+
+    // Mesmo texto que o perfil vai gravar (salvarPerfil higieniza) e mesmo
+    // limite das regras (nome ≤ 40 em usuarios e nomes_reservados).
+    final nome = sanitizarLinhaUnica(_nomeController.text);
+    if (nome.length > _maxNome) {
+      const msg = 'Use um nome com até $_maxNome caracteres';
       setState(() => _errorMessage = msg);
       ScaffoldMessenger.of(
         context,
@@ -119,72 +131,69 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
       _errorMessage = null;
     });
 
-    // Captura os serviços enquanto o widget está montado: as escritas abaixo
-    // seguem mesmo depois que o redirect do router troca a tela para a
-    // verificação de e-mail (senão o `ref` ficaria inválido).
     final authService = ref.read(authServiceProvider);
     final consentService = ref.read(consentServiceProvider);
-    final nome = _nomeController.text.trim();
+    final emAndamento = ref.read(cadastroEmAndamentoProvider.notifier);
 
-    // Cria a conta PRIMEIRO: a reserva do nome escreve em `nomes_reservados`,
-    // que as Firestore Rules só liberam para usuários autenticados. Por isso a
-    // validação de nome vem depois da criação (com rollback se o nome colidir).
-    final result = await authService.cadastrar(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
-
-    if (!result.success) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = result.message;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message ?? 'Erro ao cadastrar')),
-      );
-      return;
-    }
-
-    final uid = result.user?.uid;
-    if (uid == null) return;
-
+    // Segura o redirect: sem isto, criar a conta levava na hora para
+    // /verificacao-email e esta página era desmontada no meio da reserva.
+    emAndamento.state = true;
     try {
-      // Reserva o nome antes de criar o perfil. Substitui a checagem anterior,
-      // que lia a coleção `usuarios` inteira e ainda assim deixava dois
-      // cadastros simultâneos ficarem com o mesmo nome — a reserva é atômica
-      // pelas Rules (ver match /nomes_reservados em firestore.rules).
-      //
-      // Nome indisponível: desfaz este cadastro para não deixar conta órfã. O
-      // redirect reage ao delete voltando à tela inicial.
-      if (!await _usuarioService.reservarNome(nome, uid)) {
-        await result.user?.delete();
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'Esse nome já está em uso. Escolha outro.';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Esse nome já está em uso. Escolha outro.'),
-          ),
-        );
+      // Cria a conta PRIMEIRO: a reserva do nome escreve em
+      // `nomes_reservados`, que as Rules só liberam para usuários
+      // autenticados (com rollback se o nome colidir).
+      final result = await authService.cadastrar(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+      if (!result.success) {
+        _falhar(result.message ?? 'Erro ao cadastrar');
+        return;
+      }
+      final user = result.user;
+      if (user == null) return;
+
+      // Reserva atômica pelas Rules (ver match /nomes_reservados). Nome
+      // indisponível: desfaz a conta para não deixar órfã — e como a página
+      // continua montada, a pessoa vê o motivo e pode trocar o nome.
+      if (!await _usuarioService.reservarNome(nome, user.uid)) {
+        await user.delete();
+        _falhar('Esse nome já está em uso. Escolha outro.');
         return;
       }
 
-      // Cria o perfil com o nome, salva o nome no Auth (usado em notificações)
-      // e registra o consentimento aceito (LGPD art. 8 §1). O redirect leva à
-      // verificação de e-mail automaticamente.
-      await _usuarioService.salvarPerfil(UsuarioModel(uid: uid, nome: nome));
-      await result.user?.updateDisplayName(nome);
-      await consentService.registrar(uid);
+      // Perfil, nome no Auth (usado em notificações) e consentimento
+      // (LGPD art. 8 §1). O e-mail de verificação só sai agora que a conta
+      // tem nome — antes ele chegava para contas já apagadas.
+      await _usuarioService
+          .salvarPerfil(UsuarioModel(uid: user.uid, nome: nome));
+      await user.updateDisplayName(nome);
+      await consentService.registrar(user.uid);
+      await authService.enviarEmailVerificacao();
     } catch (e) {
-      // Falha pós-criação (rede/permissão): NÃO deixa a UI travada no loading
-      // (bug que a reordenação anterior causava). O redirect já levou o usuário
-      // à verificação de e-mail; a conta existe e o perfil pode ser completado.
+      // Falha pós-criação (rede/permissão): a conta existe; o portão de
+      // perfil (perfilGarantidoProvider) completa o que faltar após a
+      // verificação do e-mail, reaproveitando a reserva se ela foi feita.
       debugPrint('Erro pós-cadastro: $e');
       if (mounted) setState(() => _isLoading = false);
+    } finally {
+      // Libera o redirect: com conta criada vai para a verificação; sem conta
+      // (falha ou nome em uso) fica aqui.
+      emAndamento.state = false;
     }
+  }
+
+  static const _maxNome = 40;
+
+  void _falhar(String mensagem) {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _errorMessage = mensagem;
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(mensagem)));
   }
 
   void _abrirDocumento(String titulo, String conteudo) {
@@ -209,43 +218,46 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
       fontSize: 13,
       color: pal.muted,
     );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 24,
-          height: 24,
-          child: Checkbox(
+    // A linha inteira marca a caixa (antes só o quadrado de 24 dp, abaixo do
+    // mínimo de 48 dp); os links continuam abrindo os documentos.
+    return InkWell(
+      onTap: _isLoading
+          ? null
+          : () => setState(() => _aceitouTermos = !_aceitouTermos),
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Checkbox(
             value: _aceitouTermos,
             onChanged: _isLoading
                 ? null
                 : (v) => setState(() => _aceitouTermos = v ?? false),
             activeColor: pal.ink,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text('Li e aceito a ', style: textStyle),
-              GestureDetector(
-                onTap: () => _abrirDocumento(
-                  'Política de Privacidade',
-                  kPoliticaPrivacidade,
+          const SizedBox(width: 4),
+          Expanded(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('Li e aceito a ', style: textStyle),
+                GestureDetector(
+                  onTap: () => _abrirDocumento(
+                    'Política de Privacidade',
+                    kPoliticaPrivacidade,
+                  ),
+                  child: Text('Política de Privacidade', style: linkStyle),
                 ),
-                child: Text('Política de Privacidade', style: linkStyle),
-              ),
-              Text(' e os ', style: textStyle),
-              GestureDetector(
-                onTap: () => _abrirDocumento('Termos de Uso', kTermosDeUso),
-                child: Text('Termos de Uso', style: linkStyle),
-              ),
-            ],
+                Text(' e os ', style: textStyle),
+                GestureDetector(
+                  onTap: () => _abrirDocumento('Termos de Uso', kTermosDeUso),
+                  child: Text('Termos de Uso', style: linkStyle),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -317,11 +329,14 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            GestureDetector(
-                              onTap: () {
-                                context.go(Routes.inicial);
-                              },
-                              child: SvgPicture.asset(
+                            // IconButton: alvo de 48 dp e rótulo "Voltar" para leitores
+                            // de tela (o GestureDetector com SVG não tinha nenhum).
+                            IconButton(
+                              tooltip: 'Voltar',
+                              padding: EdgeInsets.zero,
+                              iconSize: 44,
+                              onPressed: () => context.go(Routes.inicial),
+                              icon: SvgPicture.asset(
                                 'assets/icons/seta.svg',
                                 width: 44,
                                 height: 44,
@@ -358,6 +373,7 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
                                   _buildInput(
                                     controller: _nomeController,
                                     hint: 'Seu nome',
+                                    maxLength: _maxNome,
                                   ),
                                   const SizedBox(height: 16),
                                   _buildLabel('Email'),
@@ -440,14 +456,13 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
                                     width: double.infinity,
                                     height: 48,
                                     child: ElevatedButton(
-                                      onPressed: _isLoading
-                                          ? null
-                                          : _handleCadastro,
+                                      onPressed:
+                                          _isLoading ? null : _handleCadastro,
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: pal.ink,
                                         foregroundColor: pal.surface,
-                                        disabledBackgroundColor: pal.ink
-                                            .withValues(alpha: 0.6),
+                                        disabledBackgroundColor:
+                                            pal.ink.withValues(alpha: 0.6),
                                         elevation: 0,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
@@ -525,12 +540,14 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     TextInputType keyboardType = TextInputType.text,
     bool obscure = false,
     Widget? suffix,
+    int? maxLength,
   }) {
     final pal = context.pal;
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
+      maxLength: maxLength,
       style: TextStyle(fontFamily: 'Roboto', fontSize: 14, color: pal.ink),
       decoration: InputDecoration(
         hintText: hint,
@@ -578,8 +595,10 @@ class _MedidorForcaSenha extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 0-2 = fraca (1 segmento), 3 = média (2 segmentos), 4 = forte (3).
-    final int nivel = forca <= 2 ? 1 : (forca == 3 ? 2 : 3);
+    // Mesmo corte de _handleCadastro (aceita pontuação >= 2): 0-1 = fraca,
+    // recusada (1 segmento); 2 = média (2); 3-4 = forte (3). Antes o medidor
+    // mostrava "fraca" para uma senha 2, que o cadastro aceitava.
+    final int nivel = forca <= 1 ? 1 : (forca == 2 ? 2 : 3);
     final Color cor = switch (nivel) {
       1 => AppColors.danger,
       2 => const Color(0xFFF59E0B),

@@ -50,11 +50,16 @@
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
 		<key>NSCameraUsageDescription</key>
-		<string>O EcoJP usa a camera para registrar fotos das ocorrencias.</string>
+		<string>O EcoJP usa a câmera para registrar fotos e vídeos das ocorrências.</string>
+		<!-- Gravar vídeo pela câmera (form_ocorrencia_page) também captura áudio.
+		     Sem esta chave o iOS encerra o app ao abrir a gravação e a Apple
+		     rejeita o envio para a App Store. -->
+		<key>NSMicrophoneUsageDescription</key>
+		<string>O EcoJP usa o microfone para gravar o áudio dos vídeos das ocorrências.</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>O EcoJP usa sua localizacao para preencher o endereco da ocorrencia.</string>
+		<string>O EcoJP usa sua localização para preencher o endereço da ocorrência.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>O EcoJP usa sua galeria para anexar fotos das ocorrencias.</string>
+		<string>O EcoJP usa sua galeria para anexar fotos e vídeos das ocorrências.</string>
 		<key>UILaunchStoryboardName</key>
 		<string>LaunchScreen</string>
 		<key>UIMainStoryboardFile</key>
@@ -85,6 +90,9 @@
 				</array>
 			</dict>
 		</array>
+		<!-- O deep link é tratado pelo app_links (lib/core/deep_link.dart). -->
+		<key>FlutterDeepLinkingEnabled</key>
+		<false/>
 		<key>UIStatusBarHidden</key>
 		<false/>
 		<!-- Preenchido em tempo de build por MAPS_API_KEY (ios/Flutter/Maps.xcconfig,

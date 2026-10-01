@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/repositories/ocorrencia_repository.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/notificacao_service.dart';
+import '../services/usuario_service.dart';
 
 /// Snapshot do estado de reação de uma ocorrência, usado para reverter uma
 /// atualização otimista se a gravação no servidor falhar.
@@ -24,13 +25,13 @@ class ReacaoSnapshot {
   });
 
   factory ReacaoSnapshot.de(OcorrenciaModel o) => ReacaoSnapshot(
-    userLiked: o.userLiked,
-    userDisliked: o.userDisliked,
-    likes: o.likes,
-    dislikes: o.dislikes,
-    likedBy: List<String>.from(o.likedBy),
-    dislikedBy: List<String>.from(o.dislikedBy),
-  );
+        userLiked: o.userLiked,
+        userDisliked: o.userDisliked,
+        likes: o.likes,
+        dislikes: o.dislikes,
+        likedBy: List<String>.from(o.likedBy),
+        dislikedBy: List<String>.from(o.dislikedBy),
+      );
 
   void restaurarEm(OcorrenciaModel o) {
     o.userLiked = userLiked;
@@ -91,7 +92,6 @@ Future<void> reagirOcorrencia({
   required bool isLike,
   required OcorrenciaRepository ocorrenciaRepository,
   required NotificacaoService notificacaoService,
-  required String? nomeAutor,
   required VoidCallback onMudou,
 }) async {
   final vaiCurtir = isLike && !ocorrencia.userLiked;
@@ -134,12 +134,21 @@ Future<void> reagirOcorrencia({
   // a quem curte, protegendo o denunciante de correlação entre denúncias.
   final dono = ocorrencia.usuarioId;
   if (vaiCurtir && !ocorrencia.anonima && dono != null && dono != uid) {
-    notificacaoService.notificar(
+    // As regras exigem que deUsuarioNome seja o nome do perfil de quem curte
+    // (antes ia o displayName ou o prefixo do e-mail). Sem perfil, não
+    // notifica.
+    final perfil = await UsuarioService.instance
+        .carregarPerfil(uid)
+        .catchError((_) => null);
+    final nomeAutor = perfil?.nome ?? '';
+    if (nomeAutor.trim().isEmpty) return;
+    await notificacaoService.notificar(
       donoId: dono,
       tipo: 'curtida',
-      deUsuarioNome: nomeAutor ?? 'Alguém',
+      deUsuarioNome: nomeAutor,
       ocorrenciaId: ocorrencia.id,
       ocorrenciaTitulo: ocorrencia.titulo,
+      notifId: NotificacaoService.idCurtida(ocorrencia.id, uid),
     );
   }
 }

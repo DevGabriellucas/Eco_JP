@@ -1,9 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/auth_service.dart';
 import '../../../services/consent_service.dart';
 import '../../../services/role_service.dart';
+import '../../../services/usuario_service.dart';
+import '../../../utils/cloudinary_image.dart';
 
 /// Ponto único de acesso ao [AuthService] via injeção de dependência.
 ///
@@ -11,14 +14,16 @@ import '../../../services/role_service.dart';
 /// domínio ([AuthResult]/[User]), então cumpre o papel de repositório de auth.
 /// Expor por provider elimina os múltiplos `AuthService()` soltos e torna a
 /// dependência mockável nos testes.
-final authServiceProvider = Provider<AuthService>((ref) => AuthService.instance);
+final authServiceProvider =
+    Provider<AuthService>((ref) => AuthService.instance);
 
 /// Acesso ao serviço de consentimento (LGPD) por injeção.
 final consentServiceProvider =
     Provider<ConsentService>((ref) => ConsentService.instance);
 
 /// Acesso ao serviço de papéis (role) por injeção.
-final roleServiceProvider = Provider<RoleService>((ref) => RoleService.instance);
+final roleServiceProvider =
+    Provider<RoleService>((ref) => RoleService.instance);
 
 /// Estado de autenticação do Firebase, reativo. Substitui o `StreamBuilder`
 /// que ficava no `main.dart`. O router escuta este provider para redirecionar.
@@ -39,6 +44,35 @@ final isAutoridadeProvider = StreamProvider<bool>((ref) {
   return ref.watch(roleServiceProvider).observarAutoridade(user.uid);
 });
 
+/// True enquanto a tela de cadastro cria a conta, reserva o nome e grava o
+/// perfil. O router não tira o usuário de /cadastro nesse intervalo: antes o
+/// redirect trocava para /verificacao-email logo após criar a conta, a página
+/// era desmontada no meio da reserva e um nome em uso apagava a conta em
+/// silêncio, sem mensagem nenhuma.
+final cadastroEmAndamentoProvider = StateProvider<bool>((ref) => false);
+
+/// Garante que o usuário logado (e verificado) tenha perfil com nome
+/// reservado — ver [UsuarioService.garantirPerfil]. Cobre o primeiro login
+/// Google, que não passa pelo cadastro. O router segura na splash enquanto
+/// resolve. Falha de rede não trava o acesso (tenta de novo no próximo login).
+final perfilGarantidoProvider = FutureProvider<bool>((ref) async {
+  final user = ref.watch(authStateChangesProvider).value;
+  if (user == null) return true;
+  final apenasSenha =
+      user.providerData.every((p) => p.providerId == 'password');
+  if (apenasSenha && !user.emailVerified) return true;
+  try {
+    await UsuarioService.instance.garantirPerfil(
+      user.uid,
+      nomeSugerido: user.displayName,
+      fotoUrl: fotoPublicaPermitida(user.photoURL),
+    );
+  } catch (e) {
+    debugPrint('Não foi possível garantir o perfil: $e');
+  }
+  return true;
+});
+
 /// Indica se o usuário logado ainda precisa consentir (LGPD).
 ///
 /// Depende de [authStateChangesProvider]: recalcula quando o usuário muda.
@@ -49,7 +83,8 @@ final consentStatusProvider = FutureProvider<bool>((ref) async {
   final user = ref.watch(authStateChangesProvider).value;
   if (user == null) return false;
 
-  final apenasSenha = user.providerData.every((p) => p.providerId == 'password');
+  final apenasSenha =
+      user.providerData.every((p) => p.providerId == 'password');
   if (apenasSenha && !user.emailVerified) return false;
 
   return ref.watch(consentServiceProvider).precisaConsentir(user.uid);

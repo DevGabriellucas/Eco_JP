@@ -158,16 +158,16 @@ abstract final class AppTheme {
   }
 
   static ThemeData light() => _build(
-    brightness: Brightness.light,
-    palette: AppPalette.light,
-    textTheme: _textThemeLight,
-  );
+        brightness: Brightness.light,
+        palette: AppPalette.light,
+        textTheme: _textThemeLight,
+      );
 
   static ThemeData dark() => _build(
-    brightness: Brightness.dark,
-    palette: AppPalette.dark,
-    textTheme: _textThemeDark,
-  );
+        brightness: Brightness.dark,
+        palette: AppPalette.dark,
+        textTheme: _textThemeDark,
+      );
 
   static ThemeData _build({
     required Brightness brightness,

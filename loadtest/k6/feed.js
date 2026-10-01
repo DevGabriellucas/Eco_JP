@@ -18,7 +18,7 @@ import { check } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import { SharedArray } from 'k6/data';
 import exec from 'k6/execution';
-import { contexto, consultar } from './lib/firestore.js';
+import { contexto, consultar, FILTRO_VISIVEIS } from './lib/firestore.js';
 
 const config = JSON.parse(open('../tokens.json'));
 const ctx = contexto(config);
@@ -30,7 +30,8 @@ const latenciaAgregado = new Trend('tela_agregada_ms', true);
 
 // Espelham o código: home_page usa _pageSize; mapa, estatísticas e dados
 // públicos usam OcorrenciaRepository.tetoAgregado.
-const PAGINA_FEED = 20;
+// Mesmo tamanho de página do app (_pageSize em home_page.dart).
+const PAGINA_FEED = 10;
 const TETO_AGREGADO = 500;
 
 export const options = {
@@ -67,6 +68,7 @@ export default function () {
   let inicio = Date.now();
   const feed = consultar(ctx, usuario.idToken, {
     from: [{ collectionId: 'ocorrencias' }],
+    where: FILTRO_VISIVEIS,
     orderBy: [{ field: { fieldPath: 'dataCriacao' }, direction: 'DESCENDING' }],
     limit: PAGINA_FEED,
   });
@@ -79,6 +81,7 @@ export default function () {
   inicio = Date.now();
   const agregado = consultar(ctx, usuario.idToken, {
     from: [{ collectionId: 'ocorrencias' }],
+    where: FILTRO_VISIVEIS,
     orderBy: [{ field: { fieldPath: 'dataCriacao' }, direction: 'DESCENDING' }],
     limit: TETO_AGREGADO,
   });

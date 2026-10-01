@@ -41,6 +41,21 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Deep link ecojp://ocorrencia/<id> (lib/core/deep_link.dart). O iOS
+                 já declarava o esquema; sem este filtro o link não abria o
+                 app no Android. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="ecojp"/>
+            </intent-filter>
+            <!-- Quem trata o link é o app_links + DeepLinkListener. Com o deep
+                 linking nativo do Flutter ligado, o GoRouter também tentava
+                 abrir "ocorrencia/<id>" como rota e os dois brigavam. -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false"/>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -57,6 +72,17 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- "Traçar rota" (lib/utils/navegacao_externa.dart). Com targetSdk
+             30+ a visibilidade de pacotes esconde os apps de mapa/navegador
+             sem estas entradas, e canLaunchUrl sempre devolvia false. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="geo"/>
         </intent>
     </queries>
 </manifest>

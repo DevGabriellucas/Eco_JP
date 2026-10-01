@@ -21,7 +21,8 @@ final comentarioRepositoryProvider =
 /// executa o scroll/destaque e limpa o valor (volta a null). Guardamos o
 /// modelo inteiro para garantir a exibição mesmo que a denúncia ainda não
 /// tenha sido carregada pela paginação do feed.
-final feedFocoOcorrenciaProvider = StateProvider<OcorrenciaModel?>((ref) => null);
+final feedFocoOcorrenciaProvider =
+    StateProvider<OcorrenciaModel?>((ref) => null);
 
 /// ID do comentário que o feed deve focar (destacar). Usado quando a
 /// autoridade toca em "Ver" na fila de moderação para um comentário:

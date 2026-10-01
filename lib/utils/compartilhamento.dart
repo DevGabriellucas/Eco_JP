@@ -53,11 +53,11 @@ Future<bool> compartilharOcorrencia(
   // `unavailable`; so `dismissed` significa cancelamento explicito.
   if (resultado.status == ShareResultStatus.dismissed) return false;
 
-  o.shares++;
   try {
-    await (repository ?? OcorrenciaRepository()).incrementarCompartilhamento(
-      o.id,
-    );
+    // Só conta a primeira vez de cada usuário (ver regras).
+    final contou = await (repository ?? OcorrenciaRepository())
+        .incrementarCompartilhamento(o.id);
+    if (contou) o.shares++;
   } catch (e) {
     // Contador e informativo: falhar a gravacao nao invalida o
     // compartilhamento, que ja aconteceu do ponto de vista do usuario.

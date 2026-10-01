@@ -45,9 +45,9 @@ class CloudinaryService {
     http.Client? client,
     String? cloudName,
     String? uploadPreset,
-  }) : _client = client ?? http.Client(),
-       _cloudName = cloudName ?? _envCloudName,
-       _uploadPreset = uploadPreset ?? _envUploadPreset;
+  })  : _client = client ?? http.Client(),
+        _cloudName = cloudName ?? _envCloudName,
+        _uploadPreset = uploadPreset ?? _envUploadPreset;
 
   bool get isConfigured =>
       _cloudName.trim().isNotEmpty && _uploadPreset.trim().isNotEmpty;
@@ -62,19 +62,18 @@ class CloudinaryService {
       );
     }
 
-    final request =
-        http.MultipartRequest(
-            'POST',
-            Uri.https('api.cloudinary.com', '/v1_1/$_cloudName/image/upload'),
-          )
-          ..fields['upload_preset'] = _uploadPreset
-          ..files.add(
-            http.MultipartFile.fromBytes(
-              'file',
-              bytes,
-              filename: safeFileName(fileName),
-            ),
-          );
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.https('api.cloudinary.com', '/v1_1/$_cloudName/image/upload'),
+    )
+      ..fields['upload_preset'] = _uploadPreset
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: safeFileName(fileName),
+        ),
+      );
 
     final response = await _client.send(request);
     final body = await response.stream.bytesToString();
@@ -82,9 +81,8 @@ class CloudinaryService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final error = json['error'];
-      final message = error is Map<String, dynamic>
-          ? error['message']?.toString()
-          : null;
+      final message =
+          error is Map<String, dynamic> ? error['message']?.toString() : null;
 
       throw CloudinaryUploadException(
         message ?? 'Erro ao enviar imagem para o Cloudinary.',
@@ -112,19 +110,18 @@ class CloudinaryService {
       );
     }
 
-    final request =
-        http.MultipartRequest(
-            'POST',
-            Uri.https('api.cloudinary.com', '/v1_1/$_cloudName/video/upload'),
-          )
-          ..fields['upload_preset'] = _uploadPreset
-          ..files.add(
-            http.MultipartFile.fromBytes(
-              'file',
-              bytes,
-              filename: safeFileName(fileName, fallback: 'ocorrencia.mp4'),
-            ),
-          );
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.https('api.cloudinary.com', '/v1_1/$_cloudName/video/upload'),
+    )
+      ..fields['upload_preset'] = _uploadPreset
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: safeFileName(fileName, fallback: 'ocorrencia.mp4'),
+        ),
+      );
 
     final response = await _client.send(request);
     final body = await response.stream.bytesToString();
@@ -132,9 +129,8 @@ class CloudinaryService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final error = json['error'];
-      final message = error is Map<String, dynamic>
-          ? error['message']?.toString()
-          : null;
+      final message =
+          error is Map<String, dynamic> ? error['message']?.toString() : null;
 
       throw CloudinaryUploadException(
         message ?? 'Erro ao enviar vídeo para o Cloudinary.',
@@ -155,9 +151,9 @@ class CloudinaryService {
   @visibleForTesting
   String safeFileName(String fileName, {String fallback = 'ocorrencia.jpg'}) {
     final sanitized = fileName.trim().replaceAll(
-      RegExp(r'[^a-zA-Z0-9._-]'),
-      '_',
-    );
+          RegExp(r'[^a-zA-Z0-9._-]'),
+          '_',
+        );
 
     if (sanitized.isEmpty || !sanitized.contains('.')) {
       return fallback;

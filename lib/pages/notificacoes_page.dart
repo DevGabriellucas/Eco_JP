@@ -21,14 +21,20 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
   final _service = NotificacaoService();
   bool _abrindo = false;
 
+  late final String? _uid = _authService.currentUser?.uid;
+  // Criada uma vez (uma stream nova a cada build reabria o listener).
+  late final Stream<List<NotificacaoModel>>? _notificacoes = switch (_uid) {
+    final uid? => _service.listar(uid),
+    null => null,
+  };
+
   @override
-  void initState() {
-    super.initState();
-    // Ao abrir a tela, marca tudo como lido (zera o contador do sino).
-    final uid = _authService.currentUser?.uid;
-    if (uid != null) {
-      _service.marcarTodasComoLidas(uid);
-    }
+  void dispose() {
+    // Marca como lidas ao SAIR da tela. Marcando na abertura, o destaque de
+    // "não lida" sumia em um segundo, antes de a pessoa ver o que era novo.
+    final uid = _uid;
+    if (uid != null) _service.marcarTodasComoLidas(uid);
+    super.dispose();
   }
 
   // Busca a denúncia da notificação e abre a tela de detalhes.
@@ -39,6 +45,7 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
     if (_abrindo) return;
     setState(() => _abrindo = true);
     try {
+      // null também quando a denúncia foi ocultada pela moderação.
       final ocorrencia = await ref
           .read(ocorrenciaRepositoryProvider)
           .buscarPorId(n.ocorrenciaId);
@@ -55,6 +62,15 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
         context,
         MaterialPageRoute(
           builder: (_) => DetalheOcorrenciaPage(occurrence: ocorrencia),
+        ),
+      );
+    } catch (_) {
+      // Sem rede, a busca lançava sem tratamento (crash "fatal").
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Não foi possível abrir a denúncia. Verifique a conexão.'),
         ),
       );
     } finally {
@@ -80,7 +96,7 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final uid = _authService.currentUser?.uid;
+    final uid = _uid;
     final pal = context.pal;
 
     return Scaffold(
@@ -106,7 +122,7 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
       body: uid == null
           ? const Center(child: Text('Faça login para ver suas notificações.'))
           : StreamBuilder<List<NotificacaoModel>>(
-              stream: _service.listar(uid),
+              stream: _notificacoes,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -278,11 +294,14 @@ class _NotificacaoTile extends StatelessWidget {
                 ),
               )
             : null,
-        trailing: Icon(
-          Icons.chevron_right,
-          size: 20,
-          color: pal.hint,
-        ),
+        // Conquistas não abrem nada; a seta sugeria um destino que não existe.
+        trailing: n.tipo == 'conquista'
+            ? null
+            : Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: pal.hint,
+              ),
       ),
     );
   }

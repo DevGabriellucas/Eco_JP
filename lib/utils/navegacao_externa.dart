@@ -19,18 +19,21 @@ Future<bool> abrirRotaNoMapa({
     'travelmode': 'driving',
   });
 
+  // launchUrl direto, sem canLaunchUrl antes: a checagem depende das
+  // <queries> do AndroidManifest e dá falso negativo quando falta alguma.
+  // launchUrl devolve false (ou lança) quando nada abre a URL.
+  if (await _tentarAbrir(uri)) return true;
+  // Fallback: esquema geo: (alguns dispositivos sem Google Maps).
+  final q =
+      rotulo == null ? destino : '$destino(${Uri.encodeComponent(rotulo)})';
+  return _tentarAbrir(Uri.parse('geo:$destino?q=$q'));
+}
+
+Future<bool> _tentarAbrir(Uri uri) async {
   try {
-    if (await canLaunchUrl(uri)) {
-      return await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-    // Fallback: esquema geo: (alguns dispositivos sem Google Maps).
-    final geo = Uri.parse('geo:$destino?q=$destino${rotulo != null ? '($rotulo)' : ''}');
-    if (await canLaunchUrl(geo)) {
-      return await launchUrl(geo, mode: LaunchMode.externalApplication);
-    }
-    return false;
+    return await launchUrl(uri, mode: LaunchMode.externalApplication);
   } catch (e) {
-    debugPrint('Erro ao abrir rota no mapa: $e');
+    debugPrint('Erro ao abrir $uri: $e');
     return false;
   }
 }

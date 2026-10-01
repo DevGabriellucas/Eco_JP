@@ -44,11 +44,8 @@ class UsuarioModel {
 
   // Iniciais para o avatar (ex: "Gabriel Lucas" -> "GL")
   String get iniciais {
-    final partes = nome
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
-        .toList();
+    final partes =
+        nome.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (partes.isEmpty) return '?';
     if (partes.length == 1) {
       return partes.first.substring(0, 1).toUpperCase();

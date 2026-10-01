@@ -52,7 +52,7 @@ class OccurrenceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = occurrence;
     final tempoStr = tempoRelativo(o.dataCriacao);
-    final statusEnum = OccurrenceStatusParser.fromString(o.status);
+    final statusEnum = o.statusAtual;
     final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
     final estagio = EstagioOficialInfo.calcular(o.verificada, o.statusOficial);
     final autor = _authorName;
@@ -547,15 +547,13 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..setLooping(true)
       ..setVolume(0)
-      ..initialize()
-          .then((_) {
-            if (!mounted) return;
-            setState(() {});
-            _controller.play();
-          })
-          .catchError((_) {
-            if (mounted) setState(() => _error = true);
-          });
+      ..initialize().then((_) {
+        if (!mounted) return;
+        setState(() {});
+        _controller.play();
+      }).catchError((_) {
+        if (mounted) setState(() => _error = true);
+      });
   }
 
   @override
@@ -843,9 +841,8 @@ class _ImageSliderState extends State<_ImageSlider>
           child: Stack(
             children: [
               GestureDetector(
-                onDoubleTap: widget.onDoubleTapLike == null
-                    ? null
-                    : _handleDoubleTap,
+                onDoubleTap:
+                    widget.onDoubleTapLike == null ? null : _handleDoubleTap,
                 child: PageView.builder(
                   controller: _controller,
                   itemCount: images.length,
@@ -1344,7 +1341,6 @@ class _CommentButton extends StatelessWidget {
   }
 }
 
-
 /// Botão de compartilhar com contador. É stateful porque o contador sobe
 /// assim que o envio termina — sem depender de um novo snapshot do feed,
 /// que só chegaria segundos depois.
@@ -1520,7 +1516,7 @@ class _AccountSheet extends StatelessWidget {
             const SizedBox(height: 18),
             _AccountInfoRow(
               icon: Icons.report_problem_outlined,
-              label: 'Última denúncia',
+              label: 'Esta denúncia',
               value: occurrence.titulo,
             ),
             const SizedBox(height: 12),

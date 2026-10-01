@@ -6,6 +6,7 @@ import '../core/connectivity_provider.dart';
 import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../features/denuncias/providers/denuncia_providers.dart';
+import '../models/usuario_model.dart';
 import '../services/usuario_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/cloudinary_image.dart';
@@ -32,6 +33,19 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   bool _isAutoridade = false;
 
+  // Stream do perfil (foto do avatar na barra), recriada só se o usuário
+  // mudar — não a cada build.
+  String? _perfilUid;
+  Stream<UsuarioModel?>? _perfilStream;
+
+  Stream<UsuarioModel?> _perfilDe(String uid) {
+    if (_perfilUid != uid || _perfilStream == null) {
+      _perfilUid = uid;
+      _perfilStream = UsuarioService.instance.observarPerfil(uid);
+    }
+    return _perfilStream!;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -56,7 +70,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       case 1:
         return const MapPage();
       case 3:
-        return EstatisticasPage(scrollController: _scrollControllerEstatisticas);
+        return EstatisticasPage(
+            scrollController: _scrollControllerEstatisticas);
       case 4:
         return PerfilPage(scrollController: _scrollControllerPerfil);
       default:
@@ -74,9 +89,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       return;
     }
 
+    // hasClients: o controller só tem posição quando está preso a uma lista
+    // visível. Na aba Dados do cidadão e nos estados de skeleton/erro/vazio
+    // do feed ele fica solto, e ler `offset` lançava StateError (registrado
+    // como crash fatal ao tocar de novo na aba).
     if (i == 0) {
       if (_index == 0) {
-        if (_scrollController.offset > 0) {
+        if (_scrollController.hasClients && _scrollController.offset > 0) {
           _scrollController.animateTo(
             0,
             duration: const Duration(milliseconds: 400),
@@ -96,7 +115,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     if (i == 3) {
       if (_index == 3) {
-        if (_scrollControllerEstatisticas.offset > 0) {
+        if (_scrollControllerEstatisticas.hasClients &&
+            _scrollControllerEstatisticas.offset > 0) {
           _scrollControllerEstatisticas.animateTo(
             0,
             duration: const Duration(milliseconds: 400),
@@ -114,7 +134,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     if (i == 4) {
       if (_index == 4) {
-        if (_scrollControllerPerfil.offset > 0) {
+        if (_scrollControllerPerfil.hasClients &&
+            _scrollControllerPerfil.offset > 0) {
           _scrollControllerPerfil.animateTo(
             0,
             duration: const Duration(milliseconds: 400),
@@ -196,7 +217,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final online = ref.watch(conexaoOnlineProvider).value ?? true;
 
     final authUser = ref.watch(authStateChangesProvider).value;
-    final usuarioService = UsuarioService();
 
     // Quando a fila de verificação pede foco em uma denúncia, troca para a aba
     // do feed (o próprio feed faz o scroll/destaque e limpa o provider).
@@ -223,7 +243,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           _BannerOffline(visivel: !online),
           if (authUser != null)
             StreamBuilder(
-              stream: usuarioService.observarPerfil(authUser.uid),
+              stream: _perfilDe(authUser.uid),
               builder: (context, perfilSnap) {
                 final fotoUrl = perfilSnap.data?.fotoUrl;
                 return _BottomNav(
@@ -311,7 +331,8 @@ class _BottomNav extends StatelessWidget {
     const padding = 8.0;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: padding, vertical: padding),
+      padding:
+          const EdgeInsets.symmetric(horizontal: padding, vertical: padding),
       child: SafeArea(
         top: false,
         child: Container(
@@ -325,10 +346,13 @@ class _BottomNav extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildItem(0, Icons.home_rounded, Icons.home_outlined, 'Feed', 24.0),
-                _buildItem(1, Icons.location_on_rounded, Icons.location_on_outlined, 'Mapa', 24.0),
+                _buildItem(
+                    0, Icons.home_rounded, Icons.home_outlined, 'Feed', 24.0),
+                _buildItem(1, Icons.location_on_rounded,
+                    Icons.location_on_outlined, 'Mapa', 24.0),
                 _buildBotaoCentral(24.0),
-                _buildItem(3, Icons.library_books_rounded, Icons.library_books_outlined, 'Dados', 24.0),
+                _buildItem(3, Icons.library_books_rounded,
+                    Icons.library_books_outlined, 'Dados', 24.0),
                 _buildItemPerfil(),
               ],
             ),
@@ -388,7 +412,8 @@ class _BottomNav extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.only(left: 28, right: 48, top: 14, bottom: 14),
+                padding: const EdgeInsets.only(
+                    left: 28, right: 48, top: 14, bottom: 14),
                 decoration: BoxDecoration(
                   color: ativo ? const Color(0xFF888888) : Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
@@ -425,9 +450,8 @@ class _BottomNav extends StatelessWidget {
 
   Widget _buildBotaoCentral(double iconSize) {
     // Autoridade: atalho para a fila de verificação (selo). Cidadão: "+".
-    final label = isAutoridade
-        ? 'Fila de verificação e moderação'
-        : 'Nova denúncia';
+    final label =
+        isAutoridade ? 'Fila de verificação e moderação' : 'Nova denúncia';
 
     return Semantics(
       button: true,

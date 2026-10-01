@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'router/app_router.dart';
 import 'router/routes.dart';
@@ -29,10 +30,24 @@ String? ocorrenciaIdFromUri(Uri uri) {
   return null;
 }
 
+/// Telas de "portão" (splash, login, verificação, consentimento…). Enquanto
+/// o usuário está numa delas, o link fica pendente.
+const Set<String> _portoes = {
+  Routes.splash,
+  Routes.inicial,
+  Routes.login,
+  Routes.cadastro,
+  Routes.verificacaoEmail,
+  Routes.consentimento,
+};
+
 /// Escuta deeplinks (app aberto por um link) e navega para a ocorrência
 /// correspondente. Cobre tanto o app já em execução (stream) quanto o
-/// lançamento "frio" (link inicial). O gate de auth do router decide se o
-/// usuário chega direto no detalhe ou passa antes pelo login.
+/// lançamento "frio" (link inicial).
+///
+/// O destino fica pendente até o router sair das telas de portão. Antes o
+/// `push` acontecia com o router ainda em /splash (partida a frio) ou na
+/// tela de login, e o redirect descartava o destino.
 class DeepLinkListener extends ConsumerStatefulWidget {
   final Widget child;
 
@@ -45,11 +60,18 @@ class DeepLinkListener extends ConsumerStatefulWidget {
 class _DeepLinkListenerState extends ConsumerState<DeepLinkListener> {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _sub;
+  GoRouter? _router;
+
+  /// Ocorrência do último link recebido, aguardando o portão liberar.
+  String? _pendente;
 
   @override
   void initState() {
     super.initState();
     _appLinks = AppLinks();
+    final router = ref.read(goRouterProvider);
+    router.routeInformationProvider.addListener(_tentarAbrirPendente);
+    _router = router;
     _sub = _appLinks.uriLinkStream.listen(_handle, onError: (_) {});
     // Link que abriu o app "frio": navega após o primeiro frame para o router
     // já estar montado.
@@ -70,13 +92,25 @@ class _DeepLinkListenerState extends ConsumerState<DeepLinkListener> {
   void _handle(Uri uri) {
     final id = ocorrenciaIdFromUri(uri);
     if (id == null || !mounted) return;
+    _pendente = id;
+    _tentarAbrirPendente();
+  }
+
+  void _tentarAbrirPendente() {
+    final id = _pendente;
+    final router = _router;
+    if (id == null || router == null || !mounted) return;
+    final local = router.routeInformationProvider.value.uri.path;
+    if (_portoes.contains(local)) return; // espera o login/consentimento
+    _pendente = null;
     // push (não go) preserva a tela atual embaixo — o "voltar" do detalhe
     // retorna ao feed em vez de deixar o usuário sem para onde voltar.
-    ref.read(goRouterProvider).push('${Routes.ocorrencia}/$id');
+    router.push('${Routes.ocorrencia}/$id');
   }
 
   @override
   void dispose() {
+    _router?.routeInformationProvider.removeListener(_tentarAbrirPendente);
     _sub?.cancel();
     super.dispose();
   }

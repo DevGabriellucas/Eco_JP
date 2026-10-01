@@ -8,9 +8,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class RoleService {
   static final RoleService instance = RoleService();
 
-  final CollectionReference<Map<String, dynamic>> _ref = FirebaseFirestore
-      .instance
-      .collection('roles');
+  final CollectionReference<Map<String, dynamic>> _ref =
+      FirebaseFirestore.instance.collection('roles');
 
   static const String papelAutoridade = 'autoridade';
 

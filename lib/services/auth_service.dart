@@ -207,15 +207,23 @@ class AuthService {
   /// Recarrega os dados da conta no servidor e devolve se o e-mail já foi
   /// confirmado. Necessário porque o status de verificação não chega sozinho
   /// pelo [authStateChanges].
+  ///
+  /// Quando confirmado, força a renovação do ID token: as regras leem
+  /// `request.auth.token.email_verified`, e o `reload()` sozinho não troca o
+  /// token. Sem isso a pessoa recém-confirmada levava permission-denied ao
+  /// denunciar, comentar ou curtir por até 1 h (validade do token antigo).
   Future<bool> recarregarEVerificarEmail() async {
     final user = _auth.currentUser;
     if (user == null) return false;
     try {
       await user.reload();
+      final atual = _auth.currentUser;
+      if (atual == null || !atual.emailVerified) return false;
+      await atual.getIdToken(true);
+      return true;
     } catch (_) {
       return false;
     }
-    return _auth.currentUser?.emailVerified ?? false;
   }
 
   // ── Exclusão de conta (LGPD art. 18) ────────────────────────────────────
@@ -238,6 +246,52 @@ class AuthService {
       return AuthResult(
         success: false,
         message: 'Erro ao excluir conta (${e.code}).',
+      );
+    } catch (e) {
+      return AuthResult(success: false, message: 'Erro inesperado: $e');
+    }
+  }
+
+  /// Se a conta logada tem senha (provedor `password`). Contas só-Google não
+  /// têm senha para confirmar e precisam reautenticar pelo Google.
+  bool get contaTemSenha =>
+      _auth.currentUser?.providerData.any((p) => p.providerId == 'password') ??
+      false;
+
+  /// Reautentica pelo Google (conta sem senha) antes de uma ação sensível
+  /// como a exclusão de conta.
+  Future<AuthResult> reautenticarGoogle() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return AuthResult(success: false, message: 'Sessão inválida.');
+      }
+      if (kIsWeb) {
+        await user.reauthenticateWithPopup(GoogleAuthProvider());
+        return AuthResult(success: true);
+      }
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        return AuthResult(success: false, message: 'Cancelado.');
+      }
+      final googleAuth = await googleUser.authentication;
+      await user.reauthenticateWithCredential(
+        GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        ),
+      );
+      return AuthResult(success: true);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-mismatch') {
+        return AuthResult(
+          success: false,
+          message: 'Escolha a mesma conta Google usada no EcoJP.',
+        );
+      }
+      return AuthResult(
+        success: false,
+        message: 'Erro ao reautenticar (${e.code}).',
       );
     } catch (e) {
       return AuthResult(success: false, message: 'Erro inesperado: $e');

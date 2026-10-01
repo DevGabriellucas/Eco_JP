@@ -5,7 +5,6 @@ class DashedBorderPainter extends CustomPainter {
   final Color color;
   final double radius;
 
-
   const DashedBorderPainter({required this.color, required this.radius});
 
   @override
@@ -38,4 +37,3 @@ class DashedBorderPainter extends CustomPainter {
   bool shouldRepaint(DashedBorderPainter old) =>
       old.color != color || old.radius != radius;
 }
-

@@ -16,6 +16,13 @@ void main() {
       expect(LocationController.coordenadaValida(-7.11, -34.86), isTrue);
     });
 
+    test('rejeita coordenadas fora de João Pessoa', () {
+      expect(
+          LocationController.coordenadaValida(-23.55, -46.63), isFalse); // SP
+      expect(LocationController.coordenadaValida(-7.23, -35.88),
+          isFalse); // C. Grande
+    });
+
     test('rejeita nulos, (0,0) e fora dos limites', () {
       expect(LocationController.coordenadaValida(null, -34.86), isFalse);
       expect(LocationController.coordenadaValida(-7.11, null), isFalse);

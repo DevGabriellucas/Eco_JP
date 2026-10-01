@@ -50,8 +50,7 @@ class PerfilPublicoPage extends ConsumerWidget {
       body: StreamBuilder<UsuarioModel?>(
         stream: _usuarioService.observarPerfil(userId),
         builder: (context, perfilSnap) {
-          final perfil =
-              perfilSnap.data ??
+          final perfil = perfilSnap.data ??
               UsuarioModel(
                 uid: userId,
                 nome: fallbackName,
@@ -61,18 +60,17 @@ class PerfilPublicoPage extends ConsumerWidget {
           return StreamBuilder<List<OcorrenciaModel>>(
             stream: ocorrenciaRepository.listarPorUsuario(userId),
             builder: (context, ocorrenciasSnap) {
-              final ocorrencias =
-                  (ocorrenciasSnap.data ?? const [])
-                      .where((o) => !o.anonima)
-                      .toList()
-                    ..sort((a, b) {
-                      final da = a.dataCriacao;
-                      final db = b.dataCriacao;
-                      if (da == null && db == null) return 0;
-                      if (da == null) return 1;
-                      if (db == null) return -1;
-                      return db.compareTo(da);
-                    });
+              final ocorrencias = (ocorrenciasSnap.data ?? const [])
+                  .where((o) => !o.anonima)
+                  .toList()
+                ..sort((a, b) {
+                  final da = a.dataCriacao;
+                  final db = b.dataCriacao;
+                  if (da == null && db == null) return 0;
+                  if (da == null) return 1;
+                  if (db == null) return -1;
+                  return db.compareTo(da);
+                });
 
               return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
@@ -283,9 +281,8 @@ class _SocialBarState extends State<_SocialBar> {
                     return SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _saving
-                            ? null
-                            : () => _toggleFollow(seguindo),
+                        onPressed:
+                            _saving ? null : () => _toggleFollow(seguindo),
                         icon: Icon(
                           seguindo
                               ? Icons.person_remove_outlined
@@ -297,9 +294,8 @@ class _SocialBarState extends State<_SocialBar> {
                           backgroundColor: seguindo
                               ? context.pal.surfaceAlt
                               : AppColors.successStrong,
-                          foregroundColor: seguindo
-                              ? context.pal.ink
-                              : Colors.white,
+                          foregroundColor:
+                              seguindo ? context.pal.ink : Colors.white,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
@@ -367,7 +363,8 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final resolvidas = ocorrencias
-        .where((o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
+        .where(
+            (o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
         .length;
     final verificadas = ocorrencias.where((o) => o.verificada).length;
 
@@ -593,7 +590,8 @@ class _ContribuicaoCard extends StatelessWidget {
     }
 
     final resolvidas = ocorrencias
-        .where((o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
+        .where(
+            (o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
         .length;
     final taxaResolucao = ocorrencias.isEmpty
         ? 0

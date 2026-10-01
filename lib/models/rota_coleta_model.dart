@@ -120,13 +120,13 @@ class RotaColetaModel {
       pontos: pontosRaw == null
           ? const []
           : pontosRaw
-                .map(
-                  (p) => LatLng(
-                    (p['lat'] as num).toDouble(),
-                    (p['lng'] as num).toDouble(),
-                  ),
-                )
-                .toList(),
+              .map(
+                (p) => LatLng(
+                  (p['lat'] as num).toDouble(),
+                  (p['lng'] as num).toDouble(),
+                ),
+              )
+              .toList(),
     );
   }
 

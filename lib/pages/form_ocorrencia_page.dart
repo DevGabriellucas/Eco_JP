@@ -13,6 +13,7 @@ import '../services/cloudinary_service.dart';
 import '../services/rate_limiter.dart';
 import '../services/usuario_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/cloudinary_image.dart';
 import 'form_ocorrencia/controllers/location_controller.dart';
 import 'form_ocorrencia/controllers/media_controller.dart';
 import 'form_ocorrencia/widgets/dashed_border_painter.dart';
@@ -62,6 +63,17 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
   String? _statusEnvio;
   int _uploadAtual = 0;
   int _uploadTotal = 0;
+
+  // Sobrevivem entre tentativas de envio. O ID é gerado uma vez: se a
+  // tentativa anterior chegou ao servidor, a nova não duplica a denúncia. As
+  // URLs evitam subir de novo a mesma mídia (e deixar órfãos no Cloudinary);
+  // a chave é a própria lista de bytes, que muda se o usuário trocar o arquivo.
+  String? _idOcorrencia;
+  final Map<Uint8List, String> _urlsEnviadas = Map.identity();
+
+  /// 3 casas decimais ≈ 110 m em João Pessoa.
+  static double _arredondarCoordenada(double v) =>
+      (v * 1000).roundToDouble() / 1000;
 
   static const _categorias = [
     'Lixo',
@@ -379,6 +391,11 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
         return;
       }
 
+      // Antes dos uploads: um envio recusado pelo limite depois de subir as
+      // fotos deixaria a mídia órfã no Cloudinary.
+      _ocorrenciaRepository.verificarLimiteDenuncia();
+      final id = _idOcorrencia ??= _ocorrenciaRepository.novoIdOcorrencia();
+
       final urls = <String>[];
 
       for (int i = 0; i < 3; i++) {
@@ -391,7 +408,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                   'Enviando foto ${urls.length + 1} de $_uploadTotal...';
             });
           }
-          final url = await _cloudinaryService.uploadImage(
+          final url =
+              _urlsEnviadas[bytes] ??= await _cloudinaryService.uploadImage(
             bytes: bytes,
             fileName: img.name,
           );
@@ -408,7 +426,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
       String? videoUrl;
       if (_media.video != null && _media.videoBytes != null) {
         if (mounted) setState(() => _statusEnvio = 'Enviando vídeo...');
-        videoUrl = await _cloudinaryService.uploadVideo(
+        videoUrl = _urlsEnviadas[_media.videoBytes!] ??=
+            await _cloudinaryService.uploadVideo(
           bytes: _media.videoBytes!,
           fileName: _media.video!.name,
         );
@@ -424,33 +443,45 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
         titulo: _tituloCtrl.text.trim(),
         descricao: _descricaoCtrl.text.trim(),
         localizacao: _location.endereco,
-        latitude: lat!,
-        longitude: lon!,
+        // Anônima: coordenadas arredondadas (~100 m). Com "usar localização
+        // atual", a posição exata do denunciante ficava legível para
+        // qualquer usuário e podia identificá-lo (a casa dele, por exemplo).
+        latitude: _anonima ? _arredondarCoordenada(lat!) : lat!,
+        longitude: _anonima ? _arredondarCoordenada(lon!) : lon!,
+        bairro: _location.bairro,
         tipoLixo: categoria,
         usuarioId: uid,
         videoUrl: videoUrl,
-        usuarioNome: _anonima
+        // As regras exigem que o nome público seja o `nome` do perfil. Nunca
+        // cair no prefixo do e-mail: ele viraria dado público da pessoa.
+        usuarioNome: _anonima || perfil == null || perfil.nome.trim().isEmpty
             ? null
-            : (perfil?.nome.trim().isNotEmpty == true
-                  ? perfil!.nome
-                  : (_authService.currentUser?.displayName ??
-                        _authService.currentUser?.email?.split('@').first)),
+            : perfil.nome,
         usuarioFotoUrl: _anonima
             ? null
-            : (perfil?.fotoUrl ?? _authService.currentUser?.photoURL),
+            : fotoPublicaPermitida(
+                perfil?.fotoUrl ?? _authService.currentUser?.photoURL,
+              ),
         imagemUrl: urls.isNotEmpty ? urls.first : null,
         imagensUrls: urls,
         anonima: _anonima,
       );
 
-      await _ocorrenciaRepository.cadastrarOcorrencia(ocorrencia);
+      final confirmada = await _ocorrenciaRepository.cadastrarOcorrencia(
+        ocorrencia,
+        id: id,
+      );
       if (!mounted) return;
 
       setState(() {
         _enviado = true;
         _statusEnvio = 'Denúncia enviada.';
       });
-      _snack('Ocorrência registrada com sucesso!');
+      _snack(
+        confirmada
+            ? 'Ocorrência registrada com sucesso!'
+            : 'Sem conexão: a denúncia foi salva e será publicada quando a internet voltar.',
+      );
       await Future.delayed(const Duration(seconds: 1));
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -697,7 +728,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                   label: 'Remover vídeo',
                   child: GestureDetector(
                     onTap: _enviando ? null : _media.removerVideo,
-                    child: const Icon(Icons.close, size: 18, color: _Cores.hint),
+                    child:
+                        const Icon(Icons.close, size: 18, color: _Cores.hint),
                   ),
                 ),
               ],
@@ -710,15 +742,14 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
 
   Widget _mainPhotoArea() {
     final pal = context.pal;
-    final bytes = _media.totalFotos > 0
-        ? _media.imagensBytes[_media.fotoAtivaIdx]
-        : null;
+    final bytes =
+        _media.totalFotos > 0 ? _media.imagensBytes[_media.fotoAtivaIdx] : null;
     return GestureDetector(
       onTap: _enviando
           ? null
           : bytes == null
-          ? _adicionarFoto
-          : () => _abrirVisualizadorFotos(_media.fotoAtivaIdx),
+              ? _adicionarFoto
+              : () => _abrirVisualizadorFotos(_media.fotoAtivaIdx),
       child: SizedBox(
         height: 190,
         width: double.infinity,
@@ -736,7 +767,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                   child: const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.camera_alt_outlined, size: 40, color: _Cores.hint),
+                      Icon(Icons.camera_alt_outlined,
+                          size: 40, color: _Cores.hint),
                       SizedBox(height: 8),
                       Text(
                         'Tirar Foto',
@@ -845,9 +877,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: _media.fotoAtivaIdx == i
-                        ? pal.ink
-                        : Colors.transparent,
+                    color:
+                        _media.fotoAtivaIdx == i ? pal.ink : Colors.transparent,
                     width: 2,
                   ),
                 ),
@@ -1156,9 +1187,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: (_location.loadingLoc || _enviando)
-            ? null
-            : _usarLocalizacaoAtual,
+        onPressed:
+            (_location.loadingLoc || _enviando) ? null : _usarLocalizacaoAtual,
         style: OutlinedButton.styleFrom(
           foregroundColor: pal.ink,
           side: BorderSide(color: pal.ink),
@@ -1299,49 +1329,50 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   Widget _label(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(
-      text,
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-        color: context.pal.ink,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.2,
+            color: context.pal.ink,
+          ),
+        ),
+      );
 
   InputDecoration _dec(String hint) => InputDecoration(
-    hintText: hint.isNotEmpty ? hint : null,
-    hintStyle: const TextStyle(color: _Cores.hint, fontSize: 14),
-    filled: false,
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: context.pal.ink),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: context.pal.ink, width: 1.5),
-    ),
-    errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: _Cores.error),
-    ),
-    focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: _Cores.error, width: 1.5),
-    ),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-  );
+        hintText: hint.isNotEmpty ? hint : null,
+        hintStyle: const TextStyle(color: _Cores.hint, fontSize: 14),
+        filled: false,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: context.pal.ink),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: context.pal.ink, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: _Cores.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: _Cores.error, width: 1.5),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      );
 
   Widget _pill() => Container(
-    width: 40,
-    height: 4,
-    decoration: BoxDecoration(
-      color: _Cores.hint,
-      borderRadius: BorderRadius.circular(2),
-    ),
-  );
+        width: 40,
+        height: 4,
+        decoration: BoxDecoration(
+          color: _Cores.hint,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
 
   Widget _resumoItem(String label, String value, {bool last = false}) {
     return Padding(

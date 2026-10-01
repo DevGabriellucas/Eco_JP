@@ -10,6 +10,8 @@ import '../../services/cloudinary_service.dart';
 import '../../services/usuario_service.dart';
 import '../../utils/cloudinary_image.dart';
 import '../../utils/imagem_cacheada.dart';
+import '../../utils/imagem_privacidade.dart';
+import '../../utils/texto.dart';
 import '../../theme/app_theme.dart';
 
 class _Cores {
@@ -67,7 +69,20 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
       maxWidth: 800,
     );
     if (!mounted || img == null) return;
-    final bytes = await img.readAsBytes();
+    // A foto de perfil é pública: sem limpar o EXIF, o GPS de onde ela foi
+    // tirada (geralmente a casa da pessoa) ficaria no arquivo enviado.
+    final Uint8List bytes;
+    try {
+      bytes = await removerMetadadosImagem(await img.readAsBytes());
+    } on ImagemInvalidaException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível processar esta foto. Tente outra.'),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _novaFoto = img;
@@ -157,25 +172,25 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
 
     setState(() => _salvando = true);
     try {
-      // Renomear não passava por nenhuma checagem de unicidade: era possível
-      // editar o perfil e assumir o nome de outra conta, contornando a
-      // validação que só existia no cadastro. A troca move a reserva e falha
-      // sem alterar nada se o nome novo já for de outra conta.
-      final nomeNovo = _nomeCtrl.text.trim();
-      if (UsuarioService.idDoNome(nomeNovo) == null) {
+      // Mesmo texto que salvarPerfil grava: as regras exigem que o nome nas
+      // denúncias e comentários seja idêntico ao do perfil.
+      final uid = widget.perfilAtual.uid;
+      final nomeAntigo = widget.perfilAtual.nome;
+      final nomeNovo = sanitizarLinhaUnica(_nomeCtrl.text);
+      final slugNovo = UsuarioService.idDoNome(nomeNovo);
+      if (slugNovo == null) {
         throw const _NomeInvalido('Use ao menos uma letra ou número no nome');
       }
-      final trocou = await _usuarioService.trocarNome(
-        uid: widget.perfilAtual.uid,
-        nomeAntigo: widget.perfilAtual.nome,
-        nomeNovo: nomeNovo,
-      );
-      if (!trocou) {
-        throw const _NomeInvalido('Esse nome já está em uso. Escolha outro.');
+      final trocaDeNome = slugNovo != UsuarioService.idDoNome(nomeAntigo);
+      const emUso = _NomeInvalido('Esse nome já está em uso. Escolha outro.');
+      // Checagem antecipada só para não subir a foto à toa; a garantia real
+      // é o reservarNome abaixo.
+      if (trocaDeNome &&
+          await _usuarioService.nomeEmUso(nomeNovo, ignorarUid: uid)) {
+        throw emUso;
       }
 
       String? fotoUrl = widget.perfilAtual.fotoUrl;
-
       if (_novaFotoBytes != null && _novaFoto != null) {
         fotoUrl = await _cloudinaryService.uploadImage(
           bytes: _novaFotoBytes!,
@@ -190,11 +205,29 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
         fotoUrl: fotoUrl,
       );
 
-      await _usuarioService.salvarPerfil(atualizado);
+      // Ordem: reserva o nome novo → salva o perfil → só então libera o
+      // antigo. Antes a reserva era movida logo no início; se o upload ou o
+      // salvarPerfil falhassem, o nome antigo (ainda em uso) já estava livre
+      // para outra conta registrar.
+      if (trocaDeNome && !await _usuarioService.reservarNome(nomeNovo, uid)) {
+        throw emUso;
+      }
+      try {
+        await _usuarioService.salvarPerfil(atualizado);
+      } catch (_) {
+        if (trocaDeNome) {
+          await _usuarioService.liberarNome(nomeNovo, uid).catchError((_) {});
+        }
+        rethrow;
+      }
+      if (trocaDeNome) {
+        await _usuarioService.liberarNome(nomeAntigo, uid).catchError((_) {});
+      }
+
       await _ocorrenciaRepository.atualizarPerfilNasOcorrencias(
-        atualizado.uid,
+        uid,
         atualizado.nome,
-        atualizado.fotoUrl,
+        fotoPublicaPermitida(atualizado.fotoUrl),
       );
       if (!mounted) return;
 
@@ -320,8 +353,7 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
   Widget _avatarEditavel() {
     final pal = context.pal;
     final temFotoNova = _novaFotoBytes != null;
-    final temFotoAtual =
-        widget.perfilAtual.fotoUrl != null &&
+    final temFotoAtual = widget.perfilAtual.fotoUrl != null &&
         widget.perfilAtual.fotoUrl!.isNotEmpty;
 
     return GestureDetector(
@@ -334,10 +366,11 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
             backgroundImage: temFotoNova
                 ? MemoryImage(_novaFotoBytes!)
                 : temFotoAtual
-                ? imagemCacheada(
-                    cloudinaryAvatar(widget.perfilAtual.fotoUrl!, radius: 52),
-                  )
-                : null,
+                    ? imagemCacheada(
+                        cloudinaryAvatar(widget.perfilAtual.fotoUrl!,
+                            radius: 52),
+                      )
+                    : null,
             child: (!temFotoNova && !temFotoAtual)
                 ? Text(
                     widget.perfilAtual.iniciais,
@@ -364,13 +397,13 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
   }
 
   Widget _label(String text) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 14,
-      fontWeight: FontWeight.w600,
-      color: context.pal.ink,
-    ),
-  );
+        text,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: context.pal.ink,
+        ),
+      );
 
   Widget _input({
     required TextEditingController controller,

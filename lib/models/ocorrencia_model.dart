@@ -19,6 +19,10 @@ class OcorrenciaModel {
   final List<String> imagensUrls;
   final String? videoUrl;
 
+  /// Bairro estruturado, gravado na criação a partir do provedor de
+  /// endereço. Denúncias antigas não têm (o ranking cai na heurística).
+  final String? bairro;
+
   // Proteção do denunciante (Fase 2). Quando true, usuarioNome/usuarioFotoUrl
   // nunca são preenchidos e a UI exibe "Denunciante anônimo" para todos,
   // inclusive autoridade. usuarioId permanece (necessário para regras de
@@ -51,6 +55,21 @@ class OcorrenciaModel {
   //   StatusOficial.resolvida     → confirmada e tratada pelo órgão
   // 'confirmada' é representado por verificada == true && statusOficial == null.
   StatusOficial? statusOficial;
+
+  /// Estágio do ciclo oficial, derivado de [verificada] + [statusOficial].
+  EstagioOficial get estagio =>
+      EstagioOficialInfo.calcular(verificada, statusOficial);
+
+  /// Status exibido nos filtros, gráficos e selos. Derivado do ciclo
+  /// oficial: o campo persistido [status] é sempre 'Pendente' (as regras só
+  /// aceitam esse valor na criação e nenhuma regra de update o altera), então
+  /// filtrar por ele deixava "Resolvido" sempre vazio e a pizza em 100%.
+  OccurrenceStatus get statusAtual => switch (estagio) {
+        EstagioOficial.resolvida => OccurrenceStatus.resolved,
+        EstagioOficial.naoConfirmada => OccurrenceStatus.unresolved,
+        _ => OccurrenceStatus.inProgress,
+      };
+
   DateTime? encaminhadaEm;
   DateTime? resolvidaEm;
   bool fixada;
@@ -92,8 +111,9 @@ class OcorrenciaModel {
     this.fixada = false,
     this.anonima = false,
     this.oculto = false,
-  }) : likedBy = likedBy ?? [],
-       dislikedBy = dislikedBy ?? [];
+    this.bairro,
+  })  : likedBy = likedBy ?? [],
+        dislikedBy = dislikedBy ?? [];
 
   Map<String, dynamic> toMap() {
     return {
@@ -104,6 +124,9 @@ class OcorrenciaModel {
       'longitude': longitude,
       'tipoLixo': tipoLixo,
       'status': status,
+      // Sempre false na criação: as consultas públicas filtram
+      // oculto == false (as regras só liberam listagem assim).
+      'oculto': false,
       'dataCriacao': dataCriacao ?? FieldValue.serverTimestamp(),
       // Denúncia anônima: o UID real não vai no documento público (protege
       // o denunciante de correlação entre denúncias). Fica só na subcoleção
@@ -127,6 +150,7 @@ class OcorrenciaModel {
       // evita migração retroativa de dados quando o app expandir para outros
       // municípios da Paraíba — dados novos já nascem particionados.
       'municipioId': 'joao-pessoa',
+      if (bairro != null && bairro!.trim().isNotEmpty) 'bairro': bairro,
     };
   }
 
@@ -168,7 +192,8 @@ class OcorrenciaModel {
       verificadaEm: map['verificadaEm'] != null
           ? (map['verificadaEm'] as Timestamp).toDate()
           : null,
-      statusOficial: StatusOficialInfo.fromString(map['statusOficial'] as String?),
+      statusOficial:
+          StatusOficialInfo.fromString(map['statusOficial'] as String?),
       encaminhadaEm: map['encaminhadaEm'] != null
           ? (map['encaminhadaEm'] as Timestamp).toDate()
           : null,
@@ -178,6 +203,7 @@ class OcorrenciaModel {
       fixada: map['fixada'] == true,
       anonima: map['anonima'] == true,
       oculto: map['oculto'] == true,
+      bairro: map['bairro'] as String?,
     );
   }
 }

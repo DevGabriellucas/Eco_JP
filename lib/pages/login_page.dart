@@ -148,6 +148,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               .read(authServiceProvider)
                               .recuperarSenha(email);
                           if (!ctx.mounted) return;
+                          // Erro (e-mail inválido, sem rede): mantém o diálogo
+                          // aberto com o texto digitado, para corrigir e
+                          // tentar de novo — antes fechava e perdia tudo.
+                          if (!result.success) {
+                            setDialogState(() => enviando = false);
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text(result.message ?? '')),
+                            );
+                            return;
+                          }
                           // Fecha o teclado antes de fechar o diálogo: do
                           // contrário o fechamento do teclado (que redimensiona
                           // a tela) corre com o pop do Navigator e o app
@@ -259,11 +269,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            GestureDetector(
-                              onTap: () {
-                                context.go(Routes.inicial);
-                              },
-                              child: SvgPicture.asset(
+                            // IconButton: alvo de 48 dp e rótulo "Voltar" para leitores
+                            // de tela (o GestureDetector com SVG não tinha nenhum).
+                            IconButton(
+                              tooltip: 'Voltar',
+                              padding: EdgeInsets.zero,
+                              iconSize: 44,
+                              onPressed: () => context.go(Routes.inicial),
+                              icon: SvgPicture.asset(
                                 'assets/icons/seta.svg',
                                 width: 44,
                                 height: 44,
@@ -341,14 +354,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     width: double.infinity,
                                     height: 48,
                                     child: ElevatedButton(
-                                      onPressed: _isLoading
-                                          ? null
-                                          : _handleLogin,
+                                      // Desabilitado também durante o login
+                                      // Google (dois logins em paralelo).
+                                      onPressed:
+                                          (_isLoading || _isLoadingGoogle)
+                                              ? null
+                                              : _handleLogin,
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: pal.ink,
                                         foregroundColor: pal.surface,
-                                        disabledBackgroundColor: pal.ink
-                                            .withValues(alpha: 0.6),
+                                        disabledBackgroundColor:
+                                            pal.ink.withValues(alpha: 0.6),
                                         elevation: 0,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
@@ -398,8 +414,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       child: OutlinedButton(
                                         onPressed:
                                             (_isLoading || _isLoadingGoogle)
-                                            ? null
-                                            : _handleLoginGoogle,
+                                                ? null
+                                                : _handleLoginGoogle,
                                         style: OutlinedButton.styleFrom(
                                           backgroundColor: pal.surface,
                                           side: BorderSide(
@@ -423,9 +439,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                                 height: 20,
                                                 child:
                                                     CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: pal.ink,
-                                                    ),
+                                                  strokeWidth: 2,
+                                                  color: pal.ink,
+                                                ),
                                               )
                                             : Row(
                                                 mainAxisSize: MainAxisSize.min,

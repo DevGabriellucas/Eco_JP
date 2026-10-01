@@ -31,8 +31,6 @@ dependencies:
   image: ^4.1.1
   firebase_analytics: ^12.5.0
   google_sign_in: ^6.3.0
-  google_generative_ai: ^0.4.1
-  geocoding: ^5.0.0
   pdf: ^3.10.5
   printing: ^5.11.0
   google_fonts: ^6.2.0
@@ -52,3 +50,8 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    # Cronograma de coleta (RotaColetaService). Sem esta linha o arquivo não
+    # entra no build e o guia de coleta aparecia vazio sem aviso.
+    - assets/data/
+    # Roboto (Apache 2.0) para o PDF do relatório (RelatorioService).
+    - assets/fonts/

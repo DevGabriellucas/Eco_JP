@@ -12,9 +12,8 @@ import 'analytics_service.dart';
 class ModeracaoService {
   static final ModeracaoService instance = ModeracaoService();
 
-  final CollectionReference<Map<String, dynamic>> _ref = FirebaseFirestore
-      .instance
-      .collection('denuncias_moderacao');
+  final CollectionReference<Map<String, dynamic>> _ref =
+      FirebaseFirestore.instance.collection('denuncias_moderacao');
 
   final OcorrenciaRepository _ocorrenciaRepository = OcorrenciaRepository();
   final ComentarioRepository _comentarioRepository = ComentarioRepository();

@@ -88,9 +88,9 @@ class MarkerIconFactory {
     tp.paint(canvas, centro - Offset(tp.width / 2, tp.height / 2));
 
     final imagem = await recorder.endRecording().toImage(
-      tamanho.toInt(),
-      tamanho.toInt(),
-    );
+          tamanho.toInt(),
+          tamanho.toInt(),
+        );
     final bytes = await imagem.toByteData(format: ui.ImageByteFormat.png);
     final Uint8List png = bytes!.buffer.asUint8List();
 

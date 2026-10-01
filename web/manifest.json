@@ -1,11 +1,11 @@
 {
-    "name": "eco_jp",
-    "short_name": "eco_jp",
+    "name": "EcoJP",
+    "short_name": "EcoJP",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "EcoJP — denúncias ambientais e urbanas em João Pessoa.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

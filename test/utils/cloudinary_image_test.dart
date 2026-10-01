@@ -101,4 +101,49 @@ void main() {
       expect(cacheLarguraPx(5000, 3), 2000);
     });
   });
+
+  group('vídeo do Cloudinary', () {
+    const video =
+        'https://res.cloudinary.com/dmdghbgac/video/upload/v123/eco/clip.mp4';
+
+    test('miniatura do primeiro quadro em JPG', () {
+      expect(
+        cloudinaryVideoThumbnail(video),
+        'https://res.cloudinary.com/dmdghbgac/video/upload/'
+        'so_0,f_jpg,q_auto,w_720/v123/eco/clip.jpg',
+      );
+    });
+
+    test('versão otimizada para reprodução é idempotente', () {
+      final otimizada = cloudinaryVideoOtimizado(video);
+      expect(otimizada,
+          contains('/video/upload/q_auto,vc_auto,c_limit,w_720/v123/'));
+      expect(cloudinaryVideoOtimizado(otimizada), otimizada);
+    });
+
+    test('URL de fora do Cloudinary não é alterada', () {
+      expect(cloudinaryVideoThumbnail('https://x.com/a.mp4'), isNull);
+      expect(cloudinaryVideoOtimizado('https://x.com/a.mp4'),
+          'https://x.com/a.mp4');
+    });
+  });
+
+  group('fotoPublicaPermitida (espelha isOptionalPublicPhoto)', () {
+    test('aceita Cloudinary do projeto e avatar do Google', () {
+      const c = 'https://res.cloudinary.com/dmdghbgac/image/upload/v1/a.jpg';
+      const g = 'https://lh3.googleusercontent.com/a/xyz=s96-c';
+      expect(fotoPublicaPermitida(c), c);
+      expect(fotoPublicaPermitida(g), g);
+    });
+
+    test('recusa outros hosts e outro cloud do Cloudinary', () {
+      expect(fotoPublicaPermitida('https://evil.example/p.png'), isNull);
+      expect(
+        fotoPublicaPermitida(
+            'https://res.cloudinary.com/outro/image/upload/a.jpg'),
+        isNull,
+      );
+      expect(fotoPublicaPermitida(null), isNull);
+    });
+  });
 }

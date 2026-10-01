@@ -3,15 +3,17 @@
   "version": "1.0.0",
   "description": "Testes para regras de Firestore do EcoJP",
   "scripts": {
-    "test": "jest",
-    "test:watch": "jest --watch",
+    "test": "npm --prefix test/firestore_rules test",
     "emulator": "firebase emulators:start",
     "emulator:clean": "firebase emulators:start --import ./firestore_export",
     "loadtest:seed": "node loadtest/seed.mjs",
     "loadtest:curtidas": "k6 run loadtest/k6/curtidas.js",
     "loadtest:denuncias": "k6 run loadtest/k6/denuncias.js",
     "loadtest:feed": "k6 run loadtest/k6/feed.js",
-    "backfill:nomes": "node scripts/backfill_nomes_reservados.mjs"
+    "loadtest:pico": "k6 run loadtest/k6/pico.js",
+    "loadtest:corpus": "node loadtest/corpus.mjs",
+    "backfill:nomes": "node scripts/backfill_nomes_reservados.mjs",
+    "backfill:oculto": "node scripts/backfill_oculto.mjs"
   },
   "keywords": [],
   "author": "",

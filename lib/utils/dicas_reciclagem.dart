@@ -47,8 +47,7 @@ const List<DicaReciclagem> dicasReciclagem = [
     titulo: 'Vidro',
     icone: Icons.wine_bar_outlined,
     cor: Color(0xFF22C55E),
-    descarte:
-        'Enxágue antes de descartar. Embale cacos em jornal grosso para '
+    descarte: 'Enxágue antes de descartar. Embale cacos em jornal grosso para '
         'evitar acidentes.',
     exemplos: ['Garrafas', 'Potes', 'Frascos'],
   ),
@@ -72,8 +71,7 @@ const List<DicaReciclagem> dicasReciclagem = [
     titulo: 'Eletrônico',
     icone: Icons.devices_other_outlined,
     cor: Color(0xFF8B5CF6),
-    descarte:
-        'Nunca jogue no lixo comum! Leve a pontos de coleta especiais — '
+    descarte: 'Nunca jogue no lixo comum! Leve a pontos de coleta especiais — '
         'contêm metais tóxicos.',
     exemplos: ['Pilhas', 'Baterias', 'Celulares', 'Cabos'],
   ),

@@ -20,8 +20,15 @@ class _MapDisplayState extends State<MapDisplay> {
   final LocationService locationService = LocationService();
 
   GoogleMapController? _mapController;
-  CameraPosition? cameraPosition;
+  // Abre já em João Pessoa: antes o mapa ficava num spinner até o GPS
+  // responder (para sempre em ambiente fechado ou sem permissão).
+  CameraPosition? cameraPosition = _cameraPadrao;
   bool _jaEnquadrou = false;
+
+  static const _cameraPadrao = CameraPosition(
+    target: LatLng(-7.1195, -34.8450),
+    zoom: 12,
+  );
 
   @override
   void initState() {
@@ -39,19 +46,21 @@ class _MapDisplayState extends State<MapDisplay> {
   Future<void> loadLocation() async {
     final result = await locationService.getCurrentLatLng();
 
+    if (!mounted) return;
     switch (result) {
       case LatLngSucess(:final latLng):
-        setState(() {
-          cameraPosition = CameraPosition(target: latLng, zoom: 15);
-        });
+        final mapa = _mapController;
+        if (mapa != null) {
+          await mapa.animateCamera(CameraUpdate.newLatLngZoom(latLng, 15));
+        } else {
+          setState(() {
+            cameraPosition = CameraPosition(target: latLng, zoom: 15);
+          });
+        }
 
       case LatLngFailure():
-        setState(() {
-          cameraPosition = const CameraPosition(
-            target: LatLng(-7.1195, -34.8450),
-            zoom: 12,
-          );
-        });
+        // Continua na câmera padrão de João Pessoa.
+        break;
     }
   }
 
@@ -120,7 +129,8 @@ class _MapDisplayState extends State<MapDisplay> {
               : widget.controller.listaMarcadores,
           heatmaps: widget.controller.listaHeatmap,
           clusterManagers: {
-            const ClusterManager(clusterManagerId: MapController.clusterManagerId),
+            const ClusterManager(
+                clusterManagerId: MapController.clusterManagerId),
           },
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
@@ -158,9 +168,8 @@ class _MapDisplayState extends State<MapDisplay> {
                 backgroundColor: widget.controller.soPendentes
                     ? AppColors.primary
                     : pal.surface,
-                foregroundColor: widget.controller.soPendentes
-                    ? Colors.white
-                    : pal.ink,
+                foregroundColor:
+                    widget.controller.soPendentes ? Colors.white : pal.ink,
                 elevation: 3,
                 tooltip: 'Só pendentes de verificação',
                 onPressed: () =>
@@ -173,9 +182,8 @@ class _MapDisplayState extends State<MapDisplay> {
                 backgroundColor: widget.controller.heatmapAtivo
                     ? AppColors.danger
                     : pal.surface,
-                foregroundColor: widget.controller.heatmapAtivo
-                    ? Colors.white
-                    : pal.ink,
+                foregroundColor:
+                    widget.controller.heatmapAtivo ? Colors.white : pal.ink,
                 elevation: 3,
                 tooltip: 'Mapa de calor (regiões mais afetadas)',
                 onPressed: () =>

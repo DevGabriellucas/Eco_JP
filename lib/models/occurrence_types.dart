@@ -272,7 +272,8 @@ enum EstagioOficial {
 
 extension EstagioOficialInfo on EstagioOficial {
   /// Deriva o estágio a partir dos campos persistidos da ocorrência.
-  static EstagioOficial calcular(bool verificada, StatusOficial? statusOficial) {
+  static EstagioOficial calcular(
+      bool verificada, StatusOficial? statusOficial) {
     if (verificada) {
       if (statusOficial == StatusOficial.resolvida) {
         return EstagioOficial.resolvida;

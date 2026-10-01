@@ -102,10 +102,11 @@ function payload(indice) {
     likedBy: [],
     dislikedBy: [],
     fixada: false,
+    oculto: false,
   };
 }
 
-function enviar(usuario, indice) {
+function enviar(usuario, indice, { contar = true } = {}) {
   const dados = payload(indice);
   dados.usuarioId = usuario.uid;
   dados.usuarioNome = `Carga ${indice % usuarios.length}`;
@@ -116,8 +117,12 @@ function enviar(usuario, indice) {
   );
   latenciaRules.add(Date.now() - inicio);
 
-  if (resposta.status === 200) criadas.add(1);
-  else rejeitadas.add(1);
+  // A rajada de spam tem métricas próprias: somada aqui, ela inflava a
+  // vazão "normal" de criação.
+  if (contar) {
+    if (resposta.status === 200) criadas.add(1);
+    else rejeitadas.add(1);
+  }
 
   return resposta;
 }
@@ -136,7 +141,7 @@ export function criarDenuncia() {
 export function spam() {
   // Sempre o MESMO usuário, muito mais rápido que o intervalo de 30s do app.
   const usuario = usuarios[0];
-  const resposta = enviar(usuario, exec.scenario.iterationInTest);
+  const resposta = enviar(usuario, exec.scenario.iterationInTest, { contar: false });
 
   if (resposta.status === 200) spamAceito.add(1);
 

@@ -55,6 +55,13 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
   final _notificacaoService = NotificacaoService();
 
   OcorrenciaRepository get _service => ref.read(ocorrenciaRepositoryProvider);
+  // Criada uma vez: uma stream nova a cada build fazia o StreamBuilder voltar
+  // a "waiting" (spinner) e reabrir o listener a cada rebuild.
+  late final Stream<List<ComentarioModel>> _comentariosStream =
+      _comentarioRepository.listarComentarios(widget.occurrence.id);
+  late final Stream<List<({String status, String? por, DateTime? data})>>
+      _historicoStream = _service.listarHistorico(widget.occurrence.id);
+
   ComentarioRepository get _comentarioRepository =>
       ref.read(comentarioRepositoryProvider);
 
@@ -109,21 +116,12 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
 
     setState(() => _processandoVerif = true);
 
-    // Nome exibido no selo: usa o nome do perfil da autoridade.
-    String nome = 'Autoridade';
-    if (novo) {
-      final perfil = await _usuarioService.carregarPerfil(uid);
-      nome = perfil?.nome.trim().isNotEmpty == true
-          ? perfil!.nome.trim()
-          : (_authService.currentUser?.displayName ?? 'Autoridade');
-    }
-
     try {
-      await _service.definirVerificacao(
+      // O repositório usa o nome do perfil da autoridade (exigido pelas
+      // regras) e devolve o que foi gravado no selo.
+      final nome = await _service.definirVerificacao(
         widget.occurrence.id,
         verificar: novo,
-        nomeAutoridade: nome,
-        autoridadeUid: uid,
       );
       if (!mounted) return;
       setState(() {
@@ -147,34 +145,49 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
     }
   }
 
-  /// Define o status de triagem (emAnalise / naoConfirmada / null = reverter).
-  Future<void> _handleStatusOficial(StatusOficial? novoStatus) async {
+  /// Avança o ciclo oficial (em análise / não confirmada / encaminhada /
+  /// resolvida) e notifica o cidadão.
+  Future<void> _handleStatusOficial(StatusOficial novoStatus) async {
     if (_processandoVerif) return;
     setState(() => _processandoVerif = true);
 
-    // Nome da autoridade só é necessário quando vamos notificar o cidadão
-    // (não notificamos reversões — são correção interna, não avanço real).
-    String? nomeAutoridade;
-    if (novoStatus != null) {
-      final uid = _authService.currentUser?.uid;
-      if (uid != null) {
-        final perfil = await _usuarioService.carregarPerfil(uid);
-        nomeAutoridade = perfil?.nome.trim().isNotEmpty == true
-            ? perfil!.nome.trim()
-            : (_authService.currentUser?.displayName ?? 'Autoridade');
-      }
-    }
-
     try {
       await _service.definirStatusOficial(widget.occurrence.id, novoStatus);
+      final uid = _authService.currentUser?.uid;
+      final perfil =
+          uid == null ? null : await _usuarioService.carregarPerfil(uid);
       if (!mounted) return;
       setState(() {
         _statusOficial = novoStatus;
         _processandoVerif = false;
       });
-      if (novoStatus != null && nomeAutoridade != null) {
-        _notificarStatusOficial('status_${novoStatus.valor}', nomeAutoridade);
-      }
+      _notificarStatusOficial(
+        'status_${novoStatus.valor}',
+        perfil?.nome ?? 'Autoridade',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _processandoVerif = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível atualizar o status.')),
+      );
+    }
+  }
+
+  /// Desfaz o último passo do ciclo oficial. Correção interna: registra o
+  /// evento "revertida" e não notifica o cidadão.
+  Future<void> _reverterStatusOficial() async {
+    final atual = _statusOficial;
+    if (_processandoVerif || atual == null) return;
+    setState(() => _processandoVerif = true);
+    try {
+      await _service.reverterStatusOficial(widget.occurrence.id, atual: atual);
+      if (!mounted) return;
+      setState(() {
+        _statusOficial =
+            atual == StatusOficial.resolvida ? StatusOficial.encaminhada : null;
+        _processandoVerif = false;
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() => _processandoVerif = false);
@@ -247,8 +260,6 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
 
   Future<void> _handleLike() async {
     if (_uid.isEmpty) return;
-    final eu = _authService.currentUser;
-    final nome = eu?.displayName ?? eu?.email?.split('@').first;
     await reagirOcorrencia(
       context: context,
       ocorrencia: widget.occurrence,
@@ -256,15 +267,12 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
       isLike: true,
       ocorrenciaRepository: _service,
       notificacaoService: _notificacaoService,
-      nomeAutor: nome,
       onMudou: () => setState(_sincronizarComOcorrencia),
     );
   }
 
   Future<void> _handleDislike() async {
     if (_uid.isEmpty) return;
-    final eu = _authService.currentUser;
-    final nome = eu?.displayName ?? eu?.email?.split('@').first;
     await reagirOcorrencia(
       context: context,
       ocorrencia: widget.occurrence,
@@ -272,7 +280,6 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
       isLike: false,
       ocorrenciaRepository: _service,
       notificacaoService: _notificacaoService,
-      nomeAutor: nome,
       onMudou: () => setState(_sincronizarComOcorrencia),
     );
   }
@@ -299,7 +306,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
     final pal = context.pal;
     final o = widget.occurrence;
     final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
-    final statusEnum = OccurrenceStatusParser.fromString(o.status);
+    final statusEnum = o.statusAtual;
     final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
 
     return Scaffold(
@@ -461,7 +468,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                               ),
                               onResolver: () =>
                                   _handleStatusOficial(StatusOficial.resolvida),
-                              onReverter: () => _handleStatusOficial(null),
+                              onReverter: _reverterStatusOficial,
                             ),
                           ],
                           const SizedBox(height: 28),
@@ -476,16 +483,17 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          _StatusTimeline(occurrence: o, service: _service),
+                          _StatusTimeline(
+                            occurrence: o,
+                            historico: _historicoStream,
+                          ),
                           const SizedBox(height: 28),
 
                           // Seção de comentários: abre o mesmo sheet do feed
                           // (OccurrenceCommentsSheet), evitando reimplementar
                           // a lógica de adicionar/curtir/excluir aqui também.
                           StreamBuilder<List<ComentarioModel>>(
-                            stream: _comentarioRepository.listarComentarios(
-                              o.id,
-                            ),
+                            stream: _comentariosStream,
                             builder: (context, snap) {
                               final total = (snap.data ?? const [])
                                   .where((c) => !c.oculto)
@@ -741,7 +749,8 @@ class _ImageAreaState extends State<_ImageArea> {
                     ),
                   );
                 },
-                errorBuilder: (context, error, stackTrace) => _Placeholder(type: widget.type),
+                errorBuilder: (context, error, stackTrace) =>
+                    _Placeholder(type: widget.type),
               ),
             ),
           ),
@@ -840,33 +849,75 @@ class _VideoPlayerCard extends StatefulWidget {
 }
 
 class _VideoPlayerCardState extends State<_VideoPlayerCard> {
-  late final VideoPlayerController _controller;
+  // Só criado quando a pessoa toca em play. Antes o initialize() rodava no
+  // initState com a URL original (até 50 MB): cada visita ao detalhe baixava
+  // o vídeo e consumia banda do Cloudinary, mesmo sem ninguém assistir.
+  VideoPlayerController? _controller;
+  bool _carregando = false;
   bool _erro = false;
 
   @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize()
-          .then((_) {
-            if (mounted) setState(() {});
-          })
-          .catchError((_) {
-            if (mounted) setState(() => _erro = true);
-          });
-  }
-
-  @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
+  Future<void> _iniciar() async {
+    if (_carregando) return;
+    setState(() => _carregando = true);
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(cloudinaryVideoOtimizado(widget.url)),
+    );
+    try {
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      await controller.play();
+      setState(() {
+        _controller = controller;
+        _carregando = false;
+      });
+    } catch (_) {
+      await controller.dispose();
+      if (mounted) {
+        setState(() {
+          _carregando = false;
+          _erro = true;
+        });
+      }
+    }
+  }
+
   void _togglePlay() {
+    final c = _controller;
+    if (c == null) {
+      _iniciar();
+      return;
+    }
     setState(() {
-      _controller.value.isPlaying ? _controller.pause() : _controller.play();
+      c.value.isPlaying ? c.pause() : c.play();
     });
   }
+
+  Widget _botaoPlay({bool carregando = false}) => Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.45),
+          shape: BoxShape.circle,
+        ),
+        child: carregando
+            ? const Padding(
+                padding: EdgeInsets.all(14),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.play_arrow, color: Colors.white, size: 30),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -884,16 +935,32 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
       );
     }
 
-    if (!_controller.value.isInitialized) {
-      return Container(
-        height: 200,
-        width: double.infinity,
-        color: pal.surfaceAlt,
-        alignment: Alignment.center,
-        child: const SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2),
+    final controller = _controller;
+    if (controller == null) {
+      // Miniatura (primeiro quadro) até o play: uma imagem pequena em vez
+      // do vídeo inteiro.
+      final thumb = cloudinaryVideoThumbnail(widget.url);
+      return GestureDetector(
+        onTap: _togglePlay,
+        child: Container(
+          height: 200,
+          width: double.infinity,
+          color: pal.surfaceAlt,
+          alignment: Alignment.center,
+          child: Stack(
+            alignment: Alignment.center,
+            fit: StackFit.expand,
+            children: [
+              if (thumb != null)
+                Image.network(
+                  thumb,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, erro, stack) =>
+                      const SizedBox.shrink(),
+                ),
+              Center(child: _botaoPlay(carregando: _carregando)),
+            ],
+          ),
         ),
       );
     }
@@ -901,27 +968,15 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
     return GestureDetector(
       onTap: _togglePlay,
       child: AspectRatio(
-        aspectRatio: _controller.value.aspectRatio,
+        aspectRatio: controller.value.aspectRatio,
         child: Stack(
           alignment: Alignment.center,
           children: [
-            VideoPlayer(_controller),
+            VideoPlayer(controller),
             AnimatedOpacity(
-              opacity: _controller.value.isPlaying ? 0 : 1,
+              opacity: controller.value.isPlaying ? 0 : 1,
               duration: const Duration(milliseconds: 150),
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.play_arrow,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
+              child: _botaoPlay(),
             ),
           ],
         ),
@@ -1230,7 +1285,8 @@ class _PainelAutoridade extends StatelessWidget {
           child: SizedBox(
             width: 22,
             height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2, color: _Cores.green),
+            child:
+                CircularProgressIndicator(strokeWidth: 2, color: _Cores.green),
           ),
         ),
       );
@@ -1242,7 +1298,7 @@ class _PainelAutoridade extends StatelessWidget {
       if (statusOficial == StatusOficial.resolvida) {
         return _botaoTexto(
           label: 'Reverter para encaminhada',
-          onTap: onEncaminhar,
+          onTap: onReverter,
         );
       }
 
@@ -1401,8 +1457,8 @@ class _PainelAutoridade extends StatelessWidget {
 
 class _StatusTimeline extends StatelessWidget {
   final OcorrenciaModel occurrence;
-  final OcorrenciaRepository service;
-  const _StatusTimeline({required this.occurrence, required this.service});
+  final Stream<List<({String status, String? por, DateTime? data})>> historico;
+  const _StatusTimeline({required this.occurrence, required this.historico});
 
   String _fmt(DateTime? d) =>
       d == null ? '' : DateFormat('dd/MM/yyyy HH:mm').format(d);
@@ -1413,6 +1469,13 @@ class _StatusTimeline extends StatelessWidget {
     BuildContext context,
     String chave,
   ) {
+    if (chave == 'revertida') {
+      return (
+        icone: Icons.undo,
+        cor: context.pal.muted,
+        label: 'Status revertido pela autoridade',
+      );
+    }
     if (chave == 'verificada') {
       return (
         icone: Icons.verified,
@@ -1431,27 +1494,24 @@ class _StatusTimeline extends StatelessWidget {
   Widget build(BuildContext context) {
     final pal = context.pal;
     return StreamBuilder<List<({String status, String? por, DateTime? data})>>(
-      stream: service.listarHistorico(occurrence.id),
+      stream: historico,
       builder: (context, snap) {
         final eventos = snap.data ?? [];
-        final linhas =
-            <
-              ({
-                IconData icone,
-                Color cor,
-                String label,
-                String? por,
-                DateTime? data,
-              })
-            >[
-              (
-                icone: Icons.add_location_alt_outlined,
-                cor: context.pal.muted,
-                label: 'Registrada',
-                por: null,
-                data: occurrence.dataCriacao,
-              ),
-            ];
+        final linhas = <({
+          IconData icone,
+          Color cor,
+          String label,
+          String? por,
+          DateTime? data,
+        })>[
+          (
+            icone: Icons.add_location_alt_outlined,
+            cor: context.pal.muted,
+            label: 'Registrada',
+            por: null,
+            data: occurrence.dataCriacao,
+          ),
+        ];
         for (final e in eventos) {
           final est = _estiloEvento(context, e.status);
           linhas.add((

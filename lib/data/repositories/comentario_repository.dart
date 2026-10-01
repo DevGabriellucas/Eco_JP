@@ -28,23 +28,24 @@ class ComentarioRepository {
 
   String? get _currentUserId => _auth.currentUser?.uid;
 
+  /// Comentários visíveis ao público de [ocorrenciaId]. As regras só liberam
+  /// listagem filtrada por `oculto == false`.
+  Query<Map<String, dynamic>> _visiveis(String ocorrenciaId) => _ocorrenciasRef
+      .doc(ocorrenciaId)
+      .collection('comentarios')
+      .where('oculto', isEqualTo: false);
+
   // Quantidade de comentários via aggregation .count(): uma leitura de contagem
   // em vez de baixar todos os documentos. Pontual (não reativo) — o feed
   // recarrega ao abrir/reconstruir, suficiente para o contador.
   Future<int> contarComentarios(String ocorrenciaId) async {
-    final snap = await _ocorrenciasRef
-        .doc(ocorrenciaId)
-        .collection('comentarios')
-        .count()
-        .get();
+    final snap = await _visiveis(ocorrenciaId).count().get();
     return snap.count ?? 0;
   }
 
   Stream<List<ComentarioModel>> listarComentarios(String ocorrenciaId) {
     final uid = _currentUserId;
-    return _ocorrenciasRef
-        .doc(ocorrenciaId)
-        .collection('comentarios')
+    return _visiveis(ocorrenciaId)
         .orderBy('dataCriacao', descending: false)
         .snapshots()
         .map(
@@ -62,24 +63,43 @@ class ComentarioRepository {
 
   Stream<ComentarioModel?> observarUltimoComentario(String ocorrenciaId) {
     final uid = _currentUserId;
-    return _ocorrenciasRef
-        .doc(ocorrenciaId)
-        .collection('comentarios')
+    return _visiveis(ocorrenciaId)
         .orderBy('dataCriacao', descending: true)
         .limit(1)
         .snapshots()
         .map((snap) {
-          if (snap.docs.isEmpty) return null;
-          final doc = snap.docs.first;
-          return ComentarioModel.fromMap(
-            doc.data(),
-            doc.id,
-            currentUserId: uid,
-          );
-        });
+      if (snap.docs.isEmpty) return null;
+      final doc = snap.docs.first;
+      return ComentarioModel.fromMap(
+        doc.data(),
+        doc.id,
+        currentUserId: uid,
+      );
+    });
   }
 
-  Future<void> adicionarComentario(
+  /// Se o usuário logado é o autor da denúncia anônima [ocorrenciaId] (pelo
+  /// ponteiro privado em minhas_denuncias_anonimas). Usado para avisar antes
+  /// de comentar: o comentário mostra nome e foto e revelaria a autoria.
+  Future<bool> souAutorDaDenunciaAnonima(String ocorrenciaId) async {
+    final uid = _currentUserId;
+    if (uid == null) return false;
+    try {
+      final doc = await _firestore
+          .collection('usuarios')
+          .doc(uid)
+          .collection('minhas_denuncias_anonimas')
+          .doc(ocorrenciaId)
+          .get();
+      return doc.exists;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Grava o comentário e devolve o ID gerado (usado no ID determinístico da
+  /// notificação ao dono — ver [NotificacaoService.idComentario]).
+  Future<String> adicionarComentario(
     String ocorrenciaId,
     ComentarioModel comentario,
   ) async {
@@ -93,10 +113,11 @@ class ComentarioRepository {
       // entradas (input principal, resposta rápida) sem depender de cada UI.
       final dados = comentario.toMap();
       dados['texto'] = sanitizarTexto(dados['texto'] as String);
-      await _ocorrenciasRef
+      final ref = await _ocorrenciasRef
           .doc(ocorrenciaId)
           .collection('comentarios')
           .add(dados);
+      return ref.id;
     });
   }
 
@@ -115,11 +136,16 @@ class ComentarioRepository {
   }
 
   /// Curte/descurte um comentário (toggle do próprio UID via transação).
+  ///
+  /// Quando [ehAutoridade], grava também `curtidoPorAutoridade` — o selo
+  /// "❤️ pela autoridade" antes dependia de quem estava olhando e só aparecia
+  /// para a própria autoridade.
   Future<void> toggleLikeComentario(
     String ocorrenciaId,
     String comentarioId,
-    String userId,
-  ) {
+    String userId, {
+    bool ehAutoridade = false,
+  }) {
     final ref = _ocorrenciasRef
         .doc(ocorrenciaId)
         .collection('comentarios')
@@ -134,7 +160,11 @@ class ComentarioRepository {
         } else {
           likedBy.add(userId);
         }
-        txn.update(ref, {'likedBy': likedBy, 'likes': likedBy.length});
+        txn.update(ref, {
+          'likedBy': likedBy,
+          'likes': likedBy.length,
+          if (ehAutoridade) 'curtidoPorAutoridade': likedBy.contains(userId),
+        });
       });
     });
   }
@@ -144,11 +174,16 @@ class ComentarioRepository {
     String comentarioId,
   ) {
     return comLogDeErro('deletar comentário', () async {
-      final comentariosRef = _ocorrenciasRef
-          .doc(ocorrenciaId)
-          .collection('comentarios');
+      final comentariosRef =
+          _ocorrenciasRef.doc(ocorrenciaId).collection('comentarios');
+      // Só apaga o que é do próprio usuário: o comentário e as respostas
+      // dele no fio. A regra deixa cada autor apagar apenas o seu, e com uma
+      // única resposta alheia no lote o batch inteiro era negado — o
+      // comentário nunca saía. Respostas de outras pessoas ficam, sob o
+      // marcador "Comentário removido" na UI.
       final respostas = await comentariosRef
           .where('parentId', isEqualTo: comentarioId)
+          .where('userId', isEqualTo: _currentUserId)
           .get();
 
       final batch = _firestore.batch();

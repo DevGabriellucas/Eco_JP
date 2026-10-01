@@ -109,6 +109,78 @@ export function commitTransacao(ctx, idToken, transacao, writes) {
   );
 }
 
+export function rollbackTransacao(ctx, idToken, transacao) {
+  return http.post(
+    `${ctx.raiz}:rollback`,
+    JSON.stringify({ transaction: transacao }),
+    { ...cabecalhos(idToken), tags: { fase: 'rollback' } },
+  );
+}
+
+// Filtro que as Rules exigem em toda consulta pública (oculto == false).
+export const FILTRO_VISIVEIS = {
+  fieldFilter: {
+    field: { fieldPath: 'oculto' },
+    op: 'EQUAL',
+    value: { booleanValue: false },
+  },
+};
+
+// Mesmo número de tentativas do runTransaction do SDK que o app usa.
+const MAX_TENTATIVAS = 5;
+
+// Curte/descurte como o app (OcorrenciaRepository._toggleReacao): transação
+// otimista com até 5 tentativas, gravando também o carimbo
+// usuarios/{uid}/meta/reacao exigido pelas Rules.
+//
+// Resultado: 'ok' | 'conflito' (esgotou as tentativas por disputa) |
+// 'negada' (401/403: token vencido ou Rules) | 'erro' (o resto).
+// Antes toda resposta != 200 contava como "conflito", e uma transação
+// abandonada nunca recebia rollback.
+export function curtirComRetentativa(ctx, usuario, caminho) {
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    const transacao = iniciarTransacao(ctx, usuario.idToken);
+    if (!transacao) return 'erro';
+
+    const atual = lerNaTransacao(ctx, usuario.idToken, caminho, transacao);
+    if (!atual) {
+      rollbackTransacao(ctx, usuario.idToken, transacao);
+      return 'erro';
+    }
+
+    const curtidoPor = atual.likedBy ?? [];
+    const jaCurtiu = curtidoPor.indexOf(usuario.uid) !== -1;
+    const novaLista = jaCurtiu
+      ? curtidoPor.filter((uid) => uid !== usuario.uid)
+      : curtidoPor.concat([usuario.uid]);
+
+    const resposta = commitTransacao(ctx, usuario.idToken, transacao, [
+      {
+        update: {
+          name: caminho,
+          fields: campos({ likedBy: novaLista, likes: novaLista.length }),
+        },
+        updateMask: { fieldPaths: ['likedBy', 'likes'] },
+      },
+      {
+        update: {
+          name: ctx.caminhoDoc(`usuarios/${usuario.uid}/meta`, 'reacao'),
+          fields: {},
+        },
+        updateTransforms: [
+          { fieldPath: 'ultima', setToServerValue: 'REQUEST_TIME' },
+        ],
+      },
+    ]);
+
+    if (resposta.status === 200) return 'ok';
+    if (resposta.status === 401 || resposta.status === 403) return 'negada';
+    // 409 ABORTED = outra transação venceu a disputa: tenta de novo.
+    if (resposta.status !== 409) return 'erro';
+  }
+  return 'conflito';
+}
+
 // ── Escrita direta ────────────────────────────────────────────────────────
 
 // Cria documento com carimbo de tempo do servidor. As Rules exigem

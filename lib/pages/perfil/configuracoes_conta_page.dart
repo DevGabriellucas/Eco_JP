@@ -1,4 +1,3 @@
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +12,7 @@ import '../../services/consent_service.dart';
 import '../../services/relatorio_service.dart';
 import '../../services/usuario_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/crashlytics.dart';
 import '../legal/documentos_legais.dart';
 
 class _Cores {
@@ -60,16 +60,12 @@ class _ConfiguracoesContaPageState
     if (uid == null) return;
     setState(() => _exportandoDados = true);
     try {
-      final perfil =
-          await _usuarioService.carregarPerfil(uid) ??
-          UsuarioModel(
-            uid: uid,
-            nome:
-                _authService.currentUser?.email?.split('@').first ?? 'Usuário',
-          );
-      final ocorrencias = await _ocorrenciaRepository
-          .listarPorUsuario(uid)
-          .first;
+      final perfil = await _usuarioService.carregarPerfil(uid) ??
+          UsuarioModel(uid: uid, nome: '');
+      // Inclui as anônimas (achadas pelos ponteiros do perfil) e lê do
+      // servidor, não do cache.
+      final ocorrencias =
+          await _ocorrenciaRepository.buscarMinhasDenunciasNoServidor(uid);
       final consentimentoEm = await _consentService.dataConsentimento(uid);
       await _relatorioService.exportarMeusDados(
         perfil: perfil,
@@ -156,6 +152,11 @@ class _ConfiguracoesContaPageState
           '• Seus vínculos de seguir e ser seguido\n\n'
           'Comentários feitos em denúncias de outras pessoas permanecem, '
           'sem vínculo visível com você.\n\n'
+          // A mídia fica no Cloudinary até existir um serviço de exclusão
+          // assinado (Cloud Function); não prometer o que não acontece.
+          'As fotos e vídeos deixam de aparecer no app, mas os arquivos só '
+          'são apagados do armazenamento a pedido (Política de Privacidade, '
+          'item 6).\n\n'
           'Deseja continuar?',
           style: TextStyle(color: pal.ink, height: 1.5),
         ),
@@ -184,6 +185,24 @@ class _ConfiguracoesContaPageState
     final uid = _authService.currentUser?.uid;
     if (uid == null) return;
 
+    // Reautentica ANTES de apagar qualquer dado. Antes era o contrário: os
+    // dados sumiam e só então o Auth pedia login recente — conta Google não
+    // tem senha para o diálogo, e a pessoa ficava logada em /home sem perfil.
+    // Recém-autenticado, o user.delete() lá embaixo não pede de novo.
+    final reauth = _authService.contaTemSenha
+        ? await _pedirReautenticacao()
+        : await _authService.reautenticarGoogle();
+    if (!mounted) return;
+    if (!reauth.success) {
+      if (reauth.message != 'Cancelado.') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(reauth.message ?? 'Não foi possível confirmar.')),
+        );
+      }
+      return;
+    }
+
     setState(() => _excluindo = true);
 
     // ORDEM CRÍTICA: os DADOS saem antes da CONTA.
@@ -202,11 +221,10 @@ class _ConfiguracoesContaPageState
     try {
       await _usuarioService.excluirTodosDados(uid);
     } catch (e, stack) {
-      await FirebaseCrashlytics.instance.recordError(
+      await registrarErro(
         e,
         stack,
-        reason: 'Falha ao excluir dados do Firestore (conta preservada)',
-        information: ['uid: $uid'],
+        motivo: 'Falha ao excluir dados do Firestore (conta preservada)',
       );
       if (mounted) {
         setState(() => _excluindo = false);
@@ -224,23 +242,17 @@ class _ConfiguracoesContaPageState
     }
 
     // Dados já eliminados. Agora remove a credencial de acesso.
-    var authResult = await _authService.excluirContaAuth();
-
-    if (authResult.message == 'requires-recent-login' && mounted) {
-      setState(() => _excluindo = false);
-      authResult = await _pedirReautenticacao();
-      if (!mounted) return;
-      if (authResult.success) {
-        setState(() => _excluindo = true);
-        authResult = await _authService.excluirContaAuth();
-      }
+    final authResult = await _authService.excluirContaAuth();
+    if (!authResult.success) {
+      // Dados apagados, credencial remanescente: encerra a sessão para não
+      // deixar a pessoa logada numa conta sem perfil.
+      await _authService.sair();
     }
 
     if (mounted) {
       setState(() => _excluindo = false);
       if (!authResult.success) {
-        // Dados apagados, credencial remanescente. Avisa em vez de prometer
-        // uma limpeza automática que não existe.
+        // Avisa em vez de prometer uma limpeza automática que não existe.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -459,9 +471,8 @@ class _ConfiguracoesContaPageState
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
-                    color: atual == modo
-                        ? AppColors.primary
-                        : Colors.transparent,
+                    color:
+                        atual == modo ? AppColors.primary : Colors.transparent,
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Column(
@@ -491,17 +502,17 @@ class _ConfiguracoesContaPageState
   }
 
   Widget _grupoTitulo(String t) => Padding(
-    padding: const EdgeInsets.only(left: 4, bottom: 8),
-    child: Text(
-      t.toUpperCase(),
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.5,
-        color: context.pal.hint,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.only(left: 4, bottom: 8),
+        child: Text(
+          t.toUpperCase(),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+            color: context.pal.hint,
+          ),
+        ),
+      );
 
   Widget _cartao(List<Widget> filhos) {
     final pal = context.pal;

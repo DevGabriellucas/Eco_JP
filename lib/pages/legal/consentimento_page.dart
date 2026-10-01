@@ -13,7 +13,15 @@ class ConsentimentoPage extends StatefulWidget {
   /// consentimento e liberar o acesso.
   final Future<void> Function() onAceitar;
 
-  const ConsentimentoPage({super.key, required this.onAceitar});
+  /// Chamado em "Não concordo": encerra a sessão. Sem esta saída a tela não
+  /// tinha alternativa ao aceite (consentimento não era livre).
+  final Future<void> Function() onRecusar;
+
+  const ConsentimentoPage({
+    super.key,
+    required this.onAceitar,
+    required this.onRecusar,
+  });
 
   @override
   State<ConsentimentoPage> createState() => _ConsentimentoPageState();
@@ -99,15 +107,18 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                     children: [
                       _Topico(
                         icone: Icons.location_on_outlined,
-                        texto:
-                            'Coletamos nome, e-mail e o conteúdo das suas '
+                        texto: 'Coletamos nome, e-mail e o conteúdo das suas '
                             'denúncias (fotos, vídeo, descrição e localização).',
                       ),
                       _Topico(
                         icone: Icons.visibility_off_outlined,
+                        // Antes prometia "não aparecem para ninguém", mas a
+                        // autoridade pode identificar o autor (dono/info).
                         texto:
-                            'Você pode denunciar de forma anônima — seu nome e '
-                            'foto não aparecem para ninguém.',
+                            'Você pode denunciar de forma anônima: seu nome e '
+                            'foto não aparecem para outros usuários, mas o '
+                            'órgão público responsável pode identificar o '
+                            'autor quando necessário.',
                       ),
                       _Topico(
                         icone: Icons.shield_outlined,
@@ -126,47 +137,50 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                 ),
               ),
               const Divider(height: 24),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Checkbox(
+              // A linha inteira marca a caixa (antes só o quadrado de 24 dp);
+              // os links do texto continuam abrindo os documentos.
+              InkWell(
+                onTap: _processando
+                    ? null
+                    : () => setState(() => _aceito = !_aceito),
+                borderRadius: BorderRadius.circular(8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Checkbox(
                       value: _aceito,
                       onChanged: _processando
                           ? null
                           : (v) => setState(() => _aceito = v ?? false),
                       activeColor: AppColors.success,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text('Li e aceito a ', style: textStyle),
-                        GestureDetector(
-                          onTap: () => _abrirDocumento(
-                            'Política de Privacidade',
-                            kPoliticaPrivacidade,
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('Li e aceito a ', style: textStyle),
+                          GestureDetector(
+                            onTap: () => _abrirDocumento(
+                              'Política de Privacidade',
+                              kPoliticaPrivacidade,
+                            ),
+                            child: Text(
+                              'Política de Privacidade',
+                              style: linkStyle,
+                            ),
                           ),
-                          child: Text(
-                            'Política de Privacidade',
-                            style: linkStyle,
+                          Text(' e os ', style: textStyle),
+                          GestureDetector(
+                            onTap: () =>
+                                _abrirDocumento('Termos de Uso', kTermosDeUso),
+                            child: Text('Termos de Uso', style: linkStyle),
                           ),
-                        ),
-                        Text(' e os ', style: textStyle),
-                        GestureDetector(
-                          onTap: () =>
-                              _abrirDocumento('Termos de Uso', kTermosDeUso),
-                          child: Text('Termos de Uso', style: linkStyle),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -199,6 +213,18 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: TextButton(
+                  onPressed: _processando ? null : widget.onRecusar,
+                  child: Text(
+                    'Não concordo / sair',
+                    style: TextStyle(color: pal.muted),
+                  ),
                 ),
               ),
             ],

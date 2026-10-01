@@ -8,10 +8,24 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Analytics no-op: evita depender do Firebase real nos testes.
+/// Analytics de teste: registra os eventos em vez de enviá-los. Implementa
+/// os métodos de verdade — o `noSuchMethod` genérico de antes aceitava
+/// qualquer assinatura e escondia erros como o parâmetro `bool` que o
+/// Firebase Analytics rejeita.
 class _FakeAnalytics implements AnalyticsService {
+  final eventos = <String>[];
+
   @override
-  dynamic noSuchMethod(Invocation invocation) => Future<void>.value();
+  Future<void> denunciaCriada({required String categoria}) async =>
+      eventos.add('denuncia_criada:$categoria');
+
+  @override
+  Future<void> statusAvancado({required String statusOficial}) async =>
+      eventos.add('status_avancado:$statusOficial');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+      'Evento não esperado no teste: ${invocation.memberName}');
 }
 
 /// RateLimiter que nunca bloqueia: os testes de cadastro não dependem do
@@ -50,6 +64,17 @@ OcorrenciaModel _modelo({
     usuarioNome: anonima ? null : 'Fulano',
     anonima: anonima,
   );
+}
+
+Future<String> _cadastrar(
+  FakeFirebaseFirestore db,
+  String uid,
+  OcorrenciaModel modelo,
+) async {
+  final repo = _repo(db, uid: uid);
+  final id = repo.novoIdOcorrencia();
+  await repo.cadastrarOcorrencia(modelo, id: id);
+  return id;
 }
 
 void main() {
@@ -103,17 +128,21 @@ void main() {
   });
 
   group('incrementarCompartilhamento', () {
-    test('soma 1 a cada chamada, acumulando', () async {
+    test('cada usuário conta uma vez (não infla em loop)', () async {
       final db = FakeFirebaseFirestore();
-      final repo = _repo(db);
       final ref = await db.collection('ocorrencias').add({'shares': 0});
 
-      await repo.incrementarCompartilhamento(ref.id);
+      expect(await _repo(db, uid: 'a').incrementarCompartilhamento(ref.id),
+          isTrue);
+      expect(await _repo(db, uid: 'a').incrementarCompartilhamento(ref.id),
+          isFalse);
       expect((await ref.get()).data()!['shares'], 1);
 
-      await repo.incrementarCompartilhamento(ref.id);
-      await repo.incrementarCompartilhamento(ref.id);
-      expect((await ref.get()).data()!['shares'], 3);
+      await _repo(db, uid: 'b').incrementarCompartilhamento(ref.id);
+      expect((await ref.get()).data()!['shares'], 2);
+
+      final registro = await ref.collection('compartilhamentos').doc('a').get();
+      expect(registro.data()!['uid'], 'a');
     });
 
     test('documento sem o campo passa a contar a partir de 1', () async {
@@ -142,6 +171,7 @@ void main() {
         final ref = await db.collection('ocorrencias').add({
           'titulo': 'Ocorrência $i',
           'dataCriacao': Timestamp.now(),
+          'oculto': false,
         });
         ids.add(ref.id);
       }
@@ -155,6 +185,25 @@ void main() {
           .timeout(const Duration(seconds: 5));
 
       expect(lista.map((o) => o.id).toSet(), ids);
+    });
+
+    test('ocultadas pela moderação ficam de fora', () async {
+      final db = FakeFirebaseFirestore();
+      final visivel = await db.collection('ocorrencias').add({
+        'titulo': 'Visível',
+        'dataCriacao': Timestamp.now(),
+        'oculto': false,
+      });
+      final oculta = await db.collection('ocorrencias').add({
+        'titulo': 'Oculta',
+        'dataCriacao': Timestamp.now(),
+        'oculto': true,
+      });
+
+      final lista =
+          await _repo(db).observarPorIds({visivel.id, oculta.id}).first;
+
+      expect(lista.map((o) => o.id), [visivel.id]);
     });
   });
 
@@ -186,9 +235,7 @@ void main() {
   group('cadastrarOcorrencia', () {
     test('grava a denúncia na coleção ocorrencias', () async {
       final db = FakeFirebaseFirestore();
-      await _repo(db, uid: 'autor-a').cadastrarOcorrencia(
-        _modelo(usuarioId: 'autor-a'),
-      );
+      await _cadastrar(db, 'autor-a', _modelo(usuarioId: 'autor-a'));
 
       final snap = await db.collection('ocorrencias').get();
       expect(snap.docs, hasLength(1));
@@ -199,9 +246,8 @@ void main() {
       'denúncia anônima esconde o UID e guarda ponteiros privados (S2)',
       () async {
         final db = FakeFirebaseFirestore();
-        await _repo(db, uid: 'autor-b').cadastrarOcorrencia(
-          _modelo(usuarioId: 'autor-b', anonima: true),
-        );
+        await _cadastrar(
+            db, 'autor-b', _modelo(usuarioId: 'autor-b', anonima: true));
 
         final doc = (await db.collection('ocorrencias').get()).docs.first;
         // O documento público não expõe o autor.
@@ -228,41 +274,69 @@ void main() {
     );
   });
 
-  group('definirStatusOficial', () {
-    test('grava o valor do enum e o carimbo ao encaminhar', () async {
+  group('ciclo oficial (auditoria)', () {
+    // A autoridade 'user-1' precisa de perfil: o nome dela vai no evento.
+    Future<FakeFirebaseFirestore> dbComAutoridade() async {
       final db = FakeFirebaseFirestore();
-      final ref = await db.collection('ocorrencias').add({'titulo': 'X'});
-      final repo = _repo(db);
+      await db.collection('usuarios').doc('user-1').set({'nome': 'Semam'});
+      return db;
+    }
 
-      await repo.definirStatusOficial(ref.id, StatusOficial.encaminhada);
+    test('encaminhar grava status, carimbo e evento com o nome do perfil',
+        () async {
+      final db = await dbComAutoridade();
+      final ref = await db.collection('ocorrencias').add({'titulo': 'X'});
+
+      await _repo(db).definirStatusOficial(ref.id, StatusOficial.encaminhada);
 
       final d = (await ref.get()).data()!;
       expect(d['statusOficial'], 'encaminhada'); // wire string via .valor
       expect(d['encaminhadaEm'], isNotNull);
+      final evento = await ref
+          .collection('historico')
+          .doc(d['ultimoEventoId'] as String)
+          .get();
+      expect(evento.data()!['status'], 'encaminhada');
+      expect(evento.data()!['por'], 'Semam');
     });
 
-    test('reverter (null) limpa o status sem gerar evento de histórico', () async {
-      final db = FakeFirebaseFirestore();
+    test(
+        'reverter resolvida volta a encaminhada, limpa resolvidaEm e registra "revertida"',
+        () async {
+      final db = await dbComAutoridade();
       final ref = await db.collection('ocorrencias').add({
         'titulo': 'X',
-        'statusOficial': 'encaminhada',
+        'verificada': true,
+        'statusOficial': 'resolvida',
+        'resolvidaEm': Timestamp.now(),
       });
-      final repo = _repo(db);
 
-      await repo.definirStatusOficial(ref.id, null);
+      await _repo(db)
+          .reverterStatusOficial(ref.id, atual: StatusOficial.resolvida);
 
-      expect((await ref.get()).data()!['statusOficial'], isNull);
-      final historico = await ref.collection('historico').get();
-      expect(historico.docs, isEmpty);
+      final d = (await ref.get()).data()!;
+      expect(d['statusOficial'], 'encaminhada');
+      expect(d['resolvidaEm'], isNull);
+      final eventos = await ref.collection('historico').get();
+      expect(eventos.docs.map((e) => e.data()['status']), ['revertida']);
+    });
+
+    test('verificar usa o nome do perfil no selo, não um texto fixo', () async {
+      final db = await dbComAutoridade();
+      final ref = await db.collection('ocorrencias').add({'titulo': 'X'});
+
+      final nome = await _repo(db).definirVerificacao(ref.id, verificar: true);
+
+      expect(nome, 'Semam');
+      expect((await ref.get()).data()!['verificadaPorNome'], 'Semam');
     });
   });
 
   group('deletarOcorrencia', () {
     test('remove os documentos auxiliares de uma denúncia anônima', () async {
       final db = FakeFirebaseFirestore();
-      await _repo(db, uid: 'autor-c').cadastrarOcorrencia(
-        _modelo(usuarioId: 'autor-c', anonima: true),
-      );
+      await _cadastrar(
+          db, 'autor-c', _modelo(usuarioId: 'autor-c', anonima: true));
       final doc = (await db.collection('ocorrencias').get()).docs.first;
       final repo = _repo(db, uid: 'autor-c');
 
@@ -276,6 +350,27 @@ void main() {
           .doc(doc.id)
           .get();
       expect(ponteiro.exists, isFalse, reason: 'ponteiro órfão foi limpo');
+    });
+  });
+
+  group('buscarPaginaFeed', () {
+    test('traz as visíveis mais antigas que o cursor, em ordem', () async {
+      final db = FakeFirebaseFirestore();
+      final base = DateTime(2026, 9, 1);
+      for (var i = 0; i < 5; i++) {
+        await db.collection('ocorrencias').doc('o$i').set({
+          'titulo': 'O$i',
+          'oculto': i == 1, // o1 oculta: não pode aparecer
+          'dataCriacao': Timestamp.fromDate(base.add(Duration(days: i))),
+        });
+      }
+
+      final pagina = await _repo(db).buscarPaginaFeed(
+        antesDe: base.add(const Duration(days: 4)),
+        limite: 10,
+      );
+
+      expect(pagina.itens.map((o) => o.id), ['o3', 'o2', 'o0']);
     });
   });
 }

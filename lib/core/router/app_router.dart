@@ -27,10 +27,17 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: notifier.redirect,
     routes: [
-      GoRoute(path: Routes.splash, builder: (context, state) => const _SplashScreen()),
-      GoRoute(path: Routes.inicial, builder: (context, state) => const InicialPage()),
-      GoRoute(path: Routes.login, builder: (context, state) => const LoginPage()),
-      GoRoute(path: Routes.cadastro, builder: (context, state) => const CadastroPage()),
+      GoRoute(
+          path: Routes.splash,
+          builder: (context, state) => const _SplashScreen()),
+      GoRoute(
+          path: Routes.inicial,
+          builder: (context, state) => const InicialPage()),
+      GoRoute(
+          path: Routes.login, builder: (context, state) => const LoginPage()),
+      GoRoute(
+          path: Routes.cadastro,
+          builder: (context, state) => const CadastroPage()),
       GoRoute(
         path: Routes.verificacaoEmail,
         builder: (context, state) => const VerificacaoEmailPage(),
@@ -45,9 +52,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             // Recalcula o gate de consentimento → o redirect leva para /home.
             ref.invalidate(consentStatusProvider);
           },
+          // Sai da conta; o redirect leva de volta à tela inicial.
+          onRecusar: () => ref.read(authServiceProvider).sair(),
         ),
       ),
-      GoRoute(path: Routes.home, builder: (context, state) => const HomeShell()),
+      GoRoute(
+          path: Routes.home, builder: (context, state) => const HomeShell()),
       GoRoute(
         path: Routes.formOcorrencia,
         builder: (context, state) => const FormOcorrenciaPage(),
@@ -66,6 +76,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.perfilPublico,
+        // Sem os argumentos (link externo, restauração de estado) não há
+        // perfil a mostrar; antes o `state.extra!` derrubava o app.
+        redirect: (_, state) =>
+            state.extra is PerfilPublicoArgs ? null : Routes.home,
         builder: (_, state) {
           final extra = state.extra! as PerfilPublicoArgs;
           return PerfilPublicoPage(
@@ -89,8 +103,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 /// reavaliar o [redirect].
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._ref) {
-    _ref.listen(authStateChangesProvider, (previous, next) => notifyListeners());
+    _ref.listen(
+        authStateChangesProvider, (previous, next) => notifyListeners());
     _ref.listen(consentStatusProvider, (previous, next) => notifyListeners());
+    _ref.listen(perfilGarantidoProvider, (previous, next) => notifyListeners());
+    _ref.listen(
+        cadastroEmAndamentoProvider, (previous, next) => notifyListeners());
   }
 
   final Ref _ref;
@@ -106,6 +124,12 @@ class _RouterNotifier extends ChangeNotifier {
 
     final user = authState.value;
 
+    // Cadastro criando conta/reserva/perfil: fica em /cadastro até terminar
+    // (sucesso leva à verificação; nome em uso apaga a conta e mostra o erro).
+    if (loc == Routes.cadastro && _ref.read(cadastroEmAndamentoProvider)) {
+      return null;
+    }
+
     // Não autenticado: só telas públicas.
     if (user == null) {
       const publicas = {Routes.inicial, Routes.login, Routes.cadastro};
@@ -118,6 +142,12 @@ class _RouterNotifier extends ChangeNotifier {
     );
     if (apenasSenha && !user.emailVerified) {
       return loc == Routes.verificacaoEmail ? null : Routes.verificacaoEmail;
+    }
+
+    // Perfil com nome reservado (primeiro login Google cria aqui).
+    final perfilState = _ref.read(perfilGarantidoProvider);
+    if (perfilState.isLoading || !perfilState.hasValue) {
+      return loc == Routes.splash ? null : Routes.splash;
     }
 
     // Trava de consentimento (LGPD).

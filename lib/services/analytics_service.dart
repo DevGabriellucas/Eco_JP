@@ -7,20 +7,22 @@ class AnalyticsService {
 
   final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
 
-  Future<void> denunciaCriada({
-    required String categoria,
-    required bool anonima,
-  }) => _analytics.logEvent(
-    name: 'denuncia_criada',
-    parameters: {'categoria': categoria, 'anonima': anonima},
-  );
+  /// Só a categoria. O parâmetro `anonima` saiu por dois motivos: o
+  /// Analytics só aceita texto ou número (um `bool` falhava o evento) e, com
+  /// o `setUserId(uid)`, ele ligava cada denúncia anônima à conta do autor.
+  Future<void> denunciaCriada({required String categoria}) =>
+      _analytics.logEvent(
+        name: 'denuncia_criada',
+        parameters: {'categoria': categoria},
+      );
 
   Future<void> statusAvancado({
     required String statusOficial,
-  }) => _analytics.logEvent(
-    name: 'status_avancado',
-    parameters: {'status_oficial': statusOficial},
-  );
+  }) =>
+      _analytics.logEvent(
+        name: 'status_avancado',
+        parameters: {'status_oficial': statusOficial},
+      );
 
   Future<void> denunciaDeAbusoCriada({required String alvoTipo}) =>
       _analytics.logEvent(

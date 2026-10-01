@@ -18,9 +18,7 @@ import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 import { SharedArray } from 'k6/data';
 import exec from 'k6/execution';
-import {
-  contexto, consultar, iniciarTransacao, lerNaTransacao, commitTransacao, campos,
-} from './lib/firestore.js';
+import { contexto, consultar, curtirComRetentativa, FILTRO_VISIVEIS } from './lib/firestore.js';
 
 const config = JSON.parse(open('../tokens.json'));
 const ctx = contexto(config);
@@ -29,10 +27,14 @@ const usuarios = new SharedArray('usuarios', () => config.usuarios);
 const sessoes = new Counter('sessoes_completas');
 const erros = new Rate('erros');
 const docs = new Counter('documentos_lidos');
+// Curtidas que esgotaram as tentativas por disputa do documento. Ficam fora
+// de `erros`, que mede indisponibilidade.
+const conflitos = new Counter('curtidas_em_disputa');
 const tFeed = new Trend('abrir_feed_ms', true);
 const tMapa = new Trend('abrir_mapa_ms', true);
 
-const PAGINA_FEED = 20;
+// Mesmo tamanho de página do app (_pageSize em home_page.dart).
+const PAGINA_FEED = 10;
 const TETO_AGREGADO = 500;
 
 export const options = {
@@ -71,6 +73,7 @@ export default function () {
   let t0 = Date.now();
   const feed = consultar(ctx, usuario.idToken, {
     from: [{ collectionId: 'ocorrencias' }],
+    where: FILTRO_VISIVEIS,
     orderBy: [{ field: { fieldPath: 'dataCriacao' }, direction: 'DESCENDING' }],
     limit: PAGINA_FEED,
   });
@@ -86,6 +89,7 @@ export default function () {
     t0 = Date.now();
     const mapa = consultar(ctx, usuario.idToken, {
       from: [{ collectionId: 'ocorrencias' }],
+      where: FILTRO_VISIVEIS,
       orderBy: [{ field: { fieldPath: 'dataCriacao' }, direction: 'DESCENDING' }],
       limit: TETO_AGREGADO,
     });
@@ -100,21 +104,10 @@ export default function () {
   // ── 30% curtem alguma coisa ─────────────────────────────────────────────
   if (Math.random() < 0.3) {
     const caminho = ctx.caminhoDoc('ocorrencias', config.alvoId);
-    const tx = iniciarTransacao(ctx, usuario.idToken);
-    if (tx) {
-      const atual = lerNaTransacao(ctx, usuario.idToken, caminho, tx);
-      if (atual) {
-        const lista = atual.likedBy ?? [];
-        const nova = lista.indexOf(usuario.uid) !== -1
-          ? lista.filter((u) => u !== usuario.uid)
-          : lista.concat([usuario.uid]);
-        const r = commitTransacao(ctx, usuario.idToken, tx, [{
-          update: { name: caminho, fields: campos({ likedBy: nova, likes: nova.length }) },
-          updateMask: { fieldPaths: ['likedBy', 'likes'] },
-        }]);
-        erros.add(r.status !== 200);
-      }
-    }
+    const resultado = curtirComRetentativa(ctx, usuario, caminho);
+    // Disputa pelo documento não é indisponibilidade: conta à parte.
+    if (resultado === 'conflito') conflitos.add(1);
+    else erros.add(resultado !== 'ok');
     sleep(2 + Math.random() * 3);
   }
 
@@ -124,7 +117,9 @@ export default function () {
 export function handleSummary(dados) {
   const m = dados.metrics;
   const s = m.sessoes_completas?.values?.count ?? 0;
-  const vus = m.vus_max?.values?.max ?? 0;
+  // vus (medido), não vus_max (o teto configurado no cenário).
+  const vus = m.vus?.values?.max ?? 0;
+  const nConflitos = m.curtidas_em_disputa?.values?.count ?? 0;
   const taxaErro = (m.erros?.values?.rate ?? 0) * 100;
   const feedP95 = m.abrir_feed_ms?.values?.['p(95)'];
   const mapaP95 = m.abrir_mapa_ms?.values?.['p(95)'];
@@ -139,6 +134,7 @@ export function handleSummary(dados) {
  Sessões completas .......... ${s}
  Documentos lidos ........... ${lidos.toLocaleString('pt-BR')}
  Taxa de erro ............... ${taxaErro.toFixed(2)}%
+ Curtidas em disputa ........ ${nConflitos}
 
  Abrir o feed ............... p95 ${feedP95 ? feedP95.toFixed(0) + ' ms' : 'n/d'}
  Abrir o mapa ............... p95 ${mapaP95 ? mapaP95.toFixed(0) + ' ms' : 'n/d'}

@@ -2,15 +2,17 @@ import 'package:eco_jp/models/ocorrencia_model.dart';
 import 'package:eco_jp/pages/mapPage/controller/calc_mostaffectedzones.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-OcorrenciaModel _ocorrencia(String localizacao) => OcorrenciaModel(
-  id: 'x',
-  titulo: 't',
-  descricao: 'd',
-  localizacao: localizacao,
-  latitude: -7.1,
-  longitude: -34.84,
-  tipoLixo: 'Lixo',
-);
+OcorrenciaModel _ocorrencia(String localizacao, {String? bairro}) =>
+    OcorrenciaModel(
+      id: 'x',
+      titulo: 't',
+      descricao: 'd',
+      localizacao: localizacao,
+      bairro: bairro,
+      latitude: -7.1,
+      longitude: -34.84,
+      tipoLixo: 'Lixo',
+    );
 
 void main() {
   group('CalcMostAffectedZones.extrairBairro', () {
@@ -103,6 +105,34 @@ void main() {
       final resultado = CalcMostAffectedZones([]).bairroMaisFrequente();
       expect(resultado.bairro, 'Nenhum bairro encontrado');
       expect(resultado.quantidade, 0);
+    });
+  });
+
+  group('bairro estruturado e normalização', () {
+    test('usa o campo bairro quando existe, ignorando o texto', () {
+      final o = _ocorrencia('Av X, 1200, João Pessoa - PB', bairro: 'Manaíra');
+      expect(CalcMostAffectedZones.bairroDe(o), 'Manaíra');
+    });
+
+    test('formato do Google Places não vira "João Pessoa - PB"', () {
+      expect(
+        CalcMostAffectedZones.extrairBairro('Rua A, João Pessoa - PB, Brasil'),
+        isNull,
+      );
+    });
+
+    test('"Endereço não encontrado" não é bairro', () {
+      expect(CalcMostAffectedZones.extrairBairro('Endereço não encontrado'),
+          isNull);
+    });
+
+    test('agrupa grafias com e sem acento ou caixa diferente', () {
+      final ranking = CalcMostAffectedZones([
+        _ocorrencia('', bairro: 'Manaíra'),
+        _ocorrencia('', bairro: 'manaira'),
+        _ocorrencia('Rua, MANAÍRA , JP'),
+      ]).zonasMaisAfetadas();
+      expect(ranking, [(bairro: 'Manaíra', quantidade: 3)]);
     });
   });
 }

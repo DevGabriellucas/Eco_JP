@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -17,11 +18,28 @@ class RelatorioService {
   static final RelatorioService instance = RelatorioService();
 
   final AnalyticsService _analytics = AnalyticsService();
+
+  // Fonte TrueType embutida (assets/fonts). A Helvetica Type1 padrão do
+  // pacote pdf não tem "—", "•" nem vários acentos fora do Latin-1, que
+  // saíam como caracteres faltando no relatório oficial.
+  static pw.ThemeData? _temaCache;
+
+  static Future<pw.ThemeData> _tema() async {
+    final cache = _temaCache;
+    if (cache != null) return cache;
+    final regular = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+    final negrito = await rootBundle.load('assets/fonts/Roboto-Bold.ttf');
+    return _temaCache = pw.ThemeData.withFont(
+      base: pw.Font.ttf(regular),
+      bold: pw.Font.ttf(negrito),
+    );
+  }
+
   Future<void> gerarECompartilhar({
     required List<OcorrenciaModel> ocorrencias,
     required String periodoLabel,
   }) async {
-    final doc = pw.Document();
+    final doc = pw.Document(theme: await _tema());
     final agora = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
     // ── Agregados ──
@@ -29,7 +47,7 @@ class RelatorioService {
 
     final statusCount = <OccurrenceStatus, int>{};
     for (final o in ocorrencias) {
-      final s = OccurrenceStatusParser.fromString(o.status);
+      final s = o.statusAtual;
       statusCount[s] = (statusCount[s] ?? 0) + 1;
     }
 
@@ -82,30 +100,27 @@ class RelatorioService {
           pw.SizedBox(height: 8),
           pw.Text(
             'Total de denúncias no período: $total',
-            style: const pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
+            style: const pw.TextStyle(
+                fontSize: 13, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 16),
-
           _secao('Ciclo de triagem oficial'),
           _tabela([
             for (final e in EstagioOficial.values)
               [e.label, '${estagioCount[e] ?? 0}'],
           ]),
           pw.SizedBox(height: 16),
-
           _secao('Status das denúncias'),
           _tabela([
             for (final s in OccurrenceStatus.values)
               [s.label, '${statusCount[s] ?? 0}'],
           ]),
           pw.SizedBox(height: 16),
-
           _secao('Denúncias por categoria'),
           _tabela([
             for (final c in categorias) [c.key.label, '${c.value}'],
           ]),
           pw.SizedBox(height: 16),
-
           _secao('Bairros mais afetados'),
           if (bairros.isEmpty)
             pw.Text(
@@ -116,7 +131,6 @@ class RelatorioService {
             _tabela([
               for (final b in bairros) [b.bairro, '${b.quantidade}'],
             ]),
-
           pw.SizedBox(height: 24),
           pw.Text(
             'Relatório gerado automaticamente pelo aplicativo EcoJP. Dados '
@@ -142,7 +156,7 @@ class RelatorioService {
     String? email,
     DateTime? consentimentoEm,
   }) async {
-    final doc = pw.Document();
+    final doc = pw.Document(theme: await _tema());
     final agora = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final fmtData = DateFormat('dd/MM/yyyy');
 
@@ -185,7 +199,6 @@ class RelatorioService {
               ['Consentimento em', fmtData.format(consentimentoEm)],
           ]),
           pw.SizedBox(height: 16),
-
           _secao('Minhas denúncias (${ocorrencias.length})'),
           if (ocorrencias.isEmpty)
             pw.Text(
@@ -232,7 +245,6 @@ class RelatorioService {
                 ),
               ),
             ],
-
           pw.SizedBox(height: 24),
           pw.Text(
             'Documento gerado a seu pedido, contendo os dados pessoais '
@@ -252,16 +264,16 @@ class RelatorioService {
   }
 
   pw.Widget _secao(String titulo) => pw.Padding(
-    padding: const pw.EdgeInsets.only(bottom: 6),
-    child: pw.Text(
-      titulo,
-      style: const pw.TextStyle(
-        fontSize: 14,
-        fontWeight: pw.FontWeight.bold,
-        color: PdfColors.green800,
-      ),
-    ),
-  );
+        padding: const pw.EdgeInsets.only(bottom: 6),
+        child: pw.Text(
+          titulo,
+          style: const pw.TextStyle(
+            fontSize: 14,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.green800,
+          ),
+        ),
+      );
 
   pw.Widget _tabela(List<List<String>> linhas) {
     return pw.Table(
@@ -279,7 +291,8 @@ class RelatorioService {
                   horizontal: 8,
                   vertical: 5,
                 ),
-                child: pw.Text(linha[0], style: const pw.TextStyle(fontSize: 11)),
+                child:
+                    pw.Text(linha[0], style: const pw.TextStyle(fontSize: 11)),
               ),
               pw.Padding(
                 padding: const pw.EdgeInsets.symmetric(

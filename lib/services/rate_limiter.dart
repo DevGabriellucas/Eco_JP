@@ -36,6 +36,16 @@ class RateLimiter {
     _ultimaAcao[chave] = DateTime.now();
   }
 
+  /// Lança [RateLimitException] se a ação [chave] ainda estiver bloqueada,
+  /// sem registrar nada. Use com [registrar] quando a ação só "conta" depois
+  /// de concluída (ex.: denúncia só registra após gravar no servidor).
+  void verificar(String chave, Duration intervalo) {
+    final restante = tempoRestante(chave, intervalo);
+    if (restante > Duration.zero) {
+      throw RateLimitException(restante);
+    }
+  }
+
   /// Verifica o limite e, se liberado, já registra a ação. Lança
   /// [RateLimitException] se ainda estiver dentro do intervalo de bloqueio.
   void checarERegistrar(String chave, Duration intervalo) {

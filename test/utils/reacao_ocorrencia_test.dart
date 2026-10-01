@@ -3,14 +3,14 @@ import 'package:eco_jp/utils/reacao_ocorrencia.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 OcorrenciaModel novaOcorrencia() => OcorrenciaModel(
-  id: 'occ1',
-  titulo: 'Buraco na rua',
-  descricao: 'Buraco grande e perigoso.',
-  localizacao: 'Centro',
-  latitude: -7.11,
-  longitude: -34.86,
-  tipoLixo: 'Buraco',
-);
+      id: 'occ1',
+      titulo: 'Buraco na rua',
+      descricao: 'Buraco grande e perigoso.',
+      localizacao: 'Centro',
+      latitude: -7.11,
+      longitude: -34.86,
+      tipoLixo: 'Buraco',
+    );
 
 void main() {
   const uid = 'user1';

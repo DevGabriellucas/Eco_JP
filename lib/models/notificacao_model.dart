@@ -22,17 +22,17 @@ class NotificacaoModel {
   });
 
   Map<String, dynamic> toMap() => {
-    'tipo': tipo,
-    'deUsuarioNome': deUsuarioNome,
-    'ocorrenciaId': ocorrenciaId,
-    'ocorrenciaTitulo': ocorrenciaTitulo,
-    // Só grava o campo em notificações de conquista. Incluí-lo como null nas
-    // demais adicionaria uma chave extra que a regra do Firestore rejeita
-    // (hasOnly), quebrando toda notificação de comentário/curtida.
-    if (conquistaTitulo != null) 'conquistaTitulo': conquistaTitulo,
-    'dataCriacao': FieldValue.serverTimestamp(),
-    'lida': false,
-  };
+        'tipo': tipo,
+        'deUsuarioNome': deUsuarioNome,
+        'ocorrenciaId': ocorrenciaId,
+        'ocorrenciaTitulo': ocorrenciaTitulo,
+        // Só grava o campo em notificações de conquista. Incluí-lo como null nas
+        // demais adicionaria uma chave extra que a regra do Firestore rejeita
+        // (hasOnly), quebrando toda notificação de comentário/curtida.
+        if (conquistaTitulo != null) 'conquistaTitulo': conquistaTitulo,
+        'dataCriacao': FieldValue.serverTimestamp(),
+        'lida': false,
+      };
 
   factory NotificacaoModel.fromMap(Map<String, dynamic> map, String id) {
     return NotificacaoModel(

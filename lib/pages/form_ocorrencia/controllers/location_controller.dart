@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../services/geolocation/area_municipio.dart';
 import '../../../services/geolocation/geocoding_service.dart';
 
 /// Estado e lógica da localização de uma denúncia: campo de endereço,
@@ -23,6 +24,11 @@ class LocationController extends ChangeNotifier {
   double? latitude;
   double? longitude;
 
+  /// Bairro estruturado vindo do provedor (sugestão, CEP ou GPS). Gravado na
+  /// denúncia: o ranking de bairros deixa de depender de recortar o texto
+  /// do endereço.
+  String? bairro;
+
   // Autocomplete.
   List<EnderecoSugestao> sugestoes = [];
   bool buscandoSug = false;
@@ -37,10 +43,10 @@ class LocationController extends ChangeNotifier {
 
   bool get coordenadasConfirmadas => coordenadaValida(latitude, longitude);
 
+  /// Coordenada dentro de João Pessoa (mesmos limites das regras).
   static bool coordenadaValida(double? lat, double? lon) {
     if (lat == null || lon == null) return false;
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return false;
-    return lat != 0 && lon != 0;
+    return AreaMunicipio.contem(lat, lon);
   }
 
   void onEnderecoChanged(String v) {
@@ -48,6 +54,7 @@ class LocationController extends ChangeNotifier {
       mostrarSug = false;
       latitude = null;
       longitude = null;
+      bairro = null;
       notifyListeners();
     }
     _debounce?.cancel();
@@ -97,6 +104,7 @@ class LocationController extends ChangeNotifier {
     enderecoCtrl.text = s.descricao;
     latitude = s.lat;
     longitude = s.lon;
+    bairro = s.bairro;
     sugestoes = [];
     mostrarSug = false;
     notifyListeners();
@@ -126,20 +134,43 @@ class LocationController extends ChangeNotifier {
         }
       }
       if (perm == LocationPermission.deniedForever) {
-        return 'Permissão bloqueada nas configurações.';
+        // Leva direto às permissões do app (antes abria a tela do GPS, que
+        // não resolve uma permissão negada para sempre).
+        await Geolocator.openAppSettings();
+        return 'Permita o acesso à localização nas configurações do app.';
       }
       if (_disposed) return null;
 
-      final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      // O que estava digitado quando o GPS começou: se a pessoa editar o
+      // campo enquanto espera, o resultado não sobrescreve o que ela digitou.
+      final textoAntes = enderecoCtrl.text;
+
+      final Position pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 15),
+        );
+      } on TimeoutException {
+        // Ambiente fechado: sem fix de GPS em tempo útil.
+        return 'Não foi possível obter sua localização. Digite o endereço.';
+      }
       if (_disposed) return null;
+      if (!coordenadaValida(pos.latitude, pos.longitude)) {
+        return 'Sua localização está fora de João Pessoa. Digite o endereço '
+            'da ocorrência.';
+      }
 
       final addr = await _geo.reverseGeocode(pos.latitude, pos.longitude);
       if (_disposed) return null;
+      if (enderecoCtrl.text != textoAntes) return null;
+      if (addr == null) {
+        return 'Não foi possível descobrir o endereço. Digite-o no campo.';
+      }
       latitude = pos.latitude;
       longitude = pos.longitude;
-      enderecoCtrl.text = addr;
+      bairro = addr.bairro;
+      enderecoCtrl.text = addr.endereco;
       mostrarSug = false;
       notifyListeners();
       return null;
@@ -161,6 +192,11 @@ class LocationController extends ChangeNotifier {
       return (latitude, longitude);
     }
     final coord = await _geo.geocodificar(endereco);
+    // Endereço digitado sem escolher sugestão: o bairro vem do reverso das
+    // coordenadas encontradas (best-effort; sem ele a denúncia vai sem).
+    if (coord != null && bairro == null) {
+      bairro = (await _geo.reverseGeocode(coord.$1, coord.$2))?.bairro;
+    }
     return (coord?.$1, coord?.$2);
   }
 

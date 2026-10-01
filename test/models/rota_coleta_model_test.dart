@@ -65,12 +65,12 @@ void main() {
 
   group('RotaColetaModel.descricaoDias', () {
     RotaColetaModel comDias(List<int> dias) => RotaColetaModel(
-      id: 'r',
-      bairro: 'Bairro',
-      turno: TurnoColeta.diurno,
-      diasSemana: dias,
-      horario: 'A partir das 7h',
-    );
+          id: 'r',
+          bairro: 'Bairro',
+          turno: TurnoColeta.diurno,
+          diasSemana: dias,
+          horario: 'A partir das 7h',
+        );
 
     test('semana inteira vira "Diariamente"', () {
       expect(comDias([1, 2, 3, 4, 5, 6, 7]).descricaoDias, 'Diariamente');

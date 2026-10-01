@@ -3,40 +3,69 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../utils/texto.dart';
+import 'area_municipio.dart';
+
 /// Sugestão de endereço para o autocomplete do formulário de denúncia.
 class EnderecoSugestao {
   final String descricao;
   final double? lat;
   final double? lon;
 
-  const EnderecoSugestao({required this.descricao, this.lat, this.lon});
+  /// Bairro estruturado, quando o provedor devolve (Photon, Nominatim,
+  /// ViaCEP). Gravado na denúncia para o ranking de bairros.
+  final String? bairro;
+
+  const EnderecoSugestao({
+    required this.descricao,
+    this.lat,
+    this.lon,
+    this.bairro,
+  });
+}
+
+/// Resultado do geocode reverso (GPS → endereço).
+class EnderecoReverso {
+  final String endereco;
+  final String? bairro;
+
+  const EnderecoReverso({required this.endereco, this.bairro});
 }
 
 /// Geocoding de endereços para o formulário de denúncia:
-/// autocomplete (Google Places → Nominatim), busca por CEP (ViaCEP),
-/// geocode direto e reverso.
+/// autocomplete (Google Places → Photon), busca por CEP (ViaCEP),
+/// geocode direto e reverso (Nominatim).
+///
+/// Todas as buscas ficam restritas a João Pessoa ([AreaMunicipio]).
 ///
 /// Isola o acesso HTTP e o provedor de geocoding, permitindo testes unitários
 /// com um `http.Client` mockado (a UI apenas orquestra `setState`/debounce).
 class GeocodingService {
   GeocodingService({http.Client? client, String? googleApiKey})
-    : _client = client ?? http.Client(),
-      _googleKey =
-          googleApiKey ?? const String.fromEnvironment('GOOGLE_MAPS_API_KEY');
+      : _client = client ?? http.Client(),
+        _googleKey =
+            googleApiKey ?? const String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 
   final http.Client _client;
 
   // Passe a key via: flutter run --dart-define=GOOGLE_MAPS_API_KEY=SUA_KEY
   final String _googleKey;
 
+  static const _timeout = Duration(seconds: 8);
+
+  // A política do Nominatim exige identificar o app em toda requisição.
+  static const _headers = {
+    'User-Agent': 'EcoJP/1.0 (app de denuncias ambientais de Joao Pessoa)',
+  };
+
   /// Detecta se o texto digitado é um CEP (8 dígitos, com ou sem hífen).
   bool pareceCep(String texto) {
     return RegExp(r'^\d{5}-?\d{3}$').hasMatch(texto.trim());
   }
 
-  /// Autocomplete robusto com 3 estratégias:
+  /// Autocomplete com 3 estratégias:
   /// 1. CEP → buscarPorCep (ViaCEP)
-  /// 2. Nominatim → rua, endereço, bairro (tudo)
+  /// 2. Google Places (com chave) ou Photon
   /// 3. Fallback → aceita qualquer texto se nada encontrar
   Future<List<EnderecoSugestao>> autocomplete(String q) async {
     final trimmed = q.trim();
@@ -47,10 +76,11 @@ class GeocodingService {
       return await buscarPorCep(trimmed);
     }
 
-    // Estratégia 2: Usa Google Places ou Nominatim
+    // Estratégia 2: Google Places ou Photon. O Nominatim não é usado aqui:
+    // a política de uso do OSM proíbe autocomplete (uma busca por tecla).
     final resultados = _googleKey.isNotEmpty
         ? await _buscarGooglePlaces(trimmed)
-        : await _buscarNominatim(trimmed);
+        : await _buscarPhoton(trimmed);
 
     // Estratégia 3: Se não encontrou nada, retorna o texto como fallback
     // (usuário pode digitar manualmente e confirmar depois via geocodificação)
@@ -67,15 +97,16 @@ class GeocodingService {
         'maps.googleapis.com',
         '/maps/api/place/autocomplete/json',
         {
-          'input': '$q, João Pessoa',
+          'input': '$q, ${AreaMunicipio.sufixoBusca}',
           'components': 'country:br',
           'location': '-7.1153,-34.8641',
-          'radius': '50000',
+          'radius': '20000',
+          'strictbounds': 'true',
           'language': 'pt-BR',
           'key': _googleKey,
         },
       );
-      final res = await _client.get(uri).timeout(const Duration(seconds: 8));
+      final res = await _client.get(uri).timeout(_timeout);
       if (res.statusCode != 200) return const [];
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       // O autocomplete do Google não retorna lat/lon (só a descrição);
@@ -87,46 +118,50 @@ class GeocodingService {
           .toList();
     } catch (e) {
       debugPrint('Google Places: $e');
-      return _buscarNominatim(q);
+      return _buscarPhoton(q);
     }
   }
 
-  Future<List<EnderecoSugestao>> _buscarNominatim(String q) async {
+  /// Photon (komoot): geocoder sobre dados do OSM feito para autocomplete.
+  Future<List<EnderecoSugestao>> _buscarPhoton(String q) async {
     try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': '$q, João Pessoa',
-        'countrycodes': 'br',
-        'limit': '50',
-        'format': 'jsonv2',
-        'accept-language': 'pt-BR',
-        'addressdetails': '1',
-        // bounding box de João Pessoa para priorizar resultados locais
-        'viewbox': '-34.98,-6.97,-34.78,-7.29',
-        'bounded': '0',
+      final uri = Uri.https('photon.komoot.io', '/api/', {
+        'q': q,
+        'limit': '10',
+        'bbox': AreaMunicipio.bboxPhoton,
       });
-      final res = await _client
-          .get(uri, headers: {'User-Agent': 'EcoJP/1.0'})
-          .timeout(const Duration(seconds: 8));
+      final res = await _client.get(uri, headers: _headers).timeout(_timeout);
       if (res.statusCode != 200) return const [];
 
-      final data = jsonDecode(res.body) as List<dynamic>;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
       final seen = <String>{};
       final list = <EnderecoSugestao>[];
-      for (final raw in data) {
-        final item = raw as Map<String, dynamic>;
-        final desc = _formatarEnderecoNominatim(item);
-        if (desc.isEmpty || !seen.add(desc)) continue;
+      for (final raw in data['features'] as List<dynamic>? ?? const []) {
+        final feature = raw as Map<String, dynamic>;
+        final coords = (feature['geometry'] as Map?)?['coordinates'] as List?;
+        if (coords == null || coords.length < 2) continue;
+        final lon = (coords[0] as num).toDouble();
+        final lat = (coords[1] as num).toDouble();
+        if (!AreaMunicipio.contem(lat, lon)) continue;
+
+        final p = feature['properties'] as Map<String, dynamic>? ?? const {};
+        final rua = (p['street'] ?? p['name'])?.toString() ?? '';
+        final numero = p['housenumber']?.toString() ?? '';
+        final bairro = (p['district'] ?? p['locality'])?.toString();
+        final partes = [
+          if (rua.isNotEmpty) numero.isEmpty ? rua : '$rua, $numero',
+          if (bairro != null && bairro.isNotEmpty) bairro,
+          'João Pessoa',
+        ];
+        final desc = partes.join(', ');
+        if (!seen.add(desc)) continue;
         list.add(
-          EnderecoSugestao(
-            descricao: desc,
-            lat: double.tryParse(item['lat']?.toString() ?? ''),
-            lon: double.tryParse(item['lon']?.toString() ?? ''),
-          ),
+          EnderecoSugestao(descricao: desc, lat: lat, lon: lon, bairro: bairro),
         );
       }
       return list;
     } catch (e) {
-      debugPrint('Nominatim: $e');
+      debugPrint('Photon: $e');
       return const [];
     }
   }
@@ -139,7 +174,7 @@ class GeocodingService {
     try {
       final res = await _client
           .get(Uri.https('viacep.com.br', '/ws/$cep/json/'))
-          .timeout(const Duration(seconds: 8));
+          .timeout(_timeout);
       if (res.statusCode != 200) return const [];
 
       final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -157,10 +192,16 @@ class GeocodingService {
       ].where((s) => s.isNotEmpty).join(', ');
       final descricao = desc.isEmpty ? '$cidade - $uf' : desc;
 
-      // Resolve lat/lon do endereço retornado pelo CEP.
+      // Resolve lat/lon do endereço retornado pelo CEP (null se cair fora
+      // de João Pessoa).
       final coord = await geocodificar('$descricao, $uf');
       return [
-        EnderecoSugestao(descricao: descricao, lat: coord?.$1, lon: coord?.$2),
+        EnderecoSugestao(
+          descricao: descricao,
+          lat: coord?.$1,
+          lon: coord?.$2,
+          bairro: bairro.isEmpty ? null : bairro,
+        ),
       ];
     } catch (e) {
       debugPrint('ViaCEP: $e');
@@ -168,20 +209,26 @@ class GeocodingService {
     }
   }
 
-  /// Geocodifica um endereço em texto para coordenadas (lat, lon).
+  /// Geocodifica um endereço em texto para coordenadas (lat, lon) dentro de
+  /// João Pessoa, ou `null`. Acrescenta a cidade ao texto e limita a busca à
+  /// área do município — antes "Centro" pegava o primeiro Centro do Brasil.
   Future<(double, double)?> geocodificar(String endereco) async {
-    if (endereco.trim().isEmpty) return null;
+    final texto = endereco.trim();
+    if (texto.isEmpty) return null;
+    final q = removerAcentos(texto).toLowerCase().contains('joao pessoa')
+        ? texto
+        : '$texto, ${AreaMunicipio.sufixoBusca}';
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': endereco,
+        'q': q,
         'countrycodes': 'br',
         'limit': '1',
         'format': 'jsonv2',
         'accept-language': 'pt-BR',
+        'viewbox': AreaMunicipio.viewboxNominatim,
+        'bounded': '1',
       });
-      final res = await _client
-          .get(uri, headers: {'User-Agent': 'EcoJP/1.0'})
-          .timeout(const Duration(seconds: 8));
+      final res = await _client.get(uri, headers: _headers).timeout(_timeout);
       if (res.statusCode != 200) return null;
       final data = jsonDecode(res.body) as List<dynamic>;
       if (data.isEmpty) return null;
@@ -189,6 +236,7 @@ class GeocodingService {
       final lat = double.tryParse(item['lat']?.toString() ?? '');
       final lon = double.tryParse(item['lon']?.toString() ?? '');
       if (lat == null || lon == null) return null;
+      if (!AreaMunicipio.contem(lat, lon)) return null;
       return (lat, lon);
     } catch (e) {
       debugPrint('Geocodificar: $e');
@@ -196,8 +244,11 @@ class GeocodingService {
     }
   }
 
-  /// Endereço legível a partir de coordenadas usando Nominatim reverse.
-  Future<String> reverseGeocode(double lat, double lng) async {
+  /// Endereço legível (e bairro) a partir de coordenadas, via Nominatim
+  /// reverse. `null` se não foi possível — antes devolvia o texto "Endereço
+  /// não encontrado", que acabava gravado como endereço e contado como
+  /// bairro no ranking.
+  Future<EnderecoReverso?> reverseGeocode(double lat, double lng) async {
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
         'format': 'jsonv2',
@@ -206,76 +257,34 @@ class GeocodingService {
         'addressdetails': '1',
         'accept-language': 'pt-BR',
       });
-      final res = await _client.get(uri);
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final addr = data['address'];
-        if (addr is Map<String, dynamic>) {
-          final parts =
-              [
-                    addr['road'],
-                    addr['neighbourhood'],
-                    addr['suburb'],
-                    addr['city'],
-                  ]
-                  .where((s) => s is String && s.trim().isNotEmpty)
-                  .take(3)
-                  .map((s) => s.toString())
-                  .join(', ');
-          if (parts.isNotEmpty) return parts;
-        }
-      }
+      final res = await _client.get(uri, headers: _headers).timeout(_timeout);
+      if (res.statusCode != 200) return null;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final addr = data['address'];
+      if (addr is! Map<String, dynamic>) return null;
+      final bairro = _bairroNominatim(addr);
+      final partes = [addr['road'], bairro, addr['city']]
+          .whereType<String>()
+          .where((s) => s.trim().isNotEmpty)
+          .join(', ');
+      if (partes.isEmpty) return null;
+      return EnderecoReverso(endereco: partes, bairro: bairro);
     } catch (e) {
-      // Sem endereço via Nominatim também: devolve o texto padrão abaixo.
       debugPrint('reverseGeocode (Nominatim) falhou: $e');
+      return null;
     }
-
-    return 'Endereço não encontrado';
   }
 
-  String _formatarEnderecoNominatim(Map<String, dynamic> item) {
-    final addr = item['address'] as Map<String, dynamic>?;
-    if (addr == null) {
-      final display = item['display_name']?.toString() ?? '';
-      return display.split(',').take(3).join(',').trim();
+  static String? _bairroNominatim(Map<String, dynamic> addr) {
+    for (final chave in [
+      'suburb',
+      'neighbourhood',
+      'quarter',
+      'city_district'
+    ]) {
+      final v = addr[chave]?.toString().trim();
+      if (v != null && v.isNotEmpty) return v;
     }
-
-    // Tenta montar: "Rua/Avenida + Número + Bairro + Cidade"
-    final road =
-        addr['road']?.toString() ??
-        addr['pedestrian']?.toString() ??
-        addr['footway']?.toString() ??
-        addr['path']?.toString() ??
-        addr['street']?.toString() ??
-        '';
-    final numero = addr['house_number']?.toString() ?? '';
-
-    final bairro =
-        addr['neighbourhood']?.toString() ??
-        addr['suburb']?.toString() ??
-        addr['quarter']?.toString() ??
-        addr['city_district']?.toString() ??
-        '';
-    final cidade =
-        addr['city']?.toString() ??
-        addr['town']?.toString() ??
-        addr['municipality']?.toString() ??
-        '';
-
-    final parts = <String>[];
-
-    // Monta rua com número se houver
-    if (road.isNotEmpty) {
-      parts.add(numero.isNotEmpty ? '$road, $numero' : road);
-    }
-
-    if (bairro.isNotEmpty) parts.add(bairro);
-    if (cidade.isNotEmpty && cidade != road) parts.add(cidade);
-
-    if (parts.isEmpty) {
-      final display = item['display_name']?.toString() ?? '';
-      return display.split(',').take(2).join(',').trim();
-    }
-    return parts.join(', ');
+    return null;
   }
 }

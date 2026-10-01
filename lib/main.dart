@@ -12,6 +12,7 @@ import 'core/deep_link.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/theme_mode_provider.dart';
 import 'theme/app_theme.dart';
+import 'utils/crashlytics.dart';
 
 void main() async {
   runZonedGuarded(
@@ -47,23 +48,42 @@ void main() async {
         // esse botão só depois de confirmar, na aba de métricas do Console, que
         // as requisições já chegam com token válido — caso contrário o app em
         // produção para de funcionar de uma vez.
-        await FirebaseAppCheck.instance.activate(
-          providerAndroid: kDebugMode
-              ? const AndroidDebugProvider()
-              : const AndroidPlayIntegrityProvider(),
-          providerApple: kDebugMode
-              ? const AppleDebugProvider()
-              : const AppleAppAttestWithDeviceCheckFallbackProvider(),
+        //
+        // Web: reCAPTCHA v3, com a chave de site registrada em App Check →
+        // Apps → Web e passada no build com
+        //   --dart-define=APP_CHECK_RECAPTCHA_SITE_KEY=<chave>
+        // Sem a chave o web não recebe token e seria bloqueado quando a
+        // imposição for ligada.
+        const chaveRecaptcha = String.fromEnvironment(
+          'APP_CHECK_RECAPTCHA_SITE_KEY',
         );
+        if (kIsWeb && chaveRecaptcha.isEmpty) {
+          debugPrint(
+            'App Check: APP_CHECK_RECAPTCHA_SITE_KEY ausente; web sem token.',
+          );
+        } else {
+          await FirebaseAppCheck.instance.activate(
+            providerWeb: kIsWeb ? ReCaptchaV3Provider(chaveRecaptcha) : null,
+            providerAndroid: kDebugMode
+                ? const AndroidDebugProvider()
+                : const AndroidPlayIntegrityProvider(),
+            providerApple: kDebugMode
+                ? const AppleDebugProvider()
+                : const AppleAppAttestWithDeviceCheckFallbackProvider(),
+          );
+        }
 
         // Crashlytics: desativado em debug (evita poluir o console com
         // crashes de desenvolvimento) e captura erros do Flutter framework +
         // erros não tratados fora dele (o runZonedGuarded cobre o resto).
-        await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
-          !kDebugMode,
-        );
-        FlutterError.onError =
-            FirebaseCrashlytics.instance.recordFlutterFatalError;
+        // Só nas plataformas que o suportam (ver crashlyticsDisponivel).
+        if (crashlyticsDisponivel) {
+          await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+            !kDebugMode,
+          );
+          FlutterError.onError =
+              FirebaseCrashlytics.instance.recordFlutterFatalError;
+        }
 
         runApp(const ProviderScope(child: MyApp()));
       } catch (e) {
@@ -74,9 +94,7 @@ void main() async {
     (error, stack) {
       // Erros fora da árvore de widgets (streams, futures soltos) também vão
       // pro Crashlytics, quando o Firebase já foi inicializado com sucesso.
-      if (Firebase.apps.isNotEmpty) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      }
+      registrarErro(error, stack, fatal: true);
     },
   );
 }

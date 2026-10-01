@@ -83,6 +83,10 @@ async function criarUsuario(indice) {
     throw new Error(`login falhou para ${email}: ${await resposta.text()}`);
   }
   const { idToken } = await resposta.json();
+  // Perfil com o nome que os scripts enviam ("Carga N"): as Rules exigem que
+  // o nome público da denúncia seja o `nome` do perfil.
+  await db.collection('usuarios').doc(registro.uid)
+    .set({ nome: `Carga ${indice}`, bio: '', bairro: '' });
   return { uid: registro.uid, email, idToken };
 }
 
@@ -114,6 +118,7 @@ async function criarAlvo(donoUid) {
     likedBy: [],
     dislikedBy: [],
     fixada: false,
+    oculto: false,
   });
   return ref.id;
 }

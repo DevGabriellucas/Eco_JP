@@ -74,12 +74,29 @@ class _HomePageState extends ConsumerState<HomePage> {
   ComentarioRepository get _comentarioRepository =>
       ref.read(comentarioRepositoryProvider);
 
+  // Primeira página em tempo real; as seguintes chegam por get() paginado
+  // (ver _loadMore) e ficam em [_maisAntigas].
   late Stream<List<OcorrenciaModel>> _feedStream;
 
-  int _pageLimit = _pageSize;
   bool _loadingMore = false;
   bool _hasPotentialMore = true;
+  // Já houve "carregar mais": o fim do feed passa a ser decidido pelas
+  // páginas seguintes, não mais pelo tamanho da primeira.
+  bool _paginou = false;
   List<OcorrenciaModel> _cachedOccurrences = const [];
+  final List<OcorrenciaModel> _maisAntigas = [];
+
+  // Contador do sino, recriado só se o usuário mudar (não a cada build).
+  String? _naoLidasUid;
+  Stream<int>? _naoLidasStream;
+
+  Stream<int> _naoLidasDe(String uid) {
+    if (_naoLidasUid != uid || _naoLidasStream == null) {
+      _naoLidasUid = uid;
+      _naoLidasStream = _notificacaoService.contarNaoLidas(uid);
+    }
+    return _naoLidasStream!;
+  }
 
   OccurrenceType? _selectedType;
   OccurrenceStatus? _selectedStatus;
@@ -130,19 +147,16 @@ class _HomePageState extends ConsumerState<HomePage> {
   int? _commentCount(String id) {
     if (_commentCountCache.containsKey(id)) return _commentCountCache[id];
     if (_commentCountLoading.add(id)) {
-      _comentarioRepository
-          .contarComentarios(id)
-          .then((count) {
-            if (!mounted) return;
-            setState(() {
-              _capCache(_commentCountCache);
-              _commentCountCache[id] = count;
-              _commentCountLoading.remove(id);
-            });
-          })
-          .catchError((_) {
-            _commentCountLoading.remove(id);
-          });
+      _comentarioRepository.contarComentarios(id).then((count) {
+        if (!mounted) return;
+        setState(() {
+          _capCache(_commentCountCache);
+          _commentCountCache[id] = count;
+          _commentCountLoading.remove(id);
+        });
+      }).catchError((_) {
+        _commentCountLoading.remove(id);
+      });
     }
     return null;
   }
@@ -155,14 +169,20 @@ class _HomePageState extends ConsumerState<HomePage> {
     // initialData ao card (evita o preview sumir na rolagem de volta). Como o
     // broadcast mantém a assinatura viva ao Firestore mesmo sem ouvintes, o
     // valor cacheado continua atualizando enquanto o stream estiver no cache.
-    return _latestCommentCache[id] = _comentarioRepository
-        .observarUltimoComentario(id)
-        .map((c) {
-          _capCache(_latestCommentValues);
-          _latestCommentValues[id] = c;
-          return c;
-        })
-        .asBroadcastStream();
+    // onCancel: quando o card sai da tela, cancela o listener do Firestore e
+    // tira o stream do cache (o próximo card cria outro). Antes cada card já
+    // exibido deixava um listener vivo — até depois do logout.
+    return _latestCommentCache[id] =
+        _comentarioRepository.observarUltimoComentario(id).map((c) {
+      _capCache(_latestCommentValues);
+      _latestCommentValues[id] = c;
+      return c;
+    }).asBroadcastStream(
+      onCancel: (sub) {
+        sub.cancel();
+        _latestCommentCache.remove(id);
+      },
+    );
   }
 
   // Remove as entradas mais antigas (o Map do Dart preserva ordem de inserção)
@@ -183,7 +203,16 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Stream<List<OcorrenciaModel>> _buildFeedStream() {
-    return _ocorrenciaRepository.listarFeedComFixadas(_pageLimit);
+    return _ocorrenciaRepository.listarFeedComFixadas(_pageSize);
+  }
+
+  /// Volta ao estado inicial do feed (refresh / tentar de novo).
+  void _reiniciarFeed() {
+    _loadingMore = false;
+    _hasPotentialMore = true;
+    _paginou = false;
+    _maisAntigas.clear();
+    _feedStream = _buildFeedStream();
   }
 
   bool get _hasActiveFilters =>
@@ -204,22 +233,42 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  void _loadMore() {
+  Future<void> _loadMore() async {
     if (_loadingMore || !_hasPotentialMore) return;
-    setState(() {
-      _loadingMore = true;
-      _pageLimit += _pageSize;
-      _feedStream = _buildFeedStream();
-    });
+    // Cursor: a denúncia não fixada mais antiga já carregada.
+    final datas = [..._cachedOccurrences, ..._maisAntigas]
+        .where((o) => !o.fixada && o.dataCriacao != null)
+        .map((o) => o.dataCriacao!);
+    if (datas.isEmpty) return;
+    final antesDe = datas.reduce((a, b) => a.isBefore(b) ? a : b);
+
+    setState(() => _loadingMore = true);
+    try {
+      final pagina = await _ocorrenciaRepository.buscarPaginaFeed(
+        antesDe: antesDe,
+        limite: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _paginou = true;
+        _maisAntigas.addAll(pagina.itens);
+        // Página curta vinda do servidor = fim. Vinda do cache (offline),
+        // não dá para afirmar: antes aparecia "fim do feed" falso.
+        if (pagina.itens.length < _pageSize && !pagina.doCache) {
+          _hasPotentialMore = false;
+        }
+      });
+    } catch (_) {
+      // Falha de rede: mantém _hasPotentialMore para tentar de novo.
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   Future<void> _refreshFeed() async {
     _focoTimer?.cancel();
     setState(() {
-      _pageLimit = _pageSize;
-      _loadingMore = false;
-      _hasPotentialMore = true;
-      _feedStream = _buildFeedStream();
+      _reiniciarFeed();
       // Ao atualizar, a denúncia em foco deixa de ficar fixa no topo.
       _foco = null;
       _focoDestaque = false;
@@ -361,22 +410,17 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _sheetLabel(String text, AppPalette pal) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
-      color: pal.hint,
-      letterSpacing: 0.5,
-    ),
-  );
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: pal.hint,
+          letterSpacing: 0.5,
+        ),
+      );
 
   void _retryFeed() {
-    setState(() {
-      _pageLimit = _pageSize;
-      _loadingMore = false;
-      _hasPotentialMore = true;
-      _feedStream = _buildFeedStream();
-    });
+    setState(_reiniciarFeed);
   }
 
   @override
@@ -470,19 +514,15 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     final filtradas = ocorrencias.where((o) {
       if (o.oculto) return false; // ocultada pela autoridade (moderação)
-      final matchesSearch =
-          query.isEmpty ||
+      final matchesSearch = query.isEmpty ||
           o.localizacao.toLowerCase().contains(query) ||
           o.titulo.toLowerCase().contains(query) ||
           o.descricao.toLowerCase().contains(query);
-      final matchesType =
-          _selectedType == null ||
+      final matchesType = _selectedType == null ||
           OccurrenceTypeParser.fromString(o.tipoLixo) == _selectedType;
       final matchesStatus =
-          _selectedStatus == null ||
-          OccurrenceStatusParser.fromString(o.status) == _selectedStatus;
-      final matchesPeriodo =
-          limiteData == null ||
+          _selectedStatus == null || o.statusAtual == _selectedStatus;
+      final matchesPeriodo = limiteData == null ||
           (o.dataCriacao != null && o.dataCriacao!.isAfter(limiteData));
       return matchesSearch && matchesType && matchesStatus && matchesPeriodo;
     }).toList();
@@ -501,8 +541,6 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _toggleLike(OcorrenciaModel o) async {
     final uid = _authService.currentUser?.uid;
     if (uid == null) return;
-    final eu = _authService.currentUser;
-    final nome = eu?.displayName ?? eu?.email?.split('@').first;
     await reagirOcorrencia(
       context: context,
       ocorrencia: o,
@@ -510,7 +548,6 @@ class _HomePageState extends ConsumerState<HomePage> {
       isLike: true,
       ocorrenciaRepository: _ocorrenciaRepository,
       notificacaoService: _notificacaoService,
-      nomeAutor: nome,
       onMudou: () => setState(() {}),
     );
   }
@@ -518,8 +555,6 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _toggleDislike(OcorrenciaModel o) async {
     final uid = _authService.currentUser?.uid;
     if (uid == null) return;
-    final eu = _authService.currentUser;
-    final nome = eu?.displayName ?? eu?.email?.split('@').first;
     await reagirOcorrencia(
       context: context,
       ocorrencia: o,
@@ -527,12 +562,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       isLike: false,
       ocorrenciaRepository: _ocorrenciaRepository,
       notificacaoService: _notificacaoService,
-      nomeAutor: nome,
       onMudou: () => setState(() {}),
     );
   }
 
-  Future<void> _openComments(OcorrenciaModel o, {String? comentarioIdEmFoco}) async {
+  Future<void> _openComments(OcorrenciaModel o,
+      {String? comentarioIdEmFoco}) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -691,7 +726,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         actions: [
           if (uid != null)
             StreamBuilder<int>(
-              stream: _notificacaoService.contarNaoLidas(uid),
+              stream: _naoLidasDe(uid),
               builder: (context, snap) {
                 final count = snap.data ?? 0;
                 return Stack(
@@ -872,19 +907,28 @@ class _HomePageState extends ConsumerState<HomePage> {
       );
     }
 
-    final all = snapshot.data ?? _cachedOccurrences;
-    _cachedOccurrences = all;
+    final primeiraPagina = snapshot.data ?? _cachedOccurrences;
+    _cachedOccurrences = primeiraPagina;
+    // Primeira página (tempo real) + páginas antigas, sem duplicar: a versão
+    // da primeira página (mais fresca) vence.
+    final idsTopo = {for (final o in primeiraPagina) o.id};
+    final all = [
+      ...primeiraPagina,
+      ..._maisAntigas.where((o) => !idsTopo.contains(o.id)),
+    ];
     _carregarDadosAutor(all);
 
-    final hasMore = all.length >= _pageLimit;
-    if (_loadingMore || _hasPotentialMore != hasMore) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() {
-          _loadingMore = false;
-          _hasPotentialMore = hasMore;
+    // Antes de paginar, o fim do feed é a primeira página vir incompleta
+    // (do servidor — vinda do cache offline não prova nada).
+    if (!_paginou && snapshot.hasData) {
+      final naoFixadas = primeiraPagina.where((o) => !o.fixada).length;
+      final hasMore = naoFixadas >= _pageSize;
+      if (_hasPotentialMore != hasMore) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _paginou) return;
+          setState(() => _hasPotentialMore = hasMore);
         });
-      });
+      }
     }
 
     final filtradas = _applyFilters(all);
@@ -924,24 +968,23 @@ class _HomePageState extends ConsumerState<HomePage> {
                 final emFoco = _foco?.id == o.id;
                 // Anônima: o campo usuarioId sumiu do documento (S2), então
                 // "é minha" vem dos ponteiros do próprio perfil.
-                final isOwner =
-                    uid != null &&
+                final isOwner = uid != null &&
                     (o.anonima
                         ? minhasDenunciasAnonimasIds.contains(o.id)
                         : o.usuarioId == uid);
                 final nomeAutor = o.anonima
                     ? 'Denunciante anônimo'
                     : (o.usuarioNome != null && o.usuarioNome!.trim().isNotEmpty
-                          ? o.usuarioNome!
-                          : (_nomeCache[o.usuarioId]?.isNotEmpty == true
-                                ? _nomeCache[o.usuarioId]
-                                : null));
+                        ? o.usuarioNome!
+                        : (_nomeCache[o.usuarioId]?.isNotEmpty == true
+                            ? _nomeCache[o.usuarioId]
+                            : null));
                 final fotoAutor = o.anonima
                     ? null
                     : ((o.usuarioFotoUrl != null &&
-                              o.usuarioFotoUrl!.isNotEmpty)
-                          ? o.usuarioFotoUrl
-                          : _fotoCache[o.usuarioId]);
+                            o.usuarioFotoUrl!.isNotEmpty)
+                        ? o.usuarioFotoUrl
+                        : _fotoCache[o.usuarioId]);
 
                 final card = OccurrenceCard(
                   occurrence: o,
@@ -956,14 +999,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                   onAuthorTap: o.anonima || o.usuarioId == null
                       ? null
                       : () => _openPublicProfile(
-                          o,
-                          nomeAutor: nomeAutor,
-                          fotoAutor: fotoAutor,
-                        ),
+                            o,
+                            nomeAutor: nomeAutor,
+                            fotoAutor: fotoAutor,
+                          ),
                   onReport: isOwner ? null : () => _denunciarOcorrencia(o),
-                  onTogglePin: isAutoridade
-                      ? () => _toggleFixarOcorrencia(o)
-                      : null,
+                  onTogglePin:
+                      isAutoridade ? () => _toggleFixarOcorrencia(o) : null,
                   onManage: isOwner ? () => _gerenciarOcorrencia(o) : null,
                 );
 
@@ -1406,4 +1448,3 @@ class _StatusChip extends StatelessWidget {
 //  BANNER DE AUTORIDADE
 //  Visível no topo do feed apenas para contas com papel 'autoridade'.
 // ─────────────────────────────────────────
-

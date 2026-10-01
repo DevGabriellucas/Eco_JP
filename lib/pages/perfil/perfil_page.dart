@@ -46,6 +46,31 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
 
   int _aba = 0; // 0 = Resumo, 1 = Minhas denúncias
 
+  // Criadas uma vez: streams novas a cada build faziam o StreamBuilder voltar
+  // a "waiting" (spinner) e abrir outro listener a cada rebuild.
+  String? _uid;
+  Stream<UsuarioModel?>? _perfilStream;
+  Stream<List<OcorrenciaModel>>? _minhasDenunciasStream;
+
+  // Última combinação de conquistas já conferida contra o Firestore. A
+  // checagem rodava a cada rebuild do perfil (2 leituras cada, mesmo
+  // negadas); agora só roda quando o conjunto desbloqueado muda.
+  Set<String>? _conquistasConferidas;
+
+  // Perfil real vindo do Firestore (null enquanto carrega).
+  UsuarioModel? _perfilCarregado;
+
+  @override
+  void initState() {
+    super.initState();
+    _uid = _authService.currentUser?.uid;
+    final uid = _uid;
+    if (uid != null) {
+      _perfilStream = _usuarioService.observarPerfil(uid);
+      _minhasDenunciasStream = _ocorrenciaRepository.listarMinhasDenuncias(uid);
+    }
+  }
+
   static const _meses = [
     'jan',
     'fev',
@@ -67,7 +92,17 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     return '${_meses[criacao.month - 1]}/${criacao.year}';
   }
 
-  void _abrirEdicao(UsuarioModel perfil) {
+  /// Só abre com o perfil real carregado. Antes abria com um perfil
+  /// provisório (prefixo do e-mail, sem foto/bio/bairro): salvar gravava o
+  /// prefixo como nome público e apagava o resto.
+  void _abrirEdicao(UsuarioModel? perfil) {
+    if (perfil == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Carregando seu perfil. Tente em instantes.')),
+      );
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => EditarPerfilPage(perfilAtual: perfil)),
     );
@@ -80,11 +115,11 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     await Future<void>.delayed(const Duration(milliseconds: 600));
   }
 
-  Future<void> _verificarConquistasNovas(_Stats stats) async {
-    final uid = _authService.currentUser?.uid;
+  Future<void> _verificarConquistasNovas(
+      _Stats stats, bool isAutoridade) async {
+    final uid = _uid;
     if (uid == null) return;
 
-    final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
     final conquistasAtuais = calcularConquistas(
       denuncias: stats.total,
       resolvidas: stats.resolvidasOficial,
@@ -92,8 +127,17 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
       isAutoridade: isAutoridade,
     );
 
-    final conquistasDesbloqueadas =
-        conquistasAtuais.where((c) => c.desbloqueada).map((c) => c.titulo).toSet();
+    final conquistasDesbloqueadas = conquistasAtuais
+        .where((c) => c.desbloqueada)
+        .map((c) => c.titulo)
+        .toSet();
+    final conferidas = _conquistasConferidas;
+    if (conferidas != null &&
+        conferidas.length == conquistasDesbloqueadas.length &&
+        conferidas.containsAll(conquistasDesbloqueadas)) {
+      return;
+    }
+    _conquistasConferidas = conquistasDesbloqueadas;
 
     try {
       final doc = await FirebaseFirestore.instance
@@ -125,6 +169,8 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
             .set({'items': conquistasDesbloqueadas.toList()});
       }
     } catch (e) {
+      // Tenta de novo na próxima mudança de dados.
+      _conquistasConferidas = null;
       debugPrint('Erro ao verificar conquistas: $e');
     }
   }
@@ -132,12 +178,10 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    final uid = _authService.currentUser?.uid;
+    final uid = _uid;
     // Órgão não usa as seções de cidadão (impacto, conquistas, minhas
     // denúncias, salvos) — são recursos de gamificação/participação do cidadão.
     final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
-    final emailFallback =
-        _authService.currentUser?.email?.split('@').first ?? 'Usuário';
 
     if (uid == null) {
       return Scaffold(
@@ -182,17 +226,23 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
         ),
       ),
       body: StreamBuilder<UsuarioModel?>(
-        stream: _usuarioService.observarPerfil(uid),
+        stream: _perfilStream,
         builder: (context, perfilSnap) {
-          final perfil =
-              perfilSnap.data ?? UsuarioModel(uid: uid, nome: emailFallback);
+          // Enquanto carrega, mostra o cartão sem nome — nunca o prefixo do
+          // e-mail. A edição só abre com o perfil real (ver _abrirEdicao).
+          _perfilCarregado = perfilSnap.data;
+          final perfil = perfilSnap.data ?? UsuarioModel(uid: uid, nome: '');
 
           return StreamBuilder<List<OcorrenciaModel>>(
-            stream: _ocorrenciaRepository.listarMinhasDenuncias(uid),
+            stream: _minhasDenunciasStream,
             builder: (context, ocSnap) {
               final ocorrencias = ocSnap.data ?? [];
               final stats = _calcularStats(ocorrencias);
-              _verificarConquistasNovas(stats);
+              if (ocSnap.hasData) {
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _verificarConquistasNovas(stats, isAutoridade),
+                );
+              }
 
               return RefreshIndicator(
                 onRefresh: _recarregar,
@@ -376,7 +426,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                 color: Colors.white,
               ),
               tooltip: 'Editar perfil',
-              onPressed: () => _abrirEdicao(perfil),
+              onPressed: () => _abrirEdicao(_perfilCarregado),
             ),
           ),
         ],
@@ -386,7 +436,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
 
   Widget _nudgeCompletar(UsuarioModel perfil) {
     return GestureDetector(
-      onTap: () => _abrirEdicao(perfil),
+      onTap: () => _abrirEdicao(_perfilCarregado),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -725,8 +775,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     if (ocorrencias.isEmpty) {
       return [_denunciasVazio()];
     }
-    final ordenadas = [...ocorrencias]
-      ..sort((a, b) {
+    final ordenadas = [...ocorrencias]..sort((a, b) {
         final da = a.dataCriacao;
         final db = b.dataCriacao;
         if (da == null && db == null) return 0;
@@ -816,7 +865,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          _statusBadge(o.status),
+                          _statusBadge(o.statusAtual),
                           const Spacer(),
                           Text(
                             _formatarData(o.dataCriacao),
@@ -890,7 +939,8 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
                   height: 60,
                   fit: BoxFit.cover,
                   semanticLabel: 'Foto da denúncia: ${o.titulo}',
-                  errorBuilder: (context, error, stackTrace) => _thumbPlaceholder(),
+                  errorBuilder: (context, error, stackTrace) =>
+                      _thumbPlaceholder(),
                 );
               },
             )
@@ -911,8 +961,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     );
   }
 
-  Widget _statusBadge(String status) {
-    final s = OccurrenceStatusParser.fromString(status);
+  Widget _statusBadge(OccurrenceStatus s) {
     final cor = s.color;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -954,9 +1003,8 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
         contagem[o.tipoLixo] = (contagem[o.tipoLixo] ?? 0) + 1;
       }
       if (contagem.isNotEmpty) {
-        categoriaTop = contagem.entries
-            .reduce((a, b) => a.value >= b.value ? a : b)
-            .key;
+        categoriaTop =
+            contagem.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
       }
     }
 
@@ -966,7 +1014,8 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     // Impacto oficial: verificadas pela autoridade e resolvidas oficialmente.
     final verificadas = ocorrencias.where((o) => o.verificada).length;
     final resolvidasOficial = ocorrencias
-        .where((o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
+        .where(
+            (o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
         .length;
 
     return _Stats(

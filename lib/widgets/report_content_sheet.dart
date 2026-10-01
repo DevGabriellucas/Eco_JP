@@ -55,9 +55,8 @@ class _ReportContentSheetState extends State<_ReportContentSheet> {
       context,
       ReportContentResult(
         motivo: _motivo,
-        detalhe: _detalheCtrl.text.trim().isEmpty
-            ? null
-            : _detalheCtrl.text.trim(),
+        detalhe:
+            _detalheCtrl.text.trim().isEmpty ? null : _detalheCtrl.text.trim(),
       ),
     );
   }

@@ -7,15 +7,13 @@ import '../utils/texto.dart';
 class UsuarioService {
   static final UsuarioService instance = UsuarioService();
 
-  final CollectionReference<Map<String, dynamic>> _ref = FirebaseFirestore
-      .instance
-      .collection('usuarios');
+  final CollectionReference<Map<String, dynamic>> _ref =
+      FirebaseFirestore.instance.collection('usuarios');
 
   // Índice de unicidade de nome de exibição: um documento por nome, tendo o
   // slug do nome como ID. Ver [nomeEmUso] para o motivo de existir.
-  final CollectionReference<Map<String, dynamic>> _nomesRef = FirebaseFirestore
-      .instance
-      .collection('nomes_reservados');
+  final CollectionReference<Map<String, dynamic>> _nomesRef =
+      FirebaseFirestore.instance.collection('nomes_reservados');
 
   // Observa o perfil em tempo real
   Stream<UsuarioModel?> observarPerfil(String uid) {
@@ -52,6 +50,56 @@ class UsuarioService {
       }
       await _ref.doc(usuario.uid).set(dados);
     });
+  }
+
+  /// Garante que a conta [uid] tenha perfil em `usuarios/{uid}` com nome
+  /// reservado, criando-o se faltar. Devolve o perfil.
+  ///
+  /// O login Google não passa pelo cadastro, então antes não criava perfil
+  /// nem reserva: a tela usava um perfil provisório com o prefixo do e-mail
+  /// como nome, que virava público ao salvar a bio. Aqui o nome sai do
+  /// [nomeSugerido] (displayName do Google) — nunca do e-mail — e ganha um
+  /// sufixo numérico se já estiver reservado por outra conta.
+  ///
+  /// Se um cadastro anterior reservou o nome mas caiu antes de salvar o
+  /// perfil, reaproveita essa reserva.
+  Future<UsuarioModel> garantirPerfil(
+    String uid, {
+    String? nomeSugerido,
+    String? fotoUrl,
+  }) async {
+    final existente = await carregarPerfil(uid);
+    if (existente != null) return existente;
+
+    final reservas =
+        await _nomesRef.where('uid', isEqualTo: uid).limit(1).get();
+    var nome = reservas.docs.isEmpty
+        ? null
+        : reservas.docs.first.data()['nome'] as String?;
+
+    if (nome == null) {
+      var base = sanitizarLinhaUnica(nomeSugerido ?? '');
+      if (idDoNome(base) == null) base = 'Usuário';
+      // Deixa espaço para o sufixo dentro do limite de 40 das regras.
+      if (base.length > 34) base = base.substring(0, 34).trim();
+      final candidatos = [
+        base,
+        for (var i = 2; i <= 9; i++) '$base $i',
+        for (var i = 0; i < 5; i++)
+          '$base ${1000 + DateTime.now().microsecondsSinceEpoch % 9000 + i}',
+      ];
+      for (final candidato in candidatos) {
+        if (await reservarNome(candidato, uid)) {
+          nome = candidato;
+          break;
+        }
+      }
+      if (nome == null) throw StateError('Nenhum nome disponível para $uid');
+    }
+
+    final perfil = UsuarioModel(uid: uid, nome: nome, fotoUrl: fotoUrl);
+    await salvarPerfil(perfil);
+    return perfil;
   }
 
   CollectionReference<Map<String, dynamic>> _seguindoRef(String uid) =>
@@ -110,6 +158,11 @@ class UsuarioService {
   /// Máximo de operações aceitas por um WriteBatch do Firestore.
   static const int _maxOpsPorLote = 500;
 
+  /// Denúncias anônimas por commit na exclusão de conta. Cada uma custa até
+  /// 2 acessos a dono/info nas regras (exists + get em isOwner); 6 por lote
+  /// fica em 12, abaixo do teto de 20 por requisição com folga.
+  static const int _denunciasAnonimasPorLote = 6;
+
   /// Apaga todos os dados pessoais do usuário do Firestore: perfil,
   /// consentimento, denúncias (anônimas incluídas), notificações e vínculos
   /// de seguir/ser seguido.
@@ -131,23 +184,30 @@ class UsuarioService {
   Future<void> excluirTodosDados(String uid) async {
     final db = FirebaseFirestore.instance;
     final lotes = _LotesDeExclusao(db);
+    // Cada exclusão de denúncia anônima faz as regras lerem dono/info
+    // (isOwner), e um commit aceita no máximo 20 exists()/get(). Num lote
+    // único, quem tinha 21+ anônimas nunca conseguia excluir a conta.
+    final lotesAnonimas = _LotesDeExclusao(
+      db,
+      tamanho: _denunciasAnonimasPorLote * 3,
+    );
 
     // 1. Denúncias anônimas. O documento público NÃO guarda usuarioId (ver
     //    OcorrenciaRepository.cadastrarOcorrencia), então a query do passo 2
     //    não as encontra. Só os ponteiros do próprio perfil sabem quais são —
     //    sem este passo, as denúncias anônimas sobreviveriam à exclusão.
-    final ponteiros = await _ref
-        .doc(uid)
-        .collection('minhas_denuncias_anonimas')
-        .get();
+    final ponteiros =
+        await _ref.doc(uid).collection('minhas_denuncias_anonimas').get();
     for (final ponteiro in ponteiros.docs) {
       final ocorrencia = db.collection('ocorrencias').doc(ponteiro.id);
       // As Rules avaliam get() contra o estado já commitado, então apagar a
       // ocorrência e o dono/info que comprova a titularidade no mesmo lote é
       // seguro: isOwner() ainda enxerga dono/info na hora da avaliação.
-      lotes.deletar(ocorrencia);
-      lotes.deletar(ocorrencia.collection('dono').doc('info'));
-      lotes.deletar(ponteiro.reference);
+      // As três exclusões de uma denúncia ficam sempre no mesmo lote
+      // (o tamanho do lote é múltiplo de 3).
+      lotesAnonimas.deletar(ocorrencia);
+      lotesAnonimas.deletar(ocorrencia.collection('dono').doc('info'));
+      lotesAnonimas.deletar(ponteiro.reference);
     }
 
     // 2. Denúncias não-anônimas.
@@ -160,11 +220,8 @@ class UsuarioService {
     }
 
     // 3. Notificações recebidas.
-    final notifs = await db
-        .collection('notificacoes')
-        .doc(uid)
-        .collection('items')
-        .get();
+    final notifs =
+        await db.collection('notificacoes').doc(uid).collection('items').get();
     for (final doc in notifs.docs) {
       lotes.deletar(doc.reference);
     }
@@ -185,16 +242,38 @@ class UsuarioService {
     }
 
     // 5. Reserva do nome. Sem isto o nome ficaria permanentemente bloqueado
-    //    por uma conta que não existe mais.
+    //    por uma conta que não existe mais. Só entra no lote se existir e for
+    //    desta conta: contas criadas antes de nomes_reservados não têm
+    //    reserva, e a regra nega apagar a de outra conta — num delete negado
+    //    o lote inteiro (com perfil e consentimento) falhava.
     final perfil = await _ref.doc(uid).get();
     final nome = perfil.data()?['nome'] as String?;
     final slug = nome == null ? null : idDoNome(nome);
-    if (slug != null) lotes.deletar(_nomesRef.doc(slug));
+    if (slug != null) {
+      final reserva = await _nomesRef.doc(slug).get();
+      if (reserva.exists && reserva.data()?['uid'] == uid) {
+        lotes.deletar(reserva.reference);
+      }
+    }
 
-    // 6. Consentimento e perfil por último: nada mais depende deles.
+    // 6. Registros de compartilhamento (um por denúncia compartilhada).
+    final compartilhamentos = await db
+        .collectionGroup('compartilhamentos')
+        .where('uid', isEqualTo: uid)
+        .get();
+    for (final doc in compartilhamentos.docs) {
+      lotes.deletar(doc.reference);
+    }
+
+    // 7. Estado privado (conquistas já notificadas, carimbo de reação),
+    //    consentimento e perfil por último: nada mais depende deles.
+    lotes
+        .deletar(_ref.doc(uid).collection('meta').doc('conquistasNotificadas'));
+    lotes.deletar(_ref.doc(uid).collection('meta').doc('reacao'));
     lotes.deletar(db.collection('consentimentos').doc(uid));
     lotes.deletar(_ref.doc(uid));
 
+    await lotesAnonimas.commit();
     await lotes.commit();
   }
 
@@ -205,8 +284,13 @@ class UsuarioService {
   /// "José Silva", "jose silva" e "JOSE-SILVA" disputam o mesmo documento. Isso
   /// é intencional — em app de denúncia, dois perfis com nomes visualmente
   /// confundíveis são um vetor de personificação, não uma conveniência.
+  ///
+  /// O slug sai do nome já higienizado — o mesmo texto que salvarPerfil
+  /// grava. Gerado do texto cru, um caractere invisível no meio ("Jo​ão")
+  /// virava hífen no slug, escapava da reserva de "João Silva" e, depois da
+  /// higienização, exibia um nome idêntico ao da outra conta.
   static String? idDoNome(String nome) {
-    final slug = slugify(nome);
+    final slug = slugify(sanitizarLinhaUnica(nome));
     return slug.isEmpty ? null : slug;
   }
 
@@ -263,44 +347,26 @@ class UsuarioService {
     final doc = await ref.get();
     if (doc.exists && doc.data()?['uid'] == uid) await ref.delete();
   }
-
-  /// Move a reserva de [nomeAntigo] para [nomeNovo] ao renomear o perfil.
-  /// Retorna false, sem alterar nada, se o nome novo já for de outra conta.
-  ///
-  /// Reserva antes de liberar: se a ordem fosse inversa e a reserva falhasse,
-  /// o usuário ficaria sem nenhum nome reservado e outra conta poderia tomar
-  /// o que ele ainda usa.
-  Future<bool> trocarNome({
-    required String uid,
-    required String nomeAntigo,
-    required String nomeNovo,
-  }) async {
-    final slugNovo = idDoNome(nomeNovo);
-    if (slugNovo == null) return false;
-    if (idDoNome(nomeAntigo) == slugNovo) return true;
-    if (!await reservarNome(nomeNovo, uid)) return false;
-    await liberarNome(nomeAntigo, uid);
-    return true;
-  }
 }
 
-/// Acumula exclusões e faz commit em blocos de [UsuarioService._maxOpsPorLote].
+/// Acumula exclusões e faz commit em blocos de [tamanho] (padrão
+/// [UsuarioService._maxOpsPorLote]).
 ///
 /// O WriteBatch do Firestore rejeita mais de 500 escritas por commit, e um
 /// usuário ativo passa desse número só em notificações — a versão anterior
 /// desta exclusão usava um único batch e falhava de forma determinística para
 /// esses usuários.
 class _LotesDeExclusao {
-  _LotesDeExclusao(this._db);
+  _LotesDeExclusao(this._db, {this.tamanho = UsuarioService._maxOpsPorLote});
 
   final FirebaseFirestore _db;
+  final int tamanho;
   final List<DocumentReference<Object?>> _refs = [];
 
   void deletar(DocumentReference<Object?> ref) => _refs.add(ref);
 
   /// Aplica as exclusões acumuladas, um lote por vez e em ordem.
   Future<void> commit() async {
-    const tamanho = UsuarioService._maxOpsPorLote;
     for (var inicio = 0; inicio < _refs.length; inicio += tamanho) {
       final fim = (inicio + tamanho).clamp(0, _refs.length);
       final lote = _db.batch();

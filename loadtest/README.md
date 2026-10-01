@@ -69,9 +69,36 @@ Então:
 npm run loadtest:curtidas    # contenção de escrita (o teste que importa)
 npm run loadtest:denuncias   # vazão de criação + limite anti-spam
 npm run loadtest:feed        # leitura por sessão
+npm run loadtest:pico        # pico de pessoas simultâneas (sessões completas)
 ```
 
-Cada um grava o resultado bruto em `loadtest/resultados/`.
+Para que `feed.js` e `pico.js` leiam um acervo realista, popule antes 10 mil
+denúncias sintéticas (com as mesmas variáveis de emulador do seed):
+
+```
+npm run loadtest:corpus
+```
+
+Cada um grava o resultado bruto em `loadtest/resultados/` (a pasta é
+versionada vazia; os JSON gerados, não).
+
+### Como as métricas são contadas
+
+- `curtidas_conflito` só conta disputa pelo documento: a transação é tentada
+  até 5 vezes, como o SDK do app faz, e só conta se todas abortarem (409).
+  401/403 (token vencido, Rules) vão para `curtidas_negadas`; falhas de rede ou
+  servidor, para `curtidas_erro`. Transações abandonadas recebem `rollback`.
+- A curtida grava também `usuarios/{uid}/meta/reacao` (carimbo exigido pelas
+  Rules, que limitam uma reação por segundo por usuário).
+- As consultas filtram `oculto == false`, como o app — sem o filtro as Rules
+  negam a listagem.
+- Em `pico.js`, "pessoas simultâneas" vem de `vus` (medido), não de `vus_max`
+  (o teto configurado), e curtidas em disputa ficam fora da taxa de erro.
+- Em `denuncias.js`, a rajada de spam tem contadores próprios e não entra na
+  vazão de criação.
+
+Os números de `RESULTADOS.md` foram medidos antes destas correções; rode as
+baterias de novo antes de citá-los.
 
 ## O que cada teste responde
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
+import '../services/notificacao_service.dart';
 import '../theme/app_theme.dart';
 
 class FilaVerificacaoPage extends ConsumerStatefulWidget {
@@ -22,20 +25,43 @@ class _FilaVerificacaoPageState extends ConsumerState<FilaVerificacaoPage> {
   String _busca = '';
   final _buscaController = TextEditingController();
 
+  // Criada uma vez: uma stream nova a cada build fazia o StreamBuilder voltar
+  // a "waiting" (spinner) e reabrir o listener a cada rebuild.
+  // Na busca, isso fechava o teclado a cada letra digitada.
+  late final Stream<List<OcorrenciaModel>> _fila =
+      ref.read(ocorrenciaRepositoryProvider).listarParaVerificacao();
+
   @override
   void dispose() {
     _buscaController.dispose();
     super.dispose();
   }
 
+  // Trava contra toque duplo: cada toque gerava outro evento de auditoria.
+  final Set<String> _verificando = {};
+
   Future<void> _marcarVerificada(OcorrenciaModel ocorrencia) async {
+    if (!_verificando.add(ocorrencia.id)) return;
     final service = ref.read(ocorrenciaRepositoryProvider);
     try {
-      await service.definirVerificacao(
+      // Grava o nome do perfil da autoridade (antes era o texto fixo
+      // 'Autoridade') e avisa o cidadão, como no detalhe.
+      final nome = await service.definirVerificacao(
         ocorrencia.id,
         verificar: true,
-        nomeAutoridade: 'Autoridade',
       );
+      final dono = ocorrencia.usuarioId;
+      if (!ocorrencia.anonima && dono != null) {
+        unawaited(
+          NotificacaoService.instance.notificar(
+            donoId: dono,
+            tipo: 'status_confirmada',
+            deUsuarioNome: nome,
+            ocorrenciaId: ocorrencia.id,
+            ocorrenciaTitulo: ocorrencia.titulo,
+          ),
+        );
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -53,6 +79,8 @@ class _FilaVerificacaoPageState extends ConsumerState<FilaVerificacaoPage> {
           ),
         );
       }
+    } finally {
+      _verificando.remove(ocorrencia.id);
     }
   }
 
@@ -82,7 +110,6 @@ class _FilaVerificacaoPageState extends ConsumerState<FilaVerificacaoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final service = ref.watch(ocorrenciaRepositoryProvider);
     final pal = context.pal;
 
     return Scaffold(
@@ -101,9 +128,10 @@ class _FilaVerificacaoPageState extends ConsumerState<FilaVerificacaoPage> {
         ),
       ),
       body: StreamBuilder<List<OcorrenciaModel>>(
-        stream: service.listarParaVerificacao(),
+        stream: _fila,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (!snap.hasData &&
+              snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -130,7 +158,8 @@ class _FilaVerificacaoPageState extends ConsumerState<FilaVerificacaoPage> {
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
                         itemCount: filtrada.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 10),
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 10),
                         itemBuilder: (_, i) => _ItemFila(
                           ocorrencia: filtrada[i],
                           onAbrir: () => _abrirNoFeed(filtrada[i]),
@@ -387,9 +416,8 @@ class _OpcaoTipo extends StatelessWidget {
           color: pal.ink,
         ),
       ),
-      trailing: selecionado
-          ? Icon(Icons.check, color: pal.primary, size: 20)
-          : null,
+      trailing:
+          selecionado ? Icon(Icons.check, color: pal.primary, size: 20) : null,
       onTap: onTap,
     );
   }
@@ -478,154 +506,154 @@ class _ItemFila extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-            // ── Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-              child: Row(
-                children: [
-                  // Chip de tipo
+          // ── Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+            child: Row(
+              children: [
+                // Chip de tipo
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: typeEnum.color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(typeEnum.icon, size: 12, color: typeEnum.color),
+                      const SizedBox(width: 4),
+                      Text(
+                        typeEnum.label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: typeEnum.color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                // Status de triagem (se houver)
+                if (statusOficial != null)
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: typeEnum.color.withValues(alpha: 0.15),
+                      color: statusOficial.color.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(typeEnum.icon, size: 12, color: typeEnum.color),
+                        Icon(statusOficial.icon,
+                            size: 12, color: statusOficial.color),
                         const SizedBox(width: 4),
                         Text(
-                          typeEnum.label,
+                          statusOficial.label,
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: typeEnum.color,
+                            color: statusOficial.color,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Spacer(),
-                  // Status de triagem (se houver)
-                  if (statusOficial != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: statusOficial.color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(statusOficial.icon,
-                              size: 12, color: statusOficial.color),
-                          const SizedBox(width: 4),
-                          Text(
-                            statusOficial.label,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: statusOficial.color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  // Idade da denúncia — destaca denúncias antigas em laranja
-                  if (statusOficial == null) ...[
-                    Icon(
-                      Icons.schedule,
-                      size: 13,
-                      color: _idadeCor(o.dataCriacao),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      idadeStr,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _idadeCor(o.dataCriacao),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // ── Título
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-              child: Text(
-                o.titulo.isEmpty ? 'Sem título' : o.titulo,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: context.pal.ink,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            // ── Localização
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.location_on,
-                    size: 12,
-                    color: Color(0xFF4CAF50),
+                // Idade da denúncia — destaca denúncias antigas em laranja
+                if (statusOficial == null) ...[
+                  Icon(
+                    Icons.schedule,
+                    size: 13,
+                    color: _idadeCor(o.dataCriacao),
                   ),
                   const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      o.localizacao,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF4CAF50),
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
                   Text(
-                    dataStr,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.hint,
+                    idadeStr,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _idadeCor(o.dataCriacao),
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
+          ),
 
-            // ── Botões de Ação
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: onVerificar,
-                      child: const Text('Verificar'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: onAbrir,
-                      child: const Text('Abrir'),
-                    ),
-                  ),
-                ],
+          // ── Título
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+            child: Text(
+              o.titulo.isEmpty ? 'Sem título' : o.titulo,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: context.pal.ink,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+          ),
+
+          // ── Localização
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.location_on,
+                  size: 12,
+                  color: Color(0xFF4CAF50),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    o.localizacao,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF4CAF50),
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  dataStr,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.hint,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Botões de Ação
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onVerificar,
+                    child: const Text('Verificar'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onAbrir,
+                    child: const Text('Abrir'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

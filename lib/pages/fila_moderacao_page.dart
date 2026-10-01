@@ -25,6 +25,12 @@ class _FilaModeracaoPageState extends State<FilaModeracaoPage> {
   String _busca = '';
   final _buscaController = TextEditingController();
 
+  // Criada uma vez: uma stream nova a cada build fazia o StreamBuilder voltar
+  // a "waiting" (spinner) e reabrir o listener a cada rebuild.
+  // Na busca, isso fechava o teclado a cada letra digitada.
+  late final Stream<List<DenunciaModeracaoModel>> _pendentes =
+      ModeracaoService.instance.listarPendentes();
+
   @override
   void dispose() {
     _buscaController.dispose();
@@ -60,9 +66,10 @@ class _FilaModeracaoPageState extends State<FilaModeracaoPage> {
         ),
       ),
       body: StreamBuilder<List<DenunciaModeracaoModel>>(
-        stream: service.listarPendentes(),
+        stream: _pendentes,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (!snap.hasData &&
+              snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
@@ -91,8 +98,13 @@ class _FilaModeracaoPageState extends State<FilaModeracaoPage> {
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
                         itemCount: filtrada.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 10),
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 10),
+                        // key: sem ela o State de um item resolvido era
+                        // reaproveitado pelo próximo relatório da lista, que
+                        // herdava o spinner e ficava sem botões.
                         itemBuilder: (_, i) => _ItemModeracao(
+                          key: ValueKey(filtrada[i].id),
                           denuncia: filtrada[i],
                           service: service,
                         ),
@@ -348,9 +360,8 @@ class _OpcaoAlvo extends StatelessWidget {
           color: pal.ink,
         ),
       ),
-      trailing: selecionado
-          ? Icon(Icons.check, color: pal.primary, size: 20)
-          : null,
+      trailing:
+          selecionado ? Icon(Icons.check, color: pal.primary, size: 20) : null,
       onTap: onTap,
     );
   }
@@ -399,7 +410,11 @@ class _ItemModeracao extends ConsumerStatefulWidget {
   final DenunciaModeracaoModel denuncia;
   final ModeracaoService service;
 
-  const _ItemModeracao({required this.denuncia, required this.service});
+  const _ItemModeracao({
+    super.key,
+    required this.denuncia,
+    required this.service,
+  });
 
   @override
   ConsumerState<_ItemModeracao> createState() => _ItemModeracaoState();
@@ -426,10 +441,11 @@ class _ItemModeracaoState extends ConsumerState<_ItemModeracao> {
       ).showSnackBar(SnackBar(content: Text(sucesso)));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _processando = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(mensagemErro(e, acao: 'concluir a ação'))),
       );
+    } finally {
+      if (mounted) setState(() => _processando = false);
     }
   }
 
@@ -464,9 +480,8 @@ class _ItemModeracaoState extends ConsumerState<_ItemModeracao> {
     final d = widget.denuncia;
     final alvoLabel = d.isComentario ? 'Comentário' : 'Ocorrência';
     final idadeStr = _idade(d.criadoEm);
-    final dataStr = d.criadoEm != null
-        ? DateFormat('dd/MM/yyyy').format(d.criadoEm!)
-        : '';
+    final dataStr =
+        d.criadoEm != null ? DateFormat('dd/MM/yyyy').format(d.criadoEm!) : '';
 
     return Container(
       decoration: BoxDecoration(

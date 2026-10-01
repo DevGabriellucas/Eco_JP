@@ -46,5 +46,8 @@ app.*.map.json
 
 # Teste de carga (k6)
 loadtest/tokens.json
-loadtest/resultados/
+# A pasta existe no repositório (o k6 não cria diretórios ao salvar o
+# resumo), mas os resultados de cada execução não são versionados.
+loadtest/resultados/*
+!loadtest/resultados/.gitkeep
 node_modules

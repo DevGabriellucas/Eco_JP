@@ -84,7 +84,7 @@ class _OcorrenciaMapSheetState extends State<_OcorrenciaMapSheet> {
     final pal = context.pal;
     final o = widget.ocorrencia;
     final tipo = OccurrenceTypeParser.fromString(o.tipoLixo);
-    final status = OccurrenceStatusParser.fromString(o.status);
+    final status = o.statusAtual;
     final imagem = o.imagensUrls.isNotEmpty ? o.imagensUrls.first : o.imagemUrl;
 
     return SafeArea(
@@ -150,7 +150,8 @@ class _OcorrenciaMapSheetState extends State<_OcorrenciaMapSheet> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       );
                     },
-                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox.shrink(),
                   ),
                 ),
               ),

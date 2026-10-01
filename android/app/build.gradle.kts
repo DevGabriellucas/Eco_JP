@@ -17,15 +17,20 @@ val mapsApiKey: String = run {
     if (localProps.exists()) {
         localProps.inputStream().use { props.load(it) }
     }
-    props.getProperty("MAPS_API_KEY")
-        ?: System.getenv("MAPS_API_KEY")
+    // takeIf: uma linha `MAPS_API_KEY=` vazia no local.properties devolvia ""
+    // (não null) e escondia a variável de ambiente.
+    props.getProperty("MAPS_API_KEY")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("MAPS_API_KEY")?.takeIf { it.isNotBlank() }
         ?: ""
 }
 
 // Assinatura de release. As credenciais ficam em android/key.properties
-// (gitignored, NUNCA versionado). Sem esse arquivo — em CI de fork ou em
-// checkout limpo — o build de release cai na chave de debug, que continua
-// servindo para `flutter run --release` local mas é recusada pela Play Store.
+// (gitignored, NUNCA versionado). Sem esse arquivo o build de release FALHA
+// (ver o bloco taskGraph.whenReady no fim): antes ele caía em silêncio na
+// chave de debug efêmera do runner, e cada tag gerava um APK com assinatura
+// diferente — sem atualização por cima, login Google com ApiException 10 e
+// App Check recusando. Para um release local de teste, assinado com a chave
+// de debug, exporte ECOJP_PERMITIR_RELEASE_DEBUG=true.
 val keystoreProperties = Properties().apply {
     val arquivo = rootProject.file("key.properties")
     if (arquivo.exists()) {
@@ -33,6 +38,7 @@ val keystoreProperties = Properties().apply {
     }
 }
 val temKeystoreDeRelease = keystoreProperties.getProperty("storeFile") != null
+val permiteReleaseComDebug = System.getenv("ECOJP_PERMITIR_RELEASE_DEBUG") == "true"
 
 android {
     namespace = "br.com.ecojp.app"
@@ -76,8 +82,8 @@ android {
             signingConfig = if (temKeystoreDeRelease) {
                 signingConfigs.getByName("release")
             } else {
-                // Fallback só para desenvolvimento. Um AAB assinado com a chave
-                // de debug é REJEITADO no upload para a Play Store.
+                // Só chega a ser usado com ECOJP_PERMITIR_RELEASE_DEBUG=true;
+                // sem isso o build é interrompido antes (ver abaixo).
                 signingConfigs.getByName("debug")
             }
         }
@@ -96,4 +102,17 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// Interrompe qualquer tarefa de release sem a chave de upload. Checado só
+// quando o grafo de tarefas está pronto, para não afetar builds de debug.
+gradle.taskGraph.whenReady {
+    val pedeRelease = allTasks.any { it.name.contains("Release") }
+    if (pedeRelease && !temKeystoreDeRelease && !permiteReleaseComDebug) {
+        throw GradleException(
+            "Build de release sem android/key.properties. Configure a chave de " +
+                "upload (ver .github/workflows/release.yml) ou, só para teste " +
+                "local, exporte ECOJP_PERMITIR_RELEASE_DEBUG=true."
+        )
+    }
 }

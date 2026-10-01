@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -20,6 +22,15 @@ class LocationService {
   }
 
   Future<PositionResult> _requestPermissionAndGetPosition() async {
+    try {
+      return await _obterPosicao();
+    } catch (e) {
+      // Sem try/catch, uma exceção do plugin deixava o mapa em spinner eterno.
+      return PositionFailure('Não foi possível obter sua localização.');
+    }
+  }
+
+  Future<PositionResult> _obterPosicao() async {
     final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!isServiceEnabled) {
       return PositionFailure('Ligue sua localização!');
@@ -35,16 +46,24 @@ class LocationService {
     }
 
     if (permission == LocationPermission.deniedForever) {
-      await GeolocatorPlatform.instance.openLocationSettings();
-      permission = await Geolocator.checkPermission();
-
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return PositionFailure('Localização negada permanentemente!');
-      }
+      // Permissão negada para sempre se resolve nas configurações do APP;
+      // antes abria a tela do GPS, que não muda nada.
+      await Geolocator.openAppSettings();
+      return PositionFailure('Permita a localização nas configurações do app.');
     }
 
-    return PositionSucess(await Geolocator.getCurrentPosition());
+    try {
+      return PositionSucess(
+        await Geolocator.getCurrentPosition(
+          timeLimit: const Duration(seconds: 10),
+        ),
+      );
+    } on TimeoutException {
+      // Ambiente fechado: usa a última posição conhecida, se houver.
+      final ultima = await Geolocator.getLastKnownPosition();
+      if (ultima != null) return PositionSucess(ultima);
+      return PositionFailure('Não foi possível obter sua localização.');
+    }
   }
 
   //Obtém a posição atual LatLng(Class de latitude e longitude do GoogleMaps).

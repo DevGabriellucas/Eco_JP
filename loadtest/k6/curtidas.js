@@ -18,13 +18,7 @@ import { check } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 import { SharedArray } from 'k6/data';
 import exec from 'k6/execution';
-import {
-  contexto,
-  iniciarTransacao,
-  lerNaTransacao,
-  commitTransacao,
-  campos,
-} from './lib/firestore.js';
+import { contexto, curtirComRetentativa } from './lib/firestore.js';
 
 const config = JSON.parse(open('../tokens.json'));
 const ctx = contexto(config);
@@ -33,6 +27,10 @@ const usuarios = new SharedArray('usuarios', () => config.usuarios);
 
 const curtidasOk = new Counter('curtidas_ok');
 const curtidasConflito = new Counter('curtidas_conflito');
+// 401/403 (token vencido, Rules) e falhas de rede/servidor contam à parte:
+// não são disputa pelo documento e antes inflavam a taxa de conflito.
+const curtidasNegadas = new Counter('curtidas_negadas');
+const curtidasErro = new Counter('curtidas_erro');
 const taxaConflito = new Rate('curtidas_conflito_taxa');
 const latencia = new Trend('curtida_duracao_ms', true);
 
@@ -70,56 +68,25 @@ export default function () {
   const caminho = ctx.caminhoDoc('ocorrencias', config.alvoId);
   const inicio = Date.now();
 
-  const transacao = iniciarTransacao(ctx, usuario.idToken);
-  if (!transacao) {
-    curtidasConflito.add(1);
-    taxaConflito.add(true);
-    return;
-  }
-
-  const atual = lerNaTransacao(ctx, usuario.idToken, caminho, transacao);
-  if (!atual) {
-    curtidasConflito.add(1);
-    taxaConflito.add(true);
-    return;
-  }
-
-  // Mesma lógica de _toggleReacao: quem já curtiu, descurte. Isso deixa o
-  // pool de usuários ciclar indefinidamente em vez de esgotar na primeira
-  // curtida de cada um.
-  const curtidoPor = atual.likedBy ?? [];
-  const jaCurtiu = curtidoPor.indexOf(usuario.uid) !== -1;
-  const novaLista = jaCurtiu
-    ? curtidoPor.filter((uid) => uid !== usuario.uid)
-    : curtidoPor.concat([usuario.uid]);
-
-  const resposta = commitTransacao(ctx, usuario.idToken, transacao, [
-    {
-      update: {
-        name: caminho,
-        fields: campos({ likedBy: novaLista, likes: novaLista.length }),
-      },
-      updateMask: { fieldPaths: ['likedBy', 'likes'] },
-    },
-  ]);
-
+  const resultado = curtirComRetentativa(ctx, usuario, caminho);
   latencia.add(Date.now() - inicio);
 
-  const conflito = resposta.status === 409 || resposta.status === 429
-    || (resposta.status >= 500 && resposta.status < 600);
-
-  if (resposta.status === 200) {
+  if (resultado === 'ok') {
     curtidasOk.add(1);
     taxaConflito.add(false);
-  } else {
+  } else if (resultado === 'conflito') {
     curtidasConflito.add(1);
     taxaConflito.add(true);
+  } else if (resultado === 'negada') {
+    curtidasNegadas.add(1);
+  } else {
+    curtidasErro.add(1);
   }
 
-  check(resposta, {
-    'curtida aceita': (r) => r.status === 200,
-    'nao foi rejeitada pelas Rules': (r) => r.status !== 403,
-  }, { conflito: String(conflito) });
+  check(resultado, {
+    'curtida aceita': (r) => r === 'ok',
+    'nao foi rejeitada pelas Rules': (r) => r !== 'negada',
+  });
 }
 
 export function handleSummary(dados) {

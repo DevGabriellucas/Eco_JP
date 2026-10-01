@@ -60,7 +60,7 @@ class MapControllerStateError extends MapControllerState {
 
 class MapController extends ChangeNotifier {
   MapController({this.aoTocarMarcador, OcorrenciaRepository? service})
-    : service = service ?? OcorrenciaRepository();
+      : service = service ?? OcorrenciaRepository();
 
   /// Disparado quando o usuário toca em um marcador individual no mapa.
   void Function(OcorrenciaModel ocorrencia)? aoTocarMarcador;
@@ -91,6 +91,7 @@ class MapController extends ChangeNotifier {
   Map<OccurrenceType, BitmapDescriptor> _icones = {};
 
   StreamSubscription<List<OcorrenciaModel>>? _subscription;
+  bool _disposed = false;
 
   // ── Estado dos filtros (consultado pela UI) ──────────────────────────────
 
@@ -106,6 +107,9 @@ class MapController extends ChangeNotifier {
     // Gera os ícones customizados uma única vez. Se falhar, _icones fica
     // vazio e criarMarcador() recorre ao marcador padrão.
     _icones = await MarkerIconFactory.carregar();
+    // A tela pode ter sido fechada durante o await: abrir o listener agora o
+    // deixaria vivo para sempre (e notifyListeners após dispose lança).
+    if (_disposed) return;
 
     try {
       _subscription?.cancel();
@@ -113,22 +117,22 @@ class MapController extends ChangeNotifier {
       _subscription = service
           .listarOcorrenciasLimitadas(OcorrenciaRepository.tetoAgregado)
           .listen(
-            (data) {
-              _todasOcorrencias = data;
-              state = MapControllerStateLoaded(data);
+        (data) {
+          _todasOcorrencias = data;
+          state = MapControllerStateLoaded(data);
 
-              _recomputar();
+          _recomputar();
 
-              notifyListeners();
-            },
-            onError: (error) {
-              state = MapControllerStateError(
-                "Erro no carregamento das ocorrências",
-              );
-
-              notifyListeners();
-            },
+          notifyListeners();
+        },
+        onError: (error) {
+          state = MapControllerStateError(
+            "Erro no carregamento das ocorrências",
           );
+
+          notifyListeners();
+        },
+      );
     } catch (e) {
       state = MapControllerStateError("Erro no carregamento das ocorrências");
 
@@ -178,8 +182,7 @@ class MapController extends ChangeNotifier {
       if (!_temCoordenadaValida(o)) return false;
       final tipo = OccurrenceTypeParser.fromString(o.tipoLixo);
       if (_categoriasOcultas.contains(tipo)) return false;
-      if (_statusSelecionado != null &&
-          OccurrenceStatusParser.fromString(o.status) != _statusSelecionado) {
+      if (_statusSelecionado != null && o.statusAtual != _statusSelecionado) {
         return false;
       }
       if (soPendentes && !_ehPendente(o)) return false;
@@ -220,8 +223,7 @@ class MapController extends ChangeNotifier {
     return Marker(
       markerId: MarkerId(ocorrencia.id),
       position: LatLng(ocorrencia.latitude, ocorrencia.longitude),
-      icon:
-          _icones[categoria] ??
+      icon: _icones[categoria] ??
           BitmapDescriptor.defaultMarkerWithHue(categoria.markerHue),
       clusterManagerId: clusterManagerId,
       infoWindow: InfoWindow(
@@ -230,9 +232,8 @@ class MapController extends ChangeNotifier {
             ? ocorrencia.titulo
             : ocorrencia.descricao,
       ),
-      onTap: aoTocarMarcador == null
-          ? null
-          : () => aoTocarMarcador!(ocorrencia),
+      onTap:
+          aoTocarMarcador == null ? null : () => aoTocarMarcador!(ocorrencia),
     );
   }
 
@@ -269,6 +270,7 @@ class MapController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _subscription?.cancel();
     super.dispose();
   }

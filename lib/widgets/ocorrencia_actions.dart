@@ -52,14 +52,25 @@ Future<void> showOcorrenciaActions({
                 ),
               ),
             ),
-            ListTile(
-              leading: Icon(
-                Icons.edit_outlined,
-                color: context.pal.ink,
+            // Depois que a autoridade agiu (verificou ou mudou o status), o
+            // texto fica travado: o selo "Verificada por <órgão>" atestaria
+            // um conteúdo que o órgão nunca viu. As regras também negam.
+            if (podeEditarTextos(ocorrencia))
+              ListTile(
+                leading: Icon(
+                  Icons.edit_outlined,
+                  color: context.pal.ink,
+                ),
+                title: const Text('Editar título/descrição'),
+                onTap: () => Navigator.pop(ctx, _OcorrenciaSheetAction.edit),
+              )
+            else
+              const ListTile(
+                enabled: false,
+                leading: Icon(Icons.edit_off_outlined),
+                title: Text('Editar título/descrição'),
+                subtitle: Text('Já analisada pela autoridade'),
               ),
-              title: const Text('Editar título/descrição'),
-              onTap: () => Navigator.pop(ctx, _OcorrenciaSheetAction.edit),
-            ),
             ListTile(
               leading: const Icon(
                 Icons.delete_outline,
@@ -168,17 +179,18 @@ Future<void> _editarOcorrencia(
   bool salvando = false;
 
   InputDecoration dec(String hint) => InputDecoration(
-    hintText: hint,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: context.pal.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: context.pal.ink, width: 1.5),
-    ),
-  );
+        hintText: hint,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: context.pal.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: context.pal.ink, width: 1.5),
+        ),
+      );
 
   await showDialog<void>(
     context: context,
@@ -218,6 +230,7 @@ Future<void> _editarOcorrencia(
                   TextField(
                     controller: descCtrl,
                     maxLines: 4,
+                    maxLength: 1000,
                     decoration: dec('Descrição'),
                   ),
                 ],
@@ -237,8 +250,25 @@ Future<void> _editarOcorrencia(
                     : () async {
                         final titulo = tituloCtrl.text.trim();
                         final desc = descCtrl.text.trim();
-                        if (titulo.isEmpty || desc.isEmpty) return;
                         final messenger = ScaffoldMessenger.of(context);
+                        // Mesmos limites das regras (isValidTitle /
+                        // isValidDescription); fora deles a gravação era
+                        // negada com um "Não foi possível editar." genérico.
+                        final problema = titulo.length < 3
+                            ? 'O título precisa de pelo menos 3 caracteres.'
+                            : titulo.length > 80
+                                ? 'O título pode ter no máximo 80 caracteres.'
+                                : desc.length < 10
+                                    ? 'A descrição precisa de pelo menos 10 caracteres.'
+                                    : desc.length > 1000
+                                        ? 'A descrição pode ter no máximo 1000 caracteres.'
+                                        : null;
+                        if (problema != null) {
+                          messenger.showSnackBar(
+                            SnackBar(content: Text(problema)),
+                          );
+                          return;
+                        }
                         final navigator = Navigator.of(ctx);
                         setDialogState(() => salvando = true);
                         try {
@@ -288,6 +318,15 @@ Future<void> _editarOcorrencia(
     },
   );
 
-  tituloCtrl.dispose();
-  descCtrl.dispose();
+  // O diálogo ainda reconstrói os TextFields durante a animação de saída;
+  // descartar os controllers na hora gerava "used after being disposed".
+  Future<void>.delayed(const Duration(milliseconds: 400), () {
+    tituloCtrl.dispose();
+    descCtrl.dispose();
+  });
 }
+
+/// Se o dono ainda pode editar título/descrição: só antes de a autoridade
+/// verificar ou definir um status oficial (espelha a regra de update).
+bool podeEditarTextos(OcorrenciaModel o) =>
+    !o.verificada && o.statusOficial == null;

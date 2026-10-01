@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../widgets/aviso_recorte.dart';
+
 import '../data/repositories/ocorrencia_repository.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../features/denuncias/providers/denuncia_providers.dart';
@@ -17,25 +19,25 @@ enum _Periodo { semana, mes, ano, tudo }
 
 extension _PeriodoInfo on _Periodo {
   String get label => switch (this) {
-    _Periodo.semana => 'Semana',
-    _Periodo.mes => 'Mês',
-    _Periodo.ano => 'Ano',
-    _Periodo.tudo => 'Tudo',
-  };
+        _Periodo.semana => 'Semana',
+        _Periodo.mes => 'Mês',
+        _Periodo.ano => 'Ano',
+        _Periodo.tudo => 'Tudo',
+      };
 
   String get descricao => switch (this) {
-    _Periodo.semana => 'últimos 7 dias',
-    _Periodo.mes => 'últimos 30 dias',
-    _Periodo.ano => 'últimos 12 meses',
-    _Periodo.tudo => 'todo o período',
-  };
+        _Periodo.semana => 'últimos 7 dias',
+        _Periodo.mes => 'últimos 30 dias',
+        _Periodo.ano => 'últimos 12 meses',
+        _Periodo.tudo => 'todo o período',
+      };
 
   Duration? get janela => switch (this) {
-    _Periodo.semana => const Duration(days: 7),
-    _Periodo.mes => const Duration(days: 30),
-    _Periodo.ano => const Duration(days: 365),
-    _Periodo.tudo => null,
-  };
+        _Periodo.semana => const Duration(days: 7),
+        _Periodo.mes => const Duration(days: 30),
+        _Periodo.ano => const Duration(days: 365),
+        _Periodo.tudo => null,
+      };
 }
 
 // ─────────────────────────────────────────
@@ -69,6 +71,14 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
   _Periodo _periodo = _Periodo.tudo;
   bool _exportando = false;
 
+  // Criada uma vez: uma stream nova a cada build fazia o StreamBuilder voltar
+  // a "waiting" (spinner) e reabrir o listener a cada rebuild.
+  // Aqui cada rebuild abria outro listener de até 500 documentos.
+  late final Stream<List<OcorrenciaModel>> _ocorrenciasStream =
+      _ocorrenciaRepository.listarOcorrenciasLimitadas(
+    OcorrenciaRepository.tetoAgregado,
+  );
+
   // Mantém só as ocorrências dentro da janela de tempo selecionada.
   List<OcorrenciaModel> _filtrarPorPeriodo(List<OcorrenciaModel> lista) {
     final janela = _periodo.janela;
@@ -79,13 +89,21 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
         .toList();
   }
 
-  Future<void> _exportarRelatorio(List<OcorrenciaModel> ocorrencias) async {
+  Future<void> _exportarRelatorio(
+    List<OcorrenciaModel> ocorrencias, {
+    required bool recorte,
+  }) async {
     if (_exportando) return;
     setState(() => _exportando = true);
     try {
       await _relatorioService.gerarECompartilhar(
         ocorrencias: ocorrencias,
-        periodoLabel: _periodo.descricao,
+        // O PDF oficial precisa dizer que é um recorte quando o teto foi
+        // atingido — antes apresentava as 500 mais recentes como o total.
+        periodoLabel: recorte
+            ? '${_periodo.descricao} (apenas as '
+                '${OcorrenciaRepository.tetoAgregado} denúncias mais recentes)'
+            : _periodo.descricao,
       );
     } catch (_) {
       if (mounted) {
@@ -111,7 +129,7 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
   Map<OccurrenceStatus, int> _statusCounts(List<OcorrenciaModel> ocorrencias) {
     final counts = <OccurrenceStatus, int>{};
     for (final o in ocorrencias) {
-      final status = OccurrenceStatusParser.fromString(o.status);
+      final status = o.statusAtual;
       counts[status] = (counts[status] ?? 0) + 1;
     }
     return counts;
@@ -164,7 +182,11 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
           final d = o.verificadaEm!.difference(o.dataCriacao!);
           if (!d.isNegative) tempoConfirmacao.add(d);
         }
-        if (o.resolvidaEm != null && o.dataCriacao != null) {
+        // Só resolvidas de fato: uma reversão deixava `resolvidaEm` para trás
+        // e o tempo médio contava denúncias que voltaram a encaminhada.
+        if (o.statusOficial == StatusOficial.resolvida &&
+            o.resolvidaEm != null &&
+            o.dataCriacao != null) {
           final d = o.resolvidaEm!.difference(o.dataCriacao!);
           if (!d.isNegative) tempoResolucao.add(d);
         }
@@ -240,11 +262,10 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
     }
 
     return StreamBuilder<List<OcorrenciaModel>>(
-      stream: _ocorrenciaRepository.listarOcorrenciasLimitadas(
-        OcorrenciaRepository.tetoAgregado,
-      ),
+      stream: _ocorrenciasStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (!snapshot.hasData &&
+            snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -292,7 +313,14 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
               exportando: _exportando,
               onTap: filtradas.isEmpty
                   ? null
-                  : () => _exportarRelatorio(filtradas),
+                  : () => _exportarRelatorio(
+                        filtradas,
+                        recorte: AvisoRecorte.atingiuTeto(ocorrencias.length),
+                      ),
+            ),
+            AvisoRecorte(
+              carregadas: ocorrencias.length,
+              repositorio: _ocorrenciaRepository,
             ),
             const SizedBox(height: 16),
             if (filtradas.isEmpty)
@@ -1401,9 +1429,8 @@ class _CategoryBarRow extends StatelessWidget {
 int _niceAxisMax(int maxValue) {
   if (maxValue <= 0) return 5;
 
-  final magnitude = math
-      .pow(10, (math.log(maxValue) / math.ln10).floor())
-      .toInt();
+  final magnitude =
+      math.pow(10, (math.log(maxValue) / math.ln10).floor()).toInt();
   final residual = maxValue / magnitude;
 
   late final int niceResidual;
