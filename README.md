@@ -1,8 +1,7 @@
 # 🌱 EcoJP — Aplicativo de Denúncias Ambientais
 
-[![CI](https://github.com/username/eco-jp/actions/workflows/ci.yml/badge.svg)](https://github.com/username/eco-jp/actions)
-[![Flutter](https://img.shields.io/badge/Flutter-3.0+-blue.svg)](https://flutter.dev)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/DevGabriellucas/Eco_JP/actions/workflows/ci.yml/badge.svg)](https://github.com/DevGabriellucas/Eco_JP/actions)
+[![Flutter](https://img.shields.io/badge/Flutter-3.47-blue.svg)](https://flutter.dev)
 
 **EcoJP** é um aplicativo móvel Flutter que permite que cidadãos denunciem problemas ambientais na Paraíba (buracos, lixo, queimadas, enchentes, etc.) com segurança, privacidade e conformidade com a LGPD. Nasceu como projeto de disciplina no Unipê (Centro Universitário de João Pessoa) e evoluiu para produto: está inscrito no Prêmio de Inovação CSED 2026 e em fase de piloto com um escritório de advocacia.
 
@@ -13,7 +12,7 @@
 - **Plataformas**: Android, iOS
 - **Tecnologia**: Flutter + Firebase (Firestore, Auth, Cloud Storage/Cloudinary)
 - **Segurança**: Firestore Rules robustas, Firebase App Check, validação de email
-- **Testes**: 145+ testes unitários + 24 testes de regras Firestore
+- **Testes**: 180+ testes Dart + 99 testes de regras Firestore (emulador)
 - **CI/CD**: GitHub Actions (análise, testes, build)
 - **Status**: Fase de blindagem de segurança e conformidade legal (LGPD)
 
@@ -55,7 +54,7 @@
 
 ### Pré-requisitos
 - **Flutter** 3.0+ ([instalar](https://flutter.dev/docs/get-started/install))
-- **Android SDK** 21+ (para build Android)
+- **Android** 8.0+ (minSdk 26) para rodar; SDK 36 para compilar
 - **Xcode** 14+ (para build iOS)
 - **Firebase CLI** (para testes do Firestore)
 - **Node.js** 20+ (para rodar testes de regras)
@@ -64,14 +63,17 @@
 
 ```bash
 # Clone o repositório
-git clone https://github.com/username/eco-jp.git
-cd eco_jp
+git clone https://github.com/DevGabriellucas/Eco_JP.git
+cd Eco_JP
 
 # Instale dependências Flutter
 flutter pub get
 
-# Configure as variáveis de ambiente (opcional para desenvolvimento local)
-# Veja firebase_options.dart para configuração do Firebase
+# lib/firebase_options.dart é versionado: a configuração do Firebase de um
+# app cliente não é segredo (a proteção está nas Rules e no App Check).
+# A chave do Google Maps vai em android/local.properties (MAPS_API_KEY=...).
+# Build de release exige android/key.properties (ver .github/workflows/release.yml)
+# ou, só para teste local, ECOJP_PERMITIR_RELEASE_DEBUG=true.
 ```
 
 ### Rodar o App
@@ -206,14 +208,16 @@ Veja `firestore.rules` para detalhes.
 - ✅ Opção de exclusão de conta (deleta denúncias do usuário)
 - ✅ Consentimento rastreável
 - ✅ Sem metadados EXIF em fotos
-- ✅ Histórico auditável de quem acessou o quê
+- ✅ Histórico auditável das ações oficiais (verificação, status, reversão)
 
 ---
 
 ## 📚 Documentação
 
 - **[ROADMAP.md](ROADMAP.md)** — Plano de evolução (Fase 1: Segurança, Fase 2: Conformidade, etc.)
-- **[DOCUMENTACAO_TECNICA.md](docs/DOCUMENTACAO_TECNICA.md)** — Arquitetura detalhada, padrões e decisões
+- **[docs/adr/](docs/adr/)** — Decisões de arquitetura (ex.: Firebase vs. Supabase)
+- **[docs/Code-review.md](docs/Code-review.md)** — Revisão de código que originou a Sprint 1
+- **[test/firestore_rules/README.md](test/firestore_rules/README.md)** — Como rodar os testes de regras
 - **[firestore.rules](firestore.rules)** — Regras de segurança comentadas
 
 ---
@@ -277,12 +281,12 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 flutter test
 
 | Componente | Status | Notas |
 |-----------|--------|-------|
-| Flutter App | ✅ Funcional | 145+ testes passando |
-| Firestore Rules | ✅ Robusto | 24 testes de segurança |
-| Firebase App Check | ✅ Ativo | Android (Play Integrity) + iOS |
+| Flutter App | ✅ Funcional | 180+ testes passando |
+| Firestore Rules | ✅ Robusto | 99 testes de segurança |
+| Firebase App Check | 🟡 Ativado no app, sem imposição | Android (Play Integrity), iOS (App Attest), web (reCAPTCHA v3, chave por `--dart-define`). Ligar a imposição no Console depois de registrar os apps com o novo ID |
 | LGPD Compliance | 🟡 Em progresso | Exclusão de conta + histórico |
 | Dark Mode | 🟡 Parcial | Auth + algumas telas |
-| Docs | ✅ Completo | ROADMAP + DOCUMENTACAO_TECNICA |
+| Docs | 🟡 Parcial | README + ROADMAP + ADR |
 
 ---
 
@@ -304,7 +308,7 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 flutter test
 
 ## 📝 Licença
 
-Este projeto está licenciado sob a MIT License — veja [LICENSE](LICENSE) para detalhes.
+Licença ainda não definida (o repositório não tem arquivo `LICENSE`). Até isso ser decidido, todos os direitos são reservados ao autor.
 
 ---
 
@@ -317,7 +321,7 @@ Este projeto está licenciado sob a MIT License — veja [LICENSE](LICENSE) para
 
 ## 📞 Suporte
 
-Para dúvidas ou sugestões, abra uma [issue no GitHub](https://github.com/username/eco-jp/issues).
+Para dúvidas ou sugestões, abra uma [issue no GitHub](https://github.com/DevGabriellucas/Eco_JP/issues).
 
 ---
 

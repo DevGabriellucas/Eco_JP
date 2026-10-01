@@ -7,7 +7,8 @@
 
 ## Decisão
 
-O EcoJP continua em **Firebase (Auth + Firestore + FCM + App Check + Crashlytics)**,
+O EcoJP continua em **Firebase (Auth + Firestore + App Check + Crashlytics)** — FCM
+(push) ainda não é usado; as notificações são in-app, no Firestore —
 com **Cloud Functions Gen 2 em TypeScript** como a camada de servidor que hoje não
 existe. Não migramos para Supabase/Postgres.
 
@@ -90,7 +91,7 @@ box para o mapa, e export para BigQuery para o analítico.
 | Cloudflare CDN/DNS | **Adotar** | Plano free resolve |
 | Sentry + PostHog | **Parcial** | Crashlytics + Firebase Analytics já cobrem. PostHog agrega em analytics de produto; Sentry seria redundante |
 | Região São Paulo (`southamerica-east1`) | **Verificar — pode ser tarde** | Correto e importante. Mas a região do Firestore é definida na criação e **não pode ser alterada**. Se `ecojp-8b952` não estiver em `southamerica-east1`, mudar exige banco novo + migração. Checar com `firebase firestore:databases:list --project ecojp-8b952` |
-| CI/CD Codemagic ou GitHub Actions | **Adotar** | Ainda não existe |
+| CI/CD Codemagic ou GitHub Actions | **Adotar** | Feito: GitHub Actions (`ci.yml` e `release.yml`) |
 
 ## Dívidas que a migração não resolveria (e que valem mais que ela)
 

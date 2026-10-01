@@ -18,7 +18,9 @@ O projeto **não parte do zero**. Auditoria de 16/06/2026 confirmou:
   de dono (owner), integridade de reações via transação, validação de
   comentários e notificações, e negação por padrão (`allow read, write: if false`).
 - **Nenhum segredo vazado** no histórico do Git; `.gitignore` cobre
-  `firebase_options.dart`, `google-services.json`, `.env`, `local.properties` e chaves.
+  `google-services.json`, `.env`, `local.properties`, `key.properties` e chaves.
+  (`lib/firebase_options.dart` é versionado de propósito: config de app
+  cliente não é segredo.)
 - **Cloudinary** com *unsigned upload preset* (abordagem correta no cliente).
 - **54 testes automatizados** passando; `flutter analyze` sem problemas.
 - **CI no GitHub Actions** rodando análise + testes + formatação a cada push.
@@ -47,7 +49,8 @@ maturidade institucional** — não sobre reescrever o que funciona.
 - [x] Ativar **Firebase App Check** (Android + iOS) — impede que scripts externos
       usem a configuração pública do Firebase fora do app.
       *(Feito: Android com Play Integrity (prod) / debug provider (dev), iOS com
-      AppleDebugProvider até ter conta Apple Developer. Imposição ativa no Firestore.)*
+      App Attest em release. A imposição no Console AINDA NÃO está ligada:
+      falta registrar os apps com o ID br.com.ecojp.app e o provedor web.)*
 - [x] Exigir **verificação de e-mail** no cadastro antes de permitir denúncias.
       *(Feito: tela de confirmação + trava no `AuthCheck` + regras exigindo
       `email_verified` para postar. Publicado no Firebase.)*
@@ -75,8 +78,8 @@ fica aberta. Esta é a tranca que falta para "segurança contra vazamento".
       automático quando `kVersaoDocumentosLegais` muda. Links permanentes à
       política/termos no perfil + data do consentimento.
 - [x] **Política de Privacidade** atualizada (`documentos_legais.dart`):
-      cobre vídeo, IA (Gemini/Google), denúncia anônima, acesso de autoridades,
-      App Check e retenção. *(Ainda requer revisão jurídica antes de publicar.)*
+      cobre vídeo, denúncia anônima, acesso de autoridades, operadores
+      (Firebase, Cloudinary, provedores de endereço), App Check e retenção. *(Ainda requer revisão jurídica antes de publicar.)*
 - [x] **Excluir conta** + apagar dados do usuário (inclui o registro de
       consentimento na exclusão).
 - [x] **Exportar meus dados** (direito de portabilidade): botão no perfil gera
@@ -114,13 +117,9 @@ no Brasil **exige** LGPD; sem isso, nenhuma adoção institucional avança.
       confirmada, encaminhada, resolvida, não confirmada) — antes só dava pra
       saber abrindo a denúncia de novo. Fecha gap identificado vs. Radar
       Ambiental (app nacional do CNMP), que já notifica andamento.
-- [x] **Sugestão de categoria por IA** (Gemini 2.5 Flash via Firebase AI
-      Logic, pacote `firebase_ai`) no formulário de denúncia — protegida pelo
-      App Check já ativo, sem backend próprio. É só sugestão: o usuário
-      sempre pode trocar a categoria antes de enviar.
-      *(Pendente: habilitar a API no Console do Firebase — Build → AI Logic
-      → Get started — antes de testar em produção; tier gratuito tem aviso de
-      uso de prompts para treinamento, considerar tier pago em caso de adoção institucional.)*
+- [ ] **Sugestão de categoria por IA** (ideia: Gemini via Firebase AI Logic).
+      *Não implementado* — o pacote `google_generative_ai`, que estava no
+      pubspec sem uso, foi removido.
 
 **Por quê:** é o que separa "rede social de reclamações" de "canal oficial".
 Um órgão ou escritório parceiro precisa enxergar um fluxo confiável de triagem.
@@ -147,7 +146,9 @@ Firestore antes de escalar para milhares de usuários.
 
 - [ ] Revisão de UX/acessibilidade das telas principais.
 - [ ] Ampliar cobertura de testes nas regras novas (moderação, LGPD).
-- [ ] Atualizar `README.md` e `CONFIGURACAO.md`.
+- [x] Atualizar `README.md` (alinhado ao código na Sprint 1).
+- [ ] Planejar atualização de `geolocator` (^9), `go_router` (^12) e
+      `google_sign_in` (^6), que têm versões maiores com mudanças de API.
 - [ ] Preparar roteiro de demonstração para o Unipê e para parceiros externos.
 
 ---
