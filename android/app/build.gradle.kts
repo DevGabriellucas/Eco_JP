@@ -43,7 +43,10 @@ val permiteReleaseComDebug = System.getenv("ECOJP_PERMITIR_RELEASE_DEBUG") == "t
 android {
     namespace = "br.com.ecojp.app"
     compileSdk = 36
-    ndkVersion = "30.0.16138531"
+    // NDK padrão do Flutter (28.x no 3.47.2). Não fixar versão preview: o
+    // 30.0.16138531 exige a android-sdk-preview-license, que o runner do CI
+    // não aceita, e o build quebrava antes de compilar.
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
