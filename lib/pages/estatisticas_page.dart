@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../widgets/aviso_recorte.dart';
+import '../widgets/feed_states.dart';
 
 import '../data/repositories/ocorrencia_repository.dart';
 import '../features/auth/providers/auth_providers.dart';
@@ -74,10 +75,13 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
   // Criada uma vez: uma stream nova a cada build fazia o StreamBuilder voltar
   // a "waiting" (spinner) e reabrir o listener a cada rebuild.
   // Aqui cada rebuild abria outro listener de até 500 documentos.
-  late final Stream<List<OcorrenciaModel>> _ocorrenciasStream =
+  // Só é recriada pelo "Tentar novamente" do estado de erro.
+  late Stream<List<OcorrenciaModel>> _ocorrenciasStream = _abrirStream();
+
+  Stream<List<OcorrenciaModel>> _abrirStream() =>
       _ocorrenciaRepository.listarOcorrenciasLimitadas(
-    OcorrenciaRepository.tetoAgregado,
-  );
+        OcorrenciaRepository.tetoAgregado,
+      );
 
   // Mantém só as ocorrências dentro da janela de tempo selecionada.
   List<OcorrenciaModel> _filtrarPorPeriodo(List<OcorrenciaModel> lista) {
@@ -270,7 +274,13 @@ class _EstatisticasPageState extends ConsumerState<EstatisticasPage> {
         }
 
         if (snapshot.hasError) {
-          return Center(child: Text('Erro: ${snapshot.error}'));
+          // O erro técnico (ex.: link de índice faltando) vai só para o log;
+          // a tela mostra um estado amigável.
+          debugPrint('Erro ao carregar estatísticas: ${snapshot.error}');
+          return FeedErrorState(
+            titulo: 'Não foi possível carregar as estatísticas',
+            onRetry: () => setState(() => _ocorrenciasStream = _abrirStream()),
+          );
         }
 
         final ocorrencias = snapshot.data ?? [];

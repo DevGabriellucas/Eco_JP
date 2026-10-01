@@ -198,11 +198,17 @@ class FeedEmptyState extends StatelessWidget {
   }
 }
 
-/// Estado de erro do feed, com ação de tentar novamente.
+/// Estado de erro do feed, com ação de tentar novamente. [titulo] permite
+/// reusar o mesmo estado em outras telas que carregam ocorrências.
 class FeedErrorState extends StatelessWidget {
   final VoidCallback onRetry;
+  final String titulo;
 
-  const FeedErrorState({super.key, required this.onRetry});
+  const FeedErrorState({
+    super.key,
+    required this.onRetry,
+    this.titulo = 'Não foi possível carregar o feed',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -227,7 +233,7 @@ class FeedErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Não foi possível carregar o feed',
+              titulo,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
