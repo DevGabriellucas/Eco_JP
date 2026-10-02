@@ -182,7 +182,10 @@ class AuthService {
       await user.sendEmailVerification();
       return AuthResult(
         success: true,
-        message: 'Enviamos um link de confirmação para o seu e-mail.',
+        // Cada envio invalida o link anterior: abrir um e-mail antigo dá
+        // "link expirado".
+        message: 'Enviamos um novo link para o seu e-mail. Use o mais '
+            'recente: os anteriores deixam de valer.',
       );
     } on FirebaseAuthException catch (e) {
       if (e.code == 'too-many-requests') {

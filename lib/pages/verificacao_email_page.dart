@@ -19,7 +19,8 @@ class VerificacaoEmailPage extends ConsumerStatefulWidget {
       _VerificacaoEmailPageState();
 }
 
-class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
+class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
+    with WidgetsBindingObserver {
   late final _authService = ref.read(authServiceProvider);
 
   Timer? _poll;
@@ -31,6 +32,7 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Não envia e-mail ao abrir: o cadastro já envia assim que a conta tem
     // nome, e reenviar a cada abertura da tela (ou a cada login de conta não
     // confirmada) estourava o limite do Firebase e invalidava o link
@@ -43,8 +45,18 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
     );
   }
 
+  // Quem confirma pelo app de e-mail volta para cá: confere na hora em vez de
+  // esperar o próximo ciclo do timer.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checarVerificacao(silencioso: true);
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     _cooldownTimer?.cancel();
     super.dispose();
@@ -199,7 +211,7 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage> {
                                 strokeWidth: 2,
                               ),
                             )
-                          : const Text('Ja confirmei'),
+                          : const Text('Já confirmei'),
                     ),
                   ),
                   const SizedBox(height: 8),

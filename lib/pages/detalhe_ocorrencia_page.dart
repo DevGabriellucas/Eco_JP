@@ -592,10 +592,15 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                     ),
                   ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.share_outlined, color: pal.ink),
-                  tooltip: 'Compartilhar',
-                  onPressed: () => compartilharOcorrencia(widget.occurrence),
+                Builder(
+                  builder: (botao) => IconButton(
+                    icon: Icon(Icons.share_outlined, color: pal.ink),
+                    tooltip: 'Compartilhar',
+                    onPressed: () => compartilharOcorrencia(
+                      widget.occurrence,
+                      origem: origemDoWidget(botao),
+                    ),
+                  ),
                 ),
                 CircleAvatar(
                   radius: 18,

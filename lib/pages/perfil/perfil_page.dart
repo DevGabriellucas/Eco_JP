@@ -757,13 +757,7 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
             ],
           ),
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final c in conquistas) _ConquistaBadge(conquista: c),
-            ],
-          ),
+          _GradeConquistas(conquistas: conquistas),
         ],
       ),
     );
@@ -1046,6 +1040,55 @@ class _Stats {
 
 /// Badge de uma conquista no perfil. Desbloqueada = ícone colorido + título
 /// forte; pendente = esmaecida, mostrando o progresso (ex.: "3/5").
+/// Grade de conquistas com colunas de mesma largura e linhas de mesma
+/// altura. Antes era um Wrap de badges com 96 dp fixos: em telas comuns
+/// cabiam 2 por linha com um vão à direita, e os badges tinham alturas
+/// diferentes (título de 1 ou 2 linhas, progresso só nos bloqueados).
+class _GradeConquistas extends StatelessWidget {
+  const _GradeConquistas({required this.conquistas});
+
+  final List<Conquista> conquistas;
+
+  static const _espaco = 10.0;
+  static const _larguraMinima = 88.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final colunas =
+            ((constraints.maxWidth + _espaco) / (_larguraMinima + _espaco))
+                .floor()
+                .clamp(2, 4);
+        final linhas = <Widget>[];
+        for (var i = 0; i < conquistas.length; i += colunas) {
+          final fim = (i + colunas).clamp(0, conquistas.length);
+          final daLinha = conquistas.sublist(i, fim);
+          if (linhas.isNotEmpty) linhas.add(const SizedBox(height: _espaco));
+          linhas.add(
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var j = 0; j < colunas; j++) ...[
+                    if (j > 0) const SizedBox(width: _espaco),
+                    Expanded(
+                      child: j < daLinha.length
+                          ? _ConquistaBadge(conquista: daLinha[j])
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+        return Column(children: linhas);
+      },
+    );
+  }
+}
+
 class _ConquistaBadge extends StatelessWidget {
   final Conquista conquista;
 
@@ -1061,7 +1104,6 @@ class _ConquistaBadge extends StatelessWidget {
     return Tooltip(
       message: '${c.descricao}${ativa ? '' : '  ·  ${c.progresso}/${c.meta}'}',
       child: Container(
-        width: 96,
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: ativa ? c.cor.withValues(alpha: 0.10) : pal.surface,
@@ -1071,9 +1113,10 @@ class _ConquistaBadge extends StatelessWidget {
           ),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Stack(
+              clipBehavior: Clip.none,
               alignment: Alignment.center,
               children: [
                 Icon(c.icone, size: 26, color: cor),

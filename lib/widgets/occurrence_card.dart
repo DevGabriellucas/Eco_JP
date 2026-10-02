@@ -22,6 +22,9 @@ class OccurrenceCard extends StatelessWidget {
   final VoidCallback? onTogglePin;
   final VoidCallback? onManage;
 
+  /// Toque no card (fora dos botões): abre a denúncia em tela cheia.
+  final VoidCallback? onOpen;
+
   // Contagem de comentários já resolvida (via .count() pontual). Quando nula
   // (ainda carregando), usa occurrence.comments como fallback.
   final int? commentCount;
@@ -43,6 +46,7 @@ class OccurrenceCard extends StatelessWidget {
     this.onReport,
     this.onTogglePin,
     this.onManage,
+    this.onOpen,
     this.commentCount,
     this.latestCommentStream,
     this.latestCommentInitial,
@@ -72,130 +76,141 @@ class OccurrenceCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (o.fixada) const _PinnedNotice(),
-          _CardHeader(
-            authorName: autor,
-            authorPhoto: fotoAutor,
-            location: o.localizacao,
-            onMenuSelected: (action) => _handleMenuAction(context, action),
-            canManage: onManage != null,
-            canPin: onTogglePin != null,
-            pinned: o.fixada,
-            onAuthorTap: onAuthorTap,
-            canReport: onReport != null,
-          ),
-          if (o.videoUrl != null && o.videoUrl!.trim().isNotEmpty)
-            _FeedVideoPlayer(url: o.videoUrl!.trim(), type: typeEnum)
-          else
-            _ImageSlider(
-              urls: o.imagensUrls,
-              fallbackUrl: o.imagemUrl,
-              type: typeEnum,
-              onDoubleTapLike: onLike,
-              alreadyLiked: o.userLiked,
-            ),
-          _OfficialStatusStrip(estagio: estagio),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 0, 8, 0),
-            child: Row(
-              children: [
-                _ActionButton(
-                  icon: Icons.favorite_border,
-                  iconFilled: Icons.favorite,
-                  count: o.likes,
-                  active: o.userLiked,
-                  activeColor: AppColors.danger,
-                  onTap: onLike,
-                  semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
-                  animateOnActivate: true,
+      // Material transparente acima da cor do card: o ripple dos botões
+      // (curtir, comentar, compartilhar) era pintado no Material da lista,
+      // atrás do card, e não aparecia.
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onOpen,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (o.fixada) const _PinnedNotice(),
+              _CardHeader(
+                authorName: autor,
+                authorPhoto: fotoAutor,
+                location: o.localizacao,
+                onMenuSelected: (action) => _handleMenuAction(context, action),
+                canManage: onManage != null,
+                canPin: onTogglePin != null,
+                pinned: o.fixada,
+                onAuthorTap: onAuthorTap,
+                canReport: onReport != null,
+              ),
+              if (o.videoUrl != null && o.videoUrl!.trim().isNotEmpty)
+                _FeedVideoPlayer(url: o.videoUrl!.trim(), type: typeEnum)
+              else
+                _ImageSlider(
+                  urls: o.imagensUrls,
+                  fallbackUrl: o.imagemUrl,
+                  type: typeEnum,
+                  onDoubleTapLike: onLike,
+                  alreadyLiked: o.userLiked,
                 ),
-                _CommentButton(
-                  count: commentCount ?? o.comments,
-                  onTap: onComment ?? () {},
-                ),
-                _ShareButton(occurrence: o),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RichText(
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  text: TextSpan(
-                    style: TextStyle(
-                      color: pal.ink,
-                      fontSize: 13,
-                      height: 1.35,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: o.titulo,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      if (o.descricao.trim().isNotEmpty)
-                        TextSpan(text: ' ${o.descricao.trim()}'),
-                    ],
-                  ),
-                ),
-                _CommentPreview(
-                  count: commentCount,
-                  initialCount: o.comments,
-                  latestCommentStream: latestCommentStream,
-                  latestCommentInitial: latestCommentInitial,
-                ),
-                const SizedBox(height: 8),
-                Row(
+              _OfficialStatusStrip(estagio: estagio),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 0, 8, 0),
+                child: Row(
                   children: [
-                    Icon(
-                      Icons.location_on_outlined,
-                      size: 14,
-                      color: pal.muted,
+                    _ActionButton(
+                      icon: Icons.favorite_border,
+                      iconFilled: Icons.favorite,
+                      count: o.likes,
+                      active: o.userLiked,
+                      activeColor: AppColors.danger,
+                      onTap: onLike,
+                      semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
+                      animateOnActivate: true,
                     ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        o.localizacao,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    _CommentButton(
+                      count: commentCount ?? o.comments,
+                      onTap: onComment ?? () {},
+                    ),
+                    _ShareButton(occurrence: o),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RichText(
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      text: TextSpan(
                         style: TextStyle(
-                          fontSize: 12,
-                          color: pal.muted,
-                          fontWeight: FontWeight.w500,
+                          color: pal.ink,
+                          fontSize: 13,
+                          height: 1.35,
                         ),
+                        children: [
+                          TextSpan(
+                            text: o.titulo,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          if (o.descricao.trim().isNotEmpty)
+                            TextSpan(text: ' ${o.descricao.trim()}'),
+                        ],
+                      ),
+                    ),
+                    _CommentPreview(
+                      count: commentCount,
+                      initialCount: o.comments,
+                      latestCommentStream: latestCommentStream,
+                      latestCommentInitial: latestCommentInitial,
+                      onTap: onComment,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_outlined,
+                          size: 14,
+                          color: pal.muted,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            o.localizacao,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: pal.muted,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _TypeChip(type: typeEnum),
+                        _StatusBadge(status: statusEnum),
+                        if (estagio.temAcaoOficial)
+                          _EstagioChip(estagio: estagio),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      tempoStr,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: pal.muted,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _TypeChip(type: typeEnum),
-                    _StatusBadge(status: statusEnum),
-                    if (estagio.temAcaoOficial) _EstagioChip(estagio: estagio),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  tempoStr,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: pal.muted,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -259,7 +274,7 @@ class _PinnedNotice extends StatelessWidget {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Denuncia fixada pela autoridade',
+              'Denúncia fixada pela autoridade',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -280,12 +295,14 @@ class _CommentPreview extends StatelessWidget {
   final int initialCount;
   final Stream<ComentarioModel?>? latestCommentStream;
   final ComentarioModel? latestCommentInitial;
+  final VoidCallback? onTap;
 
   const _CommentPreview({
     required this.count,
     required this.initialCount,
     required this.latestCommentStream,
     required this.latestCommentInitial,
+    this.onTap,
   });
 
   @override
@@ -301,45 +318,51 @@ class _CommentPreview extends StatelessWidget {
 
         final total = count ?? initialCount;
 
-        return Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                total <= 1
-                    ? 'Ver comentário'
-                    : 'Ver todos os $total comentários',
-                style: TextStyle(
-                  color: context.pal.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              RichText(
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                text: TextSpan(
+        // Antes era só texto: tocar em "Ver todos os N comentários" não
+        // fazia nada.
+        return InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  total <= 1
+                      ? 'Ver comentário'
+                      : 'Ver todos os $total comentários',
                   style: TextStyle(
-                    color: context.pal.ink,
-                    fontSize: 12.5,
-                    height: 1.3,
+                    color: context.pal.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
-                  children: [
-                    TextSpan(
-                      text: latest.userName,
-                      style: TextStyle(
-                        color: context.pal.ink,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const TextSpan(text: '  '),
-                    TextSpan(text: latest.texto),
-                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                RichText(
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    style: TextStyle(
+                      color: context.pal.ink,
+                      fontSize: 12.5,
+                      height: 1.3,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: latest.userName,
+                        style: TextStyle(
+                          color: context.pal.ink,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const TextSpan(text: '  '),
+                      TextSpan(text: latest.texto),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -588,7 +611,7 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
             width: double.infinity,
             child: _ImagePlaceholder(
               type: widget.type,
-              label: 'Video indisponivel',
+              label: 'Vídeo indisponível',
             ),
           );
         }
@@ -746,15 +769,15 @@ class _OfficialStatusStrip extends StatelessWidget {
   String get _description {
     switch (estagio) {
       case EstagioOficial.pendente:
-        return 'Aguardando analise do orgao responsavel.';
+        return 'Aguardando análise do órgão responsável.';
       case EstagioOficial.emAnalise:
-        return 'O orgao responsavel esta avaliando esta denuncia.';
+        return 'O órgão responsável está avaliando esta denúncia.';
       case EstagioOficial.naoConfirmada:
-        return 'Problema nao confirmado no local.';
+        return 'Problema não confirmado no local.';
       case EstagioOficial.confirmada:
-        return 'Denuncia verificada pela autoridade.';
+        return 'Denúncia verificada pela autoridade.';
       case EstagioOficial.encaminhada:
-        return 'Encaminhada ao orgao responsavel.';
+        return 'Encaminhada ao órgão responsável.';
       case EstagioOficial.resolvida:
         return 'Tratada e marcada como resolvida.';
     }
@@ -1357,7 +1380,10 @@ class _ShareButtonState extends State<_ShareButton> {
   Future<void> _share() async {
     // compartilharOcorrencia já soma em occurrence.shares; aqui só
     // repintamos para o novo valor aparecer.
-    await compartilharOcorrencia(widget.occurrence);
+    await compartilharOcorrencia(
+      widget.occurrence,
+      origem: origemDoWidget(context),
+    );
     if (mounted) setState(() {});
   }
 

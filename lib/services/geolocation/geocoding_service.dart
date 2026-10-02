@@ -244,11 +244,15 @@ class GeocodingService {
     }
   }
 
-  /// Endereço legível (e bairro) a partir de coordenadas, via Nominatim
-  /// reverse. `null` se não foi possível — antes devolvia o texto "Endereço
-  /// não encontrado", que acabava gravado como endereço e contado como
-  /// bairro no ranking.
+  /// Endereço legível (e bairro) a partir de coordenadas: Nominatim e, se ele
+  /// falhar ou não trouxer nada útil, Photon. `null` se nenhum resolveu —
+  /// antes devolvia o texto "Endereço não encontrado", que acabava gravado
+  /// como endereço e contado como bairro no ranking.
   Future<EnderecoReverso?> reverseGeocode(double lat, double lng) async {
+    return await _reversoNominatim(lat, lng) ?? await _reversoPhoton(lat, lng);
+  }
+
+  Future<EnderecoReverso?> _reversoNominatim(double lat, double lng) async {
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
         'format': 'jsonv2',
@@ -262,26 +266,84 @@ class GeocodingService {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       final addr = data['address'];
       if (addr is! Map<String, dynamic>) return null;
-      final bairro = _bairroNominatim(addr);
-      final partes = [addr['road'], bairro, addr['city']]
-          .whereType<String>()
-          .where((s) => s.trim().isNotEmpty)
-          .join(', ');
-      if (partes.isEmpty) return null;
-      return EnderecoReverso(endereco: partes, bairro: bairro);
+      return _montarReverso(
+        rua: _primeiro(addr, _chavesRua),
+        numero: addr['house_number']?.toString(),
+        bairro: _primeiro(addr, _chavesBairro),
+        cidade: _primeiro(addr, _chavesCidade),
+      );
     } catch (e) {
       debugPrint('reverseGeocode (Nominatim) falhou: $e');
       return null;
     }
   }
 
-  static String? _bairroNominatim(Map<String, dynamic> addr) {
-    for (final chave in [
-      'suburb',
-      'neighbourhood',
-      'quarter',
-      'city_district'
-    ]) {
+  Future<EnderecoReverso?> _reversoPhoton(double lat, double lng) async {
+    try {
+      final uri = Uri.https('photon.komoot.io', '/reverse', {
+        'lat': '$lat',
+        'lon': '$lng',
+        'limit': '1',
+      });
+      final res = await _client.get(uri, headers: _headers).timeout(_timeout);
+      if (res.statusCode != 200) return null;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final features = data['features'] as List<dynamic>? ?? const [];
+      if (features.isEmpty) return null;
+      final p = (features.first as Map<String, dynamic>)['properties']
+              as Map<String, dynamic>? ??
+          const {};
+      return _montarReverso(
+        rua: (p['street'] ?? p['name'])?.toString(),
+        numero: p['housenumber']?.toString(),
+        bairro: (p['district'] ?? p['locality'])?.toString(),
+        cidade: p['city']?.toString(),
+      );
+    } catch (e) {
+      debugPrint('reverseGeocode (Photon) falhou: $e');
+      return null;
+    }
+  }
+
+  /// Só a cidade não serve de endereço: sem rua nem bairro devolve `null` e
+  /// quem chama decide o que mostrar.
+  static EnderecoReverso? _montarReverso({
+    String? rua,
+    String? numero,
+    String? bairro,
+    String? cidade,
+  }) {
+    String? limpo(String? v) =>
+        (v == null || v.trim().isEmpty) ? null : v.trim();
+    final r = limpo(rua);
+    final n = limpo(numero);
+    final b = limpo(bairro);
+    if (r == null && b == null) return null;
+    final partes = [
+      if (r != null) n == null ? r : '$r, $n',
+      if (b != null) b,
+      limpo(cidade) ?? 'João Pessoa',
+    ];
+    return EnderecoReverso(endereco: partes.join(', '), bairro: b);
+  }
+
+  static const _chavesRua = [
+    'road',
+    'pedestrian',
+    'footway',
+    'residential',
+    'path',
+  ];
+  static const _chavesBairro = [
+    'suburb',
+    'neighbourhood',
+    'quarter',
+    'city_district',
+  ];
+  static const _chavesCidade = ['city', 'town', 'municipality'];
+
+  static String? _primeiro(Map<String, dynamic> addr, List<String> chaves) {
+    for (final chave in chaves) {
       final v = addr[chave]?.toString().trim();
       if (v != null && v.isNotEmpty) return v;
     }

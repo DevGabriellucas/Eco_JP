@@ -226,7 +226,10 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
 
   Future<void> _usarLocalizacaoAtual() async {
     final err = await _location.usarLocalizacaoAtual();
-    if (err != null) _snack(err, error: true);
+    // Com a posição confirmada a mensagem é só um aviso, não um erro.
+    if (err != null) {
+      _snack(err, error: !_location.coordenadasConfirmadas);
+    }
   }
 
   // ── Envio ────────────────────────────────────────────────────────────────
@@ -1066,6 +1069,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                 minWidth: 0,
                 minHeight: 0,
               ),
+              // Com texto no campo vira um "x" que limpa tudo de uma vez:
+              // antes era preciso apagar o endereço letra por letra.
               suffixIcon: _location.buscandoSug
                   ? Padding(
                       padding: const EdgeInsets.all(12),
@@ -1078,7 +1083,17 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                         ),
                       ),
                     )
-                  : Icon(Icons.search, color: pal.ink, size: 20),
+                  : ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _location.enderecoCtrl,
+                      builder: (context, valor, _) => valor.text.isEmpty
+                          ? Icon(Icons.search, color: pal.ink, size: 20)
+                          : IconButton(
+                              tooltip: 'Limpar localização',
+                              icon: Icon(Icons.close, color: pal.ink, size: 20),
+                              onPressed:
+                                  _enviando ? null : _location.limparEndereco,
+                            ),
+                    ),
             ),
             validator: (v) =>
                 (v?.trim() ?? '').isEmpty ? 'Informe a localização' : null,

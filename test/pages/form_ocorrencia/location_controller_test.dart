@@ -78,6 +78,54 @@ void main() {
     });
   });
 
+  group('aplicarPosicaoGps', () {
+    test('com endereço: preenche o campo e confirma sem aviso', () {
+      final aviso = controller.aplicarPosicaoGps(
+        -7.11,
+        -34.86,
+        const EnderecoReverso(endereco: 'Rua X, Torre', bairro: 'Torre'),
+      );
+
+      expect(aviso, isNull);
+      expect(controller.enderecoCtrl.text, 'Rua X, Torre');
+      expect(controller.bairro, 'Torre');
+      expect(controller.coordenadasConfirmadas, isTrue);
+    });
+
+    test('sem endereço: mantém a posição do GPS e não põe erro no campo', () {
+      final aviso = controller.aplicarPosicaoGps(-7.11, -34.86, null);
+
+      expect(aviso, isNotNull);
+      expect(controller.coordenadasConfirmadas, isTrue);
+      expect(
+        controller.enderecoCtrl.text,
+        LocationController.textoSemEndereco,
+      );
+      expect(controller.enderecoCtrl.text, isNot(contains('não encontrado')));
+    });
+  });
+
+  group('limparEndereco', () {
+    test('esvazia o campo e descarta a localização resolvida', () {
+      controller.selecionarSugestao(
+        const EnderecoSugestao(
+          descricao: 'Rua X',
+          lat: -7.11,
+          lon: -34.86,
+          bairro: 'Torre',
+        ),
+      );
+
+      controller.limparEndereco();
+
+      expect(controller.enderecoCtrl.text, isEmpty);
+      expect(controller.latitude, isNull);
+      expect(controller.longitude, isNull);
+      expect(controller.bairro, isNull);
+      expect(controller.coordenadasConfirmadas, isFalse);
+    });
+  });
+
   group('resolverCoordenadas', () {
     test('usa as coordenadas já resolvidas sem tocar a rede', () async {
       controller.selecionarSugestao(

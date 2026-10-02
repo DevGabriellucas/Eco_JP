@@ -164,16 +164,7 @@ class LocationController extends ChangeNotifier {
       final addr = await _geo.reverseGeocode(pos.latitude, pos.longitude);
       if (_disposed) return null;
       if (enderecoCtrl.text != textoAntes) return null;
-      if (addr == null) {
-        return 'Não foi possível descobrir o endereço. Digite-o no campo.';
-      }
-      latitude = pos.latitude;
-      longitude = pos.longitude;
-      bairro = addr.bairro;
-      enderecoCtrl.text = addr.endereco;
-      mostrarSug = false;
-      notifyListeners();
-      return null;
+      return aplicarPosicaoGps(pos.latitude, pos.longitude, addr);
     } catch (e) {
       debugPrint('Localização: $e');
       return 'Erro ao obter localização.';
@@ -183,6 +174,43 @@ class LocationController extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// Texto do campo quando o GPS deu a posição, mas nenhum provedor achou o
+  /// nome da rua.
+  static const textoSemEndereco = 'Minha localização atual, João Pessoa';
+
+  /// Aplica uma posição do GPS já validada. Devolve um aviso para a página
+  /// ou `null`.
+  ///
+  /// A coordenada do GPS vale mesmo sem endereço: antes, se o reverso
+  /// falhava, a posição era descartada e o campo ficava com um texto de erro
+  /// que a pessoa precisava apagar à mão.
+  @visibleForTesting
+  String? aplicarPosicaoGps(double lat, double lon, EnderecoReverso? addr) {
+    latitude = lat;
+    longitude = lon;
+    bairro = addr?.bairro;
+    enderecoCtrl.text = addr?.endereco ?? textoSemEndereco;
+    sugestoes = [];
+    mostrarSug = false;
+    notifyListeners();
+    if (addr != null) return null;
+    return 'Localização confirmada, mas não achamos o nome da rua. Se quiser, '
+        'escreva um ponto de referência na descrição.';
+  }
+
+  /// Esvazia o campo de endereço e a localização resolvida (botão "x").
+  void limparEndereco() {
+    _debounce?.cancel();
+    enderecoCtrl.clear();
+    latitude = null;
+    longitude = null;
+    bairro = null;
+    sugestoes = [];
+    mostrarSug = false;
+    notifyListeners();
+    enderecoFocus.requestFocus();
   }
 
   /// Garante coordenadas para o envio: usa as já resolvidas (sugestão/GPS) ou

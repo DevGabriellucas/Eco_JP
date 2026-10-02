@@ -19,6 +19,7 @@ import '../services/moderacao_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/autor_ocorrencia.dart';
 import '../widgets/feed_states.dart';
+import 'detalhe_ocorrencia_page.dart';
 import '../widgets/occurrence_card.dart';
 import '../widgets/occurrence_comments_sheet.dart';
 import '../widgets/ocorrencia_actions.dart';
@@ -584,9 +585,23 @@ class _HomePageState extends ConsumerState<HomePage> {
     if (!mounted) return;
     // A contagem de comentários do card vem de um .count() pontual e cacheado
     // (o preview do último comentário já é reativo). Ao fechar o sheet,
-    // descartamos só o cache da contagem para o card recontar — assim os novos
-    // comentários (inclusive os enviados pela barra de emojis) atualizam o
-    // número exibido.
+    // descartamos só o cache da contagem para o card recontar — assim os
+    // comentários novos atualizam o número exibido.
+    setState(() {
+      _commentCountCache.remove(o.id);
+      _commentCountLoading.remove(o.id);
+    });
+  }
+
+  /// Abre a denúncia em tela cheia (toque no card). Na volta reconta os
+  /// comentários, que também podem ser feitos pela tela de detalhe.
+  Future<void> _abrirDetalhe(OcorrenciaModel o) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DetalheOcorrenciaPage(occurrence: o),
+      ),
+    );
+    if (!mounted) return;
     setState(() {
       _commentCountCache.remove(o.id);
       _commentCountLoading.remove(o.id);
@@ -664,7 +679,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           SnackBar(
             content: Text(
               fixar
-                  ? 'Denuncia fixada no topo do feed.'
+                  ? 'Denúncia fixada no topo do feed.'
                   : 'Destaque removido do feed.',
             ),
           ),
@@ -672,7 +687,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nao foi possivel atualizar o destaque.')),
+        const SnackBar(content: Text('Não foi possível atualizar o destaque.')),
       );
     }
   }
@@ -996,6 +1011,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   onLike: () => _toggleLike(o),
                   onDislike: () => _toggleDislike(o),
                   onComment: () => _openComments(o),
+                  onOpen: () => _abrirDetalhe(o),
                   onAuthorTap: o.anonima || o.usuarioId == null
                       ? null
                       : () => _openPublicProfile(

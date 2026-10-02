@@ -66,15 +66,12 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
   ComentarioModel? _replyTo;
   String? _replyParentId;
   bool _sending = false;
-  // If the logged-in user is an authority/agency — stamps the badge on the comment.
+  // Usuário logado é autoridade/órgão: o comentário sai com o selo.
   bool _ehAutoridade = false;
-  // Focus on comment from moderation queue: highlights for a few seconds.
+  // Comentário em foco (vindo da fila de moderação): destaque por alguns segundos.
   String? _comentarioEmFoco;
   bool _mostraDestaque = false;
   Timer? _focoTimer;
-  // Controls which comments have expanded replies
-  final Set<String> _expandedComments = {};
-
   // Autor de denúncia anônima comentando nela: avisa uma vez por sessão do
   // painel que o comentário mostra nome e foto (revelaria a autoria).
   bool _souAutorAnonimo = false;
@@ -97,7 +94,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
         if (mounted) setState(() => _souAutorAnonimo = sou);
       });
     }
-    // If there's a focused comment, activate the highlight.
+    // Com comentário em foco, liga o destaque.
     if (widget.comentarioIdEmFoco != null) {
       _comentarioEmFoco = widget.comentarioIdEmFoco;
       _mostraDestaque = true;
@@ -116,7 +113,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       if (!mounted) return;
       setState(() => _ehAutoridade = ehAutoridade);
     } catch (_) {
-      // No confirmed role → regular comment (no badge).
+      // Sem papel confirmado → comentário comum (sem selo).
     }
   }
 
@@ -136,11 +133,25 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       if (!mounted) return;
       setState(() => _perfilAtual = perfil);
     } catch (_) {
-      // Missing profile doesn't block comment; we use Firebase Auth data.
+      // Perfil ausente não bloqueia: o envio recarrega e avisa se faltar.
     }
   }
 
-  Future<void> _send([String? forcedText]) async {
+  /// Coloca o emoji no ponto do cursor em vez de enviá-lo: antes cada toque
+  /// na barra publicava um comentário só com o emoji.
+  void _inserirEmoji(String emoji) {
+    final valor = _controller.value;
+    final texto = valor.text;
+    final sel = valor.selection;
+    final inicio = sel.isValid ? sel.start : texto.length;
+    final fim = sel.isValid ? sel.end : texto.length;
+    _controller.value = TextEditingValue(
+      text: texto.replaceRange(inicio, fim, emoji),
+      selection: TextSelection.collapsed(offset: inicio + emoji.length),
+    );
+  }
+
+  Future<void> _send() async {
     if (_sending) return;
     final user = widget.authService.currentUser;
     if (user == null) {
@@ -150,7 +161,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       return;
     }
 
-    final text = (forcedText ?? _controller.text).trim();
+    final text = _controller.text.trim();
     if (text.isEmpty) return;
 
     if (_souAutorAnonimo && !_avisoAnonimoAceito) {
@@ -213,9 +224,8 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
         ),
       );
 
-      // Anonymous reports never notify the owner: the real UID is not
-      // accessible to commenters, protecting the reporter from correlation
-      // between reports.
+      // Denúncia anônima nunca notifica o dono: o UID real não chega a quem
+      // comenta, o que impede correlacionar denúncias do mesmo autor.
       final dono = widget.occurrence.usuarioId;
       if (!widget.occurrence.anonima && dono != null && dono != user.uid) {
         await widget.notificacaoService.notificar(
@@ -466,185 +476,163 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
             color: pal.surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
           ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: pal.border,
-                  borderRadius: BorderRadius.circular(999),
+          // Material transparente sobre a cor do painel: sem ele o efeito de
+          // toque (ripple) era desenhado no Material de trás e ficava escondido.
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: pal.border,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Comentários',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: pal.ink,
-                          fontWeight: FontWeight.w800,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Comentários',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: pal.ink,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Fechar',
-                      icon: Icon(Icons.close, size: 22, color: pal.ink),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
+                      IconButton(
+                        tooltip: 'Fechar',
+                        icon: Icon(Icons.close, size: 22, color: pal.ink),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Divider(height: 1, color: pal.border),
-              Expanded(
-                child: StreamBuilder<List<ComentarioModel>>(
-                  stream: _comentariosStream,
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData &&
-                        snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      );
-                    }
-
-                    // Comments hidden by authority (moderation) do not
-                    // appear in the public feed.
-                    final comentarios = (snapshot.data ?? const [])
-                        .where((c) => !c.oculto)
-                        .toList();
-                    if (comentarios.isEmpty) {
-                      return const _EmptyComments();
-                    }
-
-                    final roots =
-                        comentarios.where((c) => c.parentId == null).toList();
-                    final repliesByParent = <String, List<ComentarioModel>>{};
-                    for (final comentario in comentarios) {
-                      final parentId = comentario.parentId;
-                      if (parentId == null) continue;
-                      repliesByParent
-                          .putIfAbsent(parentId, () => <ComentarioModel>[])
-                          .add(comentario);
-                    }
-
-                    // Respostas de outras pessoas sobrevivem quando o autor
-                    // exclui o comentário raiz (cada um só apaga o que é
-                    // seu). Elas aparecem sob um marcador "Comentário
-                    // removido" em vez de sumir.
-                    final idsRaiz = {for (final r in roots) r.id};
-                    final raizesRemovidas = repliesByParent.keys
-                        .where((id) => !idsRaiz.contains(id))
-                        .toList();
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                      itemCount: roots.length + raizesRemovidas.length,
-                      itemBuilder: (context, index) {
-                        if (index >= roots.length) {
-                          final idRemovido =
-                              raizesRemovidas[index - roots.length];
-                          return _ThreadRaizRemovida(
-                            respostas: repliesByParent[idRemovido]!,
-                            construirResposta: (reply) => _CommentTile(
-                              comentario: reply,
-                              isOwn: reply.userId == user?.uid,
-                              isEmFoco: _comentarioEmFoco == reply.id &&
-                                  _mostraDestaque,
-                              isUserAutority: _ehAutoridade,
-                              compact: true,
-                              onLike: () => _toggleLike(reply),
-                              onReply: () => _replyToComment(
-                                reply,
-                                parentRootId: idRemovido,
-                              ),
-                              onEdit: () => _editComment(reply),
-                              onDelete: () => _deleteComment(reply),
-                              onReport: () => _reportComment(reply),
-                            ),
-                          );
-                        }
-                        final root = roots[index];
-                        final replies = repliesByParent[root.id] ??
-                            const <ComentarioModel>[];
-                        final isExpanded = _expandedComments.contains(root.id);
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _CommentTile(
-                              comentario: root,
-                              isOwn: root.userId == user?.uid,
-                              isEmFoco: _comentarioEmFoco == root.id &&
-                                  _mostraDestaque,
-                              isUserAutority: _ehAutoridade,
-                              replyCount: replies.length,
-                              showReplies: isExpanded,
-                              onLike: () => _toggleLike(root),
-                              onReply: () => _replyToComment(root),
-                              onEdit: () => _editComment(root),
-                              onDelete: () => _deleteComment(root),
-                              onReport: () => _reportComment(root),
-                              onToggleReplies: (show) {
-                                setState(() {
-                                  if (show) {
-                                    _expandedComments.add(root.id);
-                                  } else {
-                                    _expandedComments.remove(root.id);
-                                  }
-                                });
-                              },
-                            ),
-                            if (isExpanded)
-                              for (final reply in replies)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 42),
-                                  child: _CommentTile(
-                                    comentario: reply,
-                                    isOwn: reply.userId == user?.uid,
-                                    isEmFoco: _comentarioEmFoco == reply.id &&
-                                        _mostraDestaque,
-                                    isUserAutority: _ehAutoridade,
-                                    compact: true,
-                                    onLike: () => _toggleLike(reply),
-                                    onReply: () => _replyToComment(
-                                      reply,
-                                      parentRootId: root.id,
-                                    ),
-                                    onEdit: () => _editComment(reply),
-                                    onDelete: () => _deleteComment(reply),
-                                    onReport: () => _reportComment(reply),
-                                  ),
-                                ),
-                          ],
+                Divider(height: 1, color: pal.border),
+                Expanded(
+                  child: StreamBuilder<List<ComentarioModel>>(
+                    stream: _comentariosStream,
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData &&
+                          snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         );
-                      },
-                    );
-                  },
+                      }
+
+                      // Comentários ocultados pela autoridade (moderação) não
+                      // aparecem para o público.
+                      final comentarios = (snapshot.data ?? const [])
+                          .where((c) => !c.oculto)
+                          .toList();
+                      if (comentarios.isEmpty) {
+                        return const _EmptyComments();
+                      }
+
+                      final roots =
+                          comentarios.where((c) => c.parentId == null).toList();
+                      final repliesByParent = <String, List<ComentarioModel>>{};
+                      for (final comentario in comentarios) {
+                        final parentId = comentario.parentId;
+                        if (parentId == null) continue;
+                        repliesByParent
+                            .putIfAbsent(parentId, () => <ComentarioModel>[])
+                            .add(comentario);
+                      }
+
+                      // Respostas de outras pessoas sobrevivem quando o autor
+                      // exclui o comentário raiz (cada um só apaga o que é
+                      // seu). Elas aparecem sob um marcador "Comentário
+                      // removido" em vez de sumir.
+                      final idsRaiz = {for (final r in roots) r.id};
+                      final raizesRemovidas = repliesByParent.keys
+                          .where((id) => !idsRaiz.contains(id))
+                          .toList();
+
+                      Widget tile(
+                        ComentarioModel c, {
+                        required String raizId,
+                        bool resposta = false,
+                      }) =>
+                          _CommentTile(
+                            comentario: c,
+                            isOwn: c.userId == user?.uid,
+                            isEmFoco:
+                                _comentarioEmFoco == c.id && _mostraDestaque,
+                            compact: resposta,
+                            onLike: () => _toggleLike(c),
+                            onReply: () => _replyToComment(
+                              c,
+                              parentRootId: resposta ? raizId : null,
+                            ),
+                            onEdit: () => _editComment(c),
+                            onDelete: () => _deleteComment(c),
+                            onReport: () => _reportComment(c),
+                          );
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        itemCount: roots.length + raizesRemovidas.length,
+                        itemBuilder: (context, index) {
+                          if (index >= roots.length) {
+                            final idRemovido =
+                                raizesRemovidas[index - roots.length];
+                            return _ThreadRaizRemovida(
+                              key: ValueKey('removida_$idRemovido'),
+                              respostas: repliesByParent[idRemovido]!,
+                              construirResposta: (reply) => tile(
+                                reply,
+                                raizId: idRemovido,
+                                resposta: true,
+                              ),
+                            );
+                          }
+                          final root = roots[index];
+                          final replies = repliesByParent[root.id] ??
+                              const <ComentarioModel>[];
+                          return _FioComentario(
+                            key: ValueKey(root.id),
+                            raiz: tile(root, raizId: root.id),
+                            respostas: [
+                              for (final reply in replies)
+                                tile(reply, raizId: root.id, resposta: true),
+                            ],
+                            // Resposta em foco (fila de moderação) já abre o
+                            // fio; antes ela ficava escondida.
+                            expandidoInicial: _comentarioEmFoco != null &&
+                                replies.any((r) => r.id == _comentarioEmFoco),
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-              Divider(height: 1, color: pal.border),
-              if (_replyTo != null)
-                _ReplyBanner(
-                  name: _replyTo!.userName,
-                  onCancel: () => setState(() {
-                    _replyTo = null;
-                    _replyParentId = null;
-                  }),
+                Divider(height: 1, color: pal.border),
+                if (_replyTo != null)
+                  _ReplyBanner(
+                    name: _replyTo!.userName,
+                    onCancel: () => setState(() {
+                      _replyTo = null;
+                      _replyParentId = null;
+                    }),
+                  ),
+                _EmojiBar(emojis: _emojis, onEmojiTap: _inserirEmoji),
+                _CommentComposer(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  sending: _sending,
+                  userName: currentName,
+                  userPhotoUrl: currentPhoto,
+                  onSend: _send,
                 ),
-              _EmojiBar(emojis: _emojis, onEmojiTap: _send),
-              _CommentComposer(
-                controller: _controller,
-                focusNode: _focusNode,
-                sending: _sending,
-                userName: currentName,
-                userPhotoUrl: currentPhoto,
-                onSend: _send,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -652,7 +640,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
   }
 }
 
-class _CommentTile extends StatefulWidget {
+class _CommentTile extends StatelessWidget {
   final ComentarioModel comentario;
   final bool isOwn;
   final VoidCallback onLike;
@@ -660,12 +648,8 @@ class _CommentTile extends StatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onReport;
-  final ValueChanged<bool>? onToggleReplies;
-  final bool showReplies;
   final bool compact;
   final bool isEmFoco;
-  final bool isUserAutority;
-  final int replyCount;
 
   const _CommentTile({
     required this.comentario,
@@ -675,180 +659,156 @@ class _CommentTile extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onReport,
-    this.onToggleReplies,
-    this.showReplies = false,
     this.compact = false,
     this.isEmFoco = false,
-    this.isUserAutority = false,
-    this.replyCount = 0,
   });
 
   @override
-  State<_CommentTile> createState() => _CommentTileState();
-}
-
-class _CommentTileState extends State<_CommentTile> {
-  @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    final c = widget.comentario;
-    return Padding(
-      padding: EdgeInsets.only(bottom: widget.compact ? 14 : 18),
-      child: Container(
-        decoration: widget.isEmFoco
-            ? BoxDecoration(
-                border: Border.all(
-                  color: pal.primary,
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              )
-            : null,
-        padding: widget.isEmFoco ? const EdgeInsets.all(8) : null,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _UserAvatar(
-              name: c.userName,
-              photoUrl: c.userPhotoUrl,
-              radius: widget.compact ? 14 : 18,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header: Name + Badge + Time + (❤️ by authority if liked)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Row(
+    final c = comentario;
+    return Container(
+      decoration: isEmFoco
+          ? BoxDecoration(
+              border: Border.all(
+                color: pal.primary,
+                width: 2,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            )
+          : null,
+      padding: isEmFoco ? const EdgeInsets.all(8) : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _UserAvatar(
+            name: c.userName,
+            photoUrl: c.userPhotoUrl,
+            radius: compact ? 14 : 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Cabeçalho: nome + selo + tempo + (❤️ pela autoridade).
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text.rich(
+                        TextSpan(
                           children: [
-                            RichText(
-                              text: TextSpan(
-                                style: TextStyle(
-                                  fontSize: widget.compact ? 12.5 : 13,
-                                  color: pal.ink,
-                                  height: 1.35,
+                            TextSpan(text: c.userName),
+                            if (c.autorAutoridade)
+                              const WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: Padding(
+                                  padding: EdgeInsets.only(left: 3),
+                                  child: Icon(
+                                    Icons.verified,
+                                    size: 14,
+                                    color: Color(0xFF3B82F6),
+                                  ),
                                 ),
-                                children: [
-                                  TextSpan(
-                                    text: c.userName,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w800),
-                                  ),
-                                  if (c.autorAutoridade)
-                                    const WidgetSpan(
-                                      alignment: PlaceholderAlignment.middle,
-                                      child: Padding(
-                                        padding: EdgeInsets.only(left: 3),
-                                        child: Icon(
-                                          Icons.verified,
-                                          size: 14,
-                                          color: Color(0xFF3B82F6),
-                                        ),
-                                      ),
-                                    ),
-                                ],
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              tempoRelativo(c.dataCriacao),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: pal.hint,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            // ❤️ pela autoridade: visível a todos quando uma
-                            // conta de autoridade curtiu.
-                            if (c.curtidoPorAutoridade) ...[
-                              const SizedBox(width: 6),
-                              const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.favorite,
-                                    size: 12,
-                                    color: AppColors.danger,
-                                  ),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'pela autoridade',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: AppColors.danger,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
                           ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: compact ? 12.5 : 13,
+                          color: pal.ink,
+                          height: 1.35,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      tempoRelativo(c.dataCriacao),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: pal.hint,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    // ❤️ pela autoridade: visível a todos quando uma conta de
+                    // autoridade curtiu.
+                    if (c.curtidoPorAutoridade) ...[
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.favorite,
+                        size: 12,
+                        color: AppColors.danger,
+                      ),
+                      const SizedBox(width: 3),
+                      const Text(
+                        'pela autoridade',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.danger,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 6),
-                  // Comment text + Like heart
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
+                  ],
+                ),
+                // Texto + coração. O coração tem largura fixa e o número de
+                // curtidas fica na linha de baixo: antes o número aparecia ao
+                // lado do coração ao curtir, roubava largura do texto e o
+                // comentário quebrava as linhas de outro jeito.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 4),
                         child: Text(
                           c.texto,
                           style: TextStyle(
-                            fontSize: widget.compact ? 12.5 : 13,
+                            fontSize: compact ? 12.5 : 13,
                             color: pal.ink,
                             height: 1.35,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: widget.onLike,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                c.userLiked
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                size: 20,
-                                color:
-                                    c.userLiked ? AppColors.danger : pal.hint,
-                              ),
-                              if (c.likes > 0) ...[
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${c.likes}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: c.userLiked
-                                        ? AppColors.danger
-                                        : pal.hint,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
+                    ),
+                    IconButton(
+                      tooltip: c.userLiked
+                          ? 'Descurtir comentário'
+                          : 'Curtir comentário',
+                      onPressed: onLike,
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        c.userLiked ? Icons.favorite : Icons.favorite_border,
+                        size: 20,
+                        color: c.userLiked ? AppColors.danger : pal.hint,
+                      ),
+                    ),
+                  ],
+                ),
+                // Ações: curtidas + responder + menu.
+                Row(
+                  children: [
+                    if (c.likes > 0) ...[
+                      Text(
+                        c.likes == 1 ? '1 curtida' : '${c.likes} curtidas',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: pal.muted,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(width: 16),
                     ],
-                  ),
-                  const SizedBox(height: 6),
-                  // Actions: Reply + Menu
-                  Row(
-                    children: [
-                      Semantics(
-                        button: true,
-                        label: 'Responder comentário',
-                        child: GestureDetector(
-                          onTap: widget.onReply,
+                    Semantics(
+                      button: true,
+                      label: 'Responder comentário',
+                      child: InkWell(
+                        onTap: onReply,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(
                             'Responder',
                             style: TextStyle(
@@ -859,90 +819,139 @@ class _CommentTileState extends State<_CommentTile> {
                           ),
                         ),
                       ),
-                      const Spacer(),
-                      // 48 dp: com 24×24 o menu "…" era difícil de acertar.
-                      SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: PopupMenuButton<_CommentOwnerAction>(
-                          tooltip: 'Opções do comentário',
-                          icon:
-                              Icon(Icons.more_horiz, size: 16, color: pal.hint),
-                          padding: EdgeInsets.zero,
-                          onSelected: (action) {
-                            switch (action) {
-                              case _CommentOwnerAction.edit:
-                                widget.onEdit();
-                                break;
-                              case _CommentOwnerAction.delete:
-                                widget.onDelete();
-                                break;
-                              case _CommentOwnerAction.report:
-                                widget.onReport();
-                                break;
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            if (widget.isOwn) ...const [
-                              PopupMenuItem(
-                                value: _CommentOwnerAction.edit,
-                                child: _CommentMenuItem(
-                                  icon: Icons.edit_outlined,
-                                  label: 'Editar',
-                                ),
+                    ),
+                    const Spacer(),
+                    // 48 dp: com 24×24 o menu "…" era difícil de acertar.
+                    SizedBox(
+                      width: 48,
+                      height: 40,
+                      child: PopupMenuButton<_CommentOwnerAction>(
+                        tooltip: 'Opções do comentário',
+                        icon: Icon(Icons.more_horiz, size: 16, color: pal.hint),
+                        padding: EdgeInsets.zero,
+                        onSelected: (action) {
+                          switch (action) {
+                            case _CommentOwnerAction.edit:
+                              onEdit();
+                              break;
+                            case _CommentOwnerAction.delete:
+                              onDelete();
+                              break;
+                            case _CommentOwnerAction.report:
+                              onReport();
+                              break;
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          if (isOwn) ...const [
+                            PopupMenuItem(
+                              value: _CommentOwnerAction.edit,
+                              child: _CommentMenuItem(
+                                icon: Icons.edit_outlined,
+                                label: 'Editar',
                               ),
-                              PopupMenuItem(
-                                value: _CommentOwnerAction.delete,
-                                child: _CommentMenuItem(
-                                  icon: Icons.delete_outline,
-                                  label: 'Excluir',
-                                  danger: true,
-                                ),
+                            ),
+                            PopupMenuItem(
+                              value: _CommentOwnerAction.delete,
+                              child: _CommentMenuItem(
+                                icon: Icons.delete_outline,
+                                label: 'Excluir',
+                                danger: true,
                               ),
-                            ],
-                            if (!widget.isOwn)
-                              const PopupMenuItem(
-                                value: _CommentOwnerAction.report,
-                                child: _CommentMenuItem(
-                                  icon: Icons.flag_outlined,
-                                  label: 'Denunciar',
-                                  danger: true,
-                                ),
-                              ),
+                            ),
                           ],
+                          if (!isOwn)
+                            const PopupMenuItem(
+                              value: _CommentOwnerAction.report,
+                              child: _CommentMenuItem(
+                                icon: Icons.flag_outlined,
+                                label: 'Denunciar',
+                                danger: true,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Comentário raiz com as respostas. O aberto/fechado das respostas é estado
+/// deste fio: antes ficava no painel, e cada toque em "Ver respostas"
+/// reconstruía a lista inteira de comentários.
+class _FioComentario extends StatefulWidget {
+  const _FioComentario({
+    super.key,
+    required this.raiz,
+    required this.respostas,
+    this.expandidoInicial = false,
+  });
+
+  final Widget raiz;
+  final List<Widget> respostas;
+  final bool expandidoInicial;
+
+  @override
+  State<_FioComentario> createState() => _FioComentarioState();
+}
+
+class _FioComentarioState extends State<_FioComentario> {
+  late bool _expandido = widget.expandidoInicial;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final total = widget.respostas.length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          widget.raiz,
+          if (total > 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 46),
+              child: InkWell(
+                onTap: () => setState(() => _expandido = !_expandido),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 24, height: 1, color: pal.border),
+                      const SizedBox(width: 8),
+                      Text(
+                        _expandido
+                            ? 'Ocultar respostas'
+                            : (total == 1
+                                ? 'Ver 1 resposta'
+                                : 'Ver $total respostas'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: pal.primary,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
                   ),
-                  // Show/hide replies (if any)
-                  if (widget.replyCount > 0) ...[
-                    const SizedBox(height: 8),
-                    Semantics(
-                      button: true,
-                      label: widget.showReplies
-                          ? 'Ocultar respostas'
-                          : 'Ver respostas',
-                      child: GestureDetector(
-                        onTap: () =>
-                            widget.onToggleReplies?.call(!widget.showReplies),
-                        child: Text(
-                          widget.showReplies
-                              ? 'Ocultar respostas'
-                              : 'Ver respostas',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: pal.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
-          ],
-        ),
+          if (_expandido)
+            for (final resposta in widget.respostas)
+              Padding(
+                padding: const EdgeInsets.only(left: 42, top: 4),
+                child: resposta,
+              ),
+        ],
       ),
     );
   }
@@ -1215,6 +1224,7 @@ class _UserAvatar extends StatelessWidget {
 /// lugar da raiz e mantém as respostas das outras pessoas visíveis.
 class _ThreadRaizRemovida extends StatelessWidget {
   const _ThreadRaizRemovida({
+    super.key,
     required this.respostas,
     required this.construirResposta,
   });
