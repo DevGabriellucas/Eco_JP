@@ -51,3 +51,29 @@ loadtest/tokens.json
 loadtest/resultados/*
 !loadtest/resultados/.gitkeep
 node_modules
+
+# Skills de agentes instaladas via `npx skills add` (reinstalaveis)
+.agents/
+.claude/skills/
+skills-lock.json
+
+# Credenciais e segredos — nunca versionar, em qualquer pasta. Os modelos
+# (*.example) continuam versionados.
+google-services.json
+GoogleService-Info.plist
+**/key.properties
+**/local.properties
+**/Maps.xcconfig
+*.jks
+*.keystore
+*.p12
+*.pem
+*.mobileprovision
+.env
+.env.*
+!.env.example
+*service-account*.json
+*serviceAccount*.json
+firebase-debug.log*
+firestore-debug.log*
+.claude/settings.local.json
