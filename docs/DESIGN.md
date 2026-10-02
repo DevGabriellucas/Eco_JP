@@ -1,7 +1,7 @@
 # Design — EcoJP
 
 > Sistema visual e padrões de interface. A fonte da verdade em código é
-> [`lib/theme/app_theme.dart`](lib/theme/app_theme.dart); este arquivo explica as escolhas.
+> [`lib/theme/app_theme.dart`](../lib/theme/app_theme.dart); este arquivo explica as escolhas.
 
 ---
 
@@ -92,9 +92,8 @@ encaminhada são candidatos a virar token.)
 
 ## 7. Telas de referência
 
-Capturas em [`docs/img/`](docs/img/): feed, mapa, nova denúncia, panorama, perfil,
-conquistas, filas de verificação e moderação, painel e perfil da autoridade, estatísticas,
-categorias por bairro.
+As capturas de tela saíram de `docs/`; as antigas continuam no histórico do git
+(commit `158559d`, pasta `docs/img/`).
 
 ## 8. Acessibilidade
 
@@ -108,5 +107,3 @@ categorias por bairro.
 
 - Dark mode ainda parcial em algumas telas.
 - Revisão de UX/acessibilidade das telas principais (Fase 5 do ROADMAP).
-- Animação de curtida aparecendo atrás do card; contador de curtidas dos comentários como
-  texto ("1 curtida"); conquistas mal alinhadas (ver [TASKS.md](TASKS.md)).

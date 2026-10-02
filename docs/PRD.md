@@ -3,7 +3,7 @@
 > Documento de requisitos do produto. Descreve **o quê** e **por quê**.
 > O **como** está em [ARCHITECTURE.md](ARCHITECTURE.md); o visual, em [DESIGN.md](DESIGN.md).
 
-**Versão:** 1.0 · **Atualizado em:** 01/10/2026 · **Responsável:** Gabriel Lucas
+**Versão:** 1.0 · **Atualizado em:** 02/10/2026 · **Responsável:** Gabriel Lucas
 
 ---
 
@@ -118,7 +118,7 @@ Isso define o que é prioridade:
 
 ## 9. Referências
 
-- [ROADMAP.md](ROADMAP.md) — plano de evolução por fases
-- [docs/adr/0001-backend-firebase-vs-supabase.md](docs/adr/0001-backend-firebase-vs-supabase.md)
-- [docs/Code-review.md](docs/Code-review.md) — revisão que originou a Sprint 1
-- [docs/Sprint1-resumo.md](docs/Sprint1-resumo.md)
+- [ROADMAP.md](../ROADMAP.md) — plano de evolução por fases
+- [TASKS.md](TASKS.md) — tarefas e pendências atuais
+- ADR 0001 (Firebase × Supabase), revisão de código e resumo da Sprint 1 saíram de
+  `docs/`; continuam no histórico do git (commit `158559d`).

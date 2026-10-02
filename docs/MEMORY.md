@@ -20,7 +20,7 @@
 - **10/09/2026 — Fica no Firebase** (ADR 0001). O argumento decisivo é offline: denúncia
   acontece na rua sem sinal, e o Firestore dá fila de escrita e cache de graça. O Blaze não
   tem piso (mesma cota grátis do Spark). Antes de reabrir a discussão, ver os gatilhos no
-  fim do ADR. Se o objetivo for só SQL, export para BigQuery resolve sem mover o app.
+  fim do ADR (saiu de `docs/`; está no git, commit `158559d`). Se o objetivo for só SQL, export para BigQuery resolve sem mover o app.
 - **Papel de autoridade pela coleção `roles`, não por custom claims** — dispensa Cloud
   Functions e é concedido pelo Console.
 - **Anonimato vale perante a comunidade, não perante o órgão.** Está no item 3 da política
@@ -53,15 +53,25 @@
 - **Máquina de desenvolvimento (Windows):** `COMSPEC` aponta para o MSYS2 e quebra
   `flutter.bat` e `firebase emulators:exec`. Corrigir nas variáveis de ambiente.
 - **ROADMAP.md está defasado** em alguns itens; na dúvida, o código e
-  `docs/Sprint1-resumo.md` valem mais.
+  [TASKS.md](TASKS.md) valem mais.
 
-## Estado atual (01/10/2026)
+- **02/10/2026 — Uma sessão por conta.** O último login derruba os outros aparelhos
+  (`meta/sessao`). *Por quê:* a mesma conta era usada por duas pessoas ao mesmo tempo. O
+  documento guarda só o id, sem data nem aparelho, para não virar log de acesso, que a
+  política não prevê. Efeito colateral: conta de órgão compartilhada entre servidores se
+  derruba sozinha.
+- **Link de verificação "expirado":** suspeita (não confirmada) de restrição "Apps Android"
+  na chave de API do Android; a página de confirmação do Firebase usa essa chave no
+  navegador.
 
-- Sprint 1 (49 cards) implementada em `Develop`, aguardando revisão e commit.
+## Estado atual (02/10/2026)
+
+- Sprint 1 commitada (`52cf0da`); índices, backfill `oculto` e regras publicados.
+- Correções dos bugs dos testes manuais e sessão única commitadas em `Develop` (02/10/2026).
 - Pendências de Console listadas em [TASKS.md](TASKS.md).
 
 ## Onde está o resto
 
 - Produto: [PRD.md](PRD.md) · Arquitetura: [ARCHITECTURE.md](ARCHITECTURE.md) ·
   Regras: [RULES.md](RULES.md) · Design: [DESIGN.md](DESIGN.md) · Tarefas: [TASKS.md](TASKS.md)
-- Decisões formais: [docs/adr/](docs/adr/)
+- Decisões formais (ADR) e resumo da Sprint 1: histórico do git, commit `158559d`.

@@ -3,18 +3,16 @@
 > Lista de trabalho viva. Marque `[x]` ao concluir e mova para "Feito" no fim do ciclo.
 > Prioridade: 🔴 bloqueia demo/LGPD · 🟡 importante · 🟢 melhoria.
 
-**Atualizado em:** 01/10/2026
+**Atualizado em:** 02/10/2026
 
 ---
 
 ## 🔴 Agora — antes de qualquer apresentação
 
-- [ ] Revisar e commitar a Sprint 1 (49 cards, em `Develop` sem commit) — commits separados por área; `dart format` à parte.
 - [ ] Rodar `flutterfire configure` com o novo ID `br.com.ecojp.app` (`firebase_options.dart` ainda aponta para `com.example.ecoJp`).
 - [ ] Atualizar restrição da chave do Maps (pacote + SHA-1) para o novo ID.
 - [ ] Criar secrets de assinatura no GitHub: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
 - [ ] Cadastrar SHA-1/SHA-256 (upload + Play App Signing) no Firebase e no App Check.
-- [ ] Implantar na ordem: app → índices → `backfill:oculto` (dry run e `--aplicar`) → regras.
 - [ ] Revisão jurídica da política de privacidade + e-mail do DPO.
 
 ## 🔴 LGPD
@@ -29,25 +27,29 @@
 
 - [ ] App Check: registrar Android, iOS e web; chave reCAPTCHA v3 (`--dart-define=APP_CHECK_RECAPTCHA_SITE_KEY`); App Attest no App ID da Apple; **depois** ligar a imposição.
 - [ ] iOS: `GIDClientID` e `REVERSED_CLIENT_ID` no `Info.plist`.
-- [ ] Chave do Maps de servidor separada para `tools/geocode_bairros.mjs`; chave web restrita por domínio em `web/index.html`.
+- [ ] Chave do Maps de servidor separada para `tools/geocode_bairros.mjs`.
 - [ ] Corrigir `COMSPEC` do Windows (aponta para `C:\msys64\ucrt64\bin` e quebra `flutter.bat`).
 
 ## 🟡 Bugs relatados (testes manuais)
 
-- [ ] Link de verificação de e-mail chega expirado; tela de verificação fecha sozinha.
-- [ ] Ao curtir, o texto do comentário muda de forma.
-- [ ] Emoji é enviado direto como comentário.
-- [ ] Animação do coração de curtida aparece atrás do card.
-- [ ] "Ver todos os N comentários" não faz nada.
-- [ ] Abrir respostas de um comentário recarrega a página inteira.
-- [ ] Curtidas de comentário como texto abaixo ("1 curtida").
-- [ ] Tocar no card não abre o post em foco.
-- [ ] Conferir e ajustar o compartilhamento.
-- [ ] Coleta de lixo por bairro não funciona.
-- [ ] Duas sessões simultâneas na mesma conta.
-- [ ] "Usar localização atual" confirma, mas o campo mostra "Endereço não encontrado".
-- [ ] "Endereço não encontrado" precisa ser apagado à mão no campo.
-- [ ] Conquistas mal alinhadas na tela.
+Corrigidos em `Develop` em 02/10/2026 (lista original em `docs/Erro q precisa se consertando .txt`):
+
+- [x] Ao curtir, o texto do comentário muda de forma (coração com largura fixa).
+- [x] Emoji é enviado direto como comentário (agora entra no campo, no cursor).
+- [x] Animação do coração de curtida aparece atrás do card (ripple desenhado no Material de trás).
+- [x] Comentários de código em inglês no painel de comentários.
+- [x] "Ver todos os N comentários" não faz nada.
+- [x] Curtidas de comentário como texto abaixo ("1 curtida").
+- [x] Abrir respostas de um comentário recarrega a página inteira (estado por fio).
+- [x] Conferir e ajustar o compartilhamento (acentos, ordem do texto, origem no iPad).
+- [x] Tocar no card não abre o post em foco.
+- [x] Duas sessões simultâneas na mesma conta (sessão única).
+- [x] "Usar localização atual" confirma, mas o campo mostra "Endereço não encontrado".
+- [x] "Endereço não encontrado" precisa ser apagado à mão (botão "x" no campo).
+- [x] Conquistas mal alinhadas na tela (grade de colunas iguais).
+- [x] Coleta de lixo por bairro não funciona: causa (asset fora do pubspec) já corrigida na Sprint 1; conferido de novo.
+- [ ] Link de verificação de e-mail chega expirado: o app agora confere ao voltar do e-mail e avisa que reenviar invalida o link anterior. **Falta conferir no Console** se a chave de API do Android tem restrição "Apps Android" — a página de confirmação do Firebase usa essa chave no navegador e, com essa restrição, mostra "link expirado". "Tela fecha sozinha" não foi reproduzido.
+- [x] Regras publicadas em `ecojp-8b952` (02/10/2026), incluindo as da Sprint 1 e a da sessão única.
 
 ## 🟡 Escala e custo (dependem de `functions/`)
 
@@ -71,7 +73,9 @@
 
 ## ✅ Feito
 
-- [x] Sprint 1 implementada em `Develop` (01/10/2026) — ver `docs/Sprint1-resumo.md`.
+- [x] Sprint 1 commitada em `Develop` (`52cf0da`, 01/10/2026).
+- [x] Correções dos bugs dos testes manuais e sessão única commitadas em `Develop` (02/10/2026).
+- [x] Implantação da Sprint 1: índices, `backfill:oculto` e regras (01–02/10/2026).
 - [x] Reserva atômica de nome em `nomes_reservados`.
 - [x] Novo ID `br.com.ecojp.app` e assinatura de release.
 - [x] App Check ativado no app.

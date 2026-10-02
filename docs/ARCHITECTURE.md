@@ -2,7 +2,7 @@
 
 > Como o sistema é montado. Requisitos em [PRD.md](PRD.md); convenções em [RULES.md](RULES.md).
 
-**Atualizado em:** 01/10/2026
+**Atualizado em:** 02/10/2026
 
 ---
 
@@ -35,8 +35,7 @@ campo, dono, papel, geofence, intervalos e eventos de auditoria. Uma pasta `func
 em TypeScript está planejada para o que as Rules não resolvem (apagar mídia na exclusão
 de conta, contadores agregados, notificações push).
 
-Decisão de stack registrada no
-[ADR 0001](docs/adr/0001-backend-firebase-vs-supabase.md): fica no Firebase. O argumento
+Decisão de stack (ADR 0001, 10/09/2026, no histórico do git): fica no Firebase. O argumento
 decisivo é o suporte offline; o Blaze não tem piso de cobrança, e a conta alta vem do
 padrão de leitura, não do fornecedor.
 
@@ -65,6 +64,7 @@ lib/
 │   ├── router/               # app_router.dart (go_router + redirects), routes.dart (caminhos)
 │   ├── theme/                # theme_mode_provider.dart (claro/escuro)
 │   ├── deep_link.dart        # ecojp://ocorrencia/<id>, destino pendente até o login
+│   ├── sessao_unica.dart     # derruba a sessão quando a conta entra em outro aparelho
 │   └── connectivity_provider.dart
 ├── features/                 # providers Riverpod por domínio
 │   ├── auth/providers/
@@ -92,7 +92,7 @@ Telas não falam com o Firestore direto; passam por repositório ou serviço.
 | `ocorrencias/{id}/dono/info` | Dono real da denúncia anônima (privado) | Criado no mesmo batch da denúncia |
 | `ocorrencias/{id}/compartilhamentos/{uid}` | Um compartilhamento por usuário | Usuário |
 | `usuarios/{uid}` | Perfil público | Próprio usuário |
-| `usuarios/{uid}/minhas_denuncias_anonimas` · `meta` · `seguindo` · `seguidores` | Dados auxiliares do perfil | Próprio usuário / seguidor |
+| `usuarios/{uid}/minhas_denuncias_anonimas` · `meta` · `seguindo` · `seguidores` | Dados auxiliares do perfil (`meta/sessao` guarda só o id da sessão ativa) | Próprio usuário / seguidor |
 | `nomes_reservados/{slug}` | Unicidade atômica do nome público | Criação única (`update: false`) |
 | `notificacoes/{uid}/items/{id}` | Notificações (ID determinístico) | Ligadas a ação real |
 | `denuncias_moderacao/{id}` | Denúncias de conteúdo abusivo | Usuário; autoridade resolve |
@@ -108,6 +108,10 @@ Telas não falam com o Firestore direto; passam por repositório ou serviço.
 **Autenticação** — `app_router.dart` redireciona: sem login → `/inicial`; e-mail não
 verificado → `/verificacao-email`; sem consentimento da versão atual → `/consentimento`;
 caso contrário → `/home` (shell com abas Feed, Mapa, Dados, Perfil).
+
+**Sessão única** — cada login grava um id aleatório no aparelho e em
+`usuarios/{uid}/meta/sessao` (`SessaoService`). O aparelho cujo id deixa de bater com o do
+servidor é desconectado com aviso. Se a gravação falhar, o app segue sem a checagem.
 
 **Nova denúncia** — `form_ocorrencia_page` → `LocationController` (GPS + geofence +
 geocoding) e `MediaController` (seleção, remoção de EXIF, limites 8 MB/50 MB) → rate
@@ -136,8 +140,8 @@ visível ao dono e à autoridade.
 
 | Suíte | Onde | Como rodar |
 |---|---|---|
-| Unitários/widget Dart (~180) | `test/` | `flutter test` |
-| Regras do Firestore (~99) | `test/firestore_rules/` | `npm test` (emulador) |
+| Unitários/widget Dart (~190) | `test/` | `flutter test` |
+| Regras do Firestore (~100) | `test/firestore_rules/` | `npm test` (emulador) |
 | Carga (k6) | `loadtest/` | ver `loadtest/README.md` |
 
 GitHub Actions (`.github/workflows/ci.yml`): analyze → format (bloqueante) → testes Dart →
