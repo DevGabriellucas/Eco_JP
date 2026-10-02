@@ -265,11 +265,13 @@ class UsuarioService {
       lotes.deletar(doc.reference);
     }
 
-    // 7. Estado privado (conquistas já notificadas, carimbo de reação),
+    // 7. Estado privado (conquistas já notificadas, carimbo de reação, id da
+    //    sessão ativa),
     //    consentimento e perfil por último: nada mais depende deles.
     lotes
         .deletar(_ref.doc(uid).collection('meta').doc('conquistasNotificadas'));
     lotes.deletar(_ref.doc(uid).collection('meta').doc('reacao'));
+    lotes.deletar(_ref.doc(uid).collection('meta').doc('sessao'));
     lotes.deletar(db.collection('consentimentos').doc(uid));
     lotes.deletar(_ref.doc(uid));
 

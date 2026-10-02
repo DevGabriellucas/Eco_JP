@@ -804,7 +804,14 @@ service cloud.firestore {
             // Carimbo da última reação (ver respeitaIntervaloDeReacao).
             || (docId == 'reacao'
               && request.resource.data.keys().hasOnly(['ultima'])
-              && request.resource.data.ultima == request.time));
+              && request.resource.data.ultima == request.time)
+            // Id da sessão ativa (uma por conta; ver SessaoService). Só o
+            // id aleatório: sem data nem aparelho, não vira log de acesso.
+            || (docId == 'sessao'
+              && request.resource.data.keys().hasOnly(['id'])
+              && request.resource.data.id is string
+              && request.resource.data.id.size() >= 16
+              && request.resource.data.id.size() <= 64));
       }
 
       match /seguindo/{alvoUid} {

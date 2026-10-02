@@ -893,6 +893,29 @@ describe('usuarios/{uid}/meta', () => {
     const db = verifiedContext(testEnv, 'alice');
     await assertFails(meta(db, 'alice').set({ items: [...Array(51).keys()].map(String) }));
   });
+
+  const sessao = (db, uid) =>
+    db.collection('usuarios').doc(uid).collection('meta').doc('sessao');
+  const idSessao = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+
+  test('sessao: dono registra o id, mesmo antes de confirmar o e-mail', async () => {
+    await assertSucceeds(sessao(verifiedContext(testEnv, 'alice'), 'alice').set({ id: idSessao }));
+    await assertSucceeds(sessao(unverifiedContext(testEnv, 'bob'), 'bob').set({ id: idSessao }));
+    await assertSucceeds(sessao(verifiedContext(testEnv, 'alice'), 'alice').get());
+  });
+
+  test('sessao: NAO derruba a sessao de outra pessoa', async () => {
+    const db = verifiedContext(testEnv, 'bob');
+    await assertFails(sessao(db, 'alice').set({ id: idSessao }));
+    await assertFails(sessao(db, 'alice').get());
+  });
+
+  test('sessao: so o id, sem data/aparelho e com tamanho valido', async () => {
+    const db = verifiedContext(testEnv, 'alice');
+    await assertFails(sessao(db, 'alice').set({ id: idSessao, aparelho: 'Moto G' }));
+    await assertFails(sessao(db, 'alice').set({ id: 'curto' }));
+    await assertFails(sessao(db, 'alice').set({ id: 123 }));
+  });
 });
 
 describe('conteudo ocultado pela moderacao', () => {

@@ -9,6 +9,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
 import 'core/deep_link.dart';
+import 'core/sessao_unica.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/theme_mode_provider.dart';
 import 'theme/app_theme.dart';
@@ -151,14 +152,17 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(goRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
-    return DeepLinkListener(
-      child: MaterialApp.router(
-        title: 'EcoJP',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: themeMode,
-        routerConfig: router,
+    return SessaoUnicaListener(
+      child: DeepLinkListener(
+        child: MaterialApp.router(
+          title: 'EcoJP',
+          debugShowCheckedModeBanner: false,
+          scaffoldMessengerKey: scaffoldMessengerGlobal,
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: themeMode,
+          routerConfig: router,
+        ),
       ),
     );
   }
