@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
@@ -374,6 +375,13 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
                                     controller: _nomeController,
                                     hint: 'Seu nome',
                                     maxLength: _maxNome,
+                                    // Teto das regras, sem o contador "0/40".
+                                    mostrarContador: false,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                        caractereDeNome,
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 16),
                                   _buildLabel('Email'),
@@ -541,6 +549,8 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     bool obscure = false,
     Widget? suffix,
     int? maxLength,
+    bool mostrarContador = true,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     final pal = context.pal;
     return TextFormField(
@@ -548,9 +558,11 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
       keyboardType: keyboardType,
       obscureText: obscure,
       maxLength: maxLength,
+      inputFormatters: inputFormatters,
       style: TextStyle(fontFamily: 'Roboto', fontSize: 14, color: pal.ink),
       decoration: InputDecoration(
         hintText: hint,
+        counterText: mostrarContador ? null : '',
         hintStyle: TextStyle(
           fontFamily: 'Roboto',
           fontSize: 14,

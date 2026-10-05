@@ -296,6 +296,9 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
               controller: _nomeCtrl,
               hint: 'Seu nome',
               maxLength: 40,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(caractereDeNome),
+              ],
               validator: (v) =>
                   (v?.trim() ?? '').isEmpty ? 'Informe seu nome' : null,
             ),
@@ -411,6 +414,7 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
     int maxLines = 1,
     int? maxLength,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     final pal = context.pal;
     return TextFormField(
@@ -418,6 +422,7 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
       enabled: !_salvando,
       maxLines: maxLines,
       maxLength: maxLength,
+      inputFormatters: inputFormatters,
       validator: validator,
       style: TextStyle(color: pal.ink, fontSize: 14),
       decoration: InputDecoration(

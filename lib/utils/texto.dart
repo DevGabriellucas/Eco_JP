@@ -70,3 +70,9 @@ String sanitizarTexto(String texto) {
 String sanitizarLinhaUnica(String texto) {
   return sanitizarTexto(texto).replaceAll(RegExp(r'\s+'), ' ').trim();
 }
+
+/// Caracteres aceitos no nome de usuário: letras (com acento, de qualquer
+/// alfabeto) e espaço. Usado como `FilteringTextInputFormatter.allow` no
+/// cadastro e na edição de perfil, então números e símbolos nem entram no
+/// campo — nem digitados, nem colados.
+final caractereDeNome = RegExp(r'[\p{L} ]', unicode: true);
