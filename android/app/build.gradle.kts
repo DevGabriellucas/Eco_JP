@@ -54,10 +54,12 @@ android {
     }
 
     defaultConfig {
-        // Identificador definitivo e permanente na Play Store. Não pode mudar
-        // depois da primeira publicação — trocá-lo cria um app novo, sem os
-        // usuários e sem as avaliações do anterior.
-        applicationId = "br.com.ecojp.app"
+        // Provisório: com.example.eco_jp é o pacote registrado na chave do Maps
+        // e no app Android do Firebase. A Play Store recusa com.example.*, então
+        // antes de publicar volta para br.com.ecojp.app (e registra esse ID na
+        // chave do Maps e no Firebase). Não pode mudar depois da primeira
+        // publicação — trocá-lo cria um app novo, sem usuários nem avaliações.
+        applicationId = "com.example.eco_jp"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
