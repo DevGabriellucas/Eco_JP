@@ -13,7 +13,8 @@
     "loadtest:pico": "k6 run loadtest/k6/pico.js",
     "loadtest:corpus": "node loadtest/corpus.mjs",
     "backfill:nomes": "node scripts/backfill_nomes_reservados.mjs",
-    "backfill:oculto": "node scripts/backfill_oculto.mjs"
+    "backfill:oculto": "node scripts/backfill_oculto.mjs",
+    "limpar:denuncias": "node scripts/limpar_denuncias.mjs"
   },
   "keywords": [],
   "author": "",
