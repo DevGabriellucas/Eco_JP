@@ -452,7 +452,8 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mensagemErro(e, acao: 'denunciar o comentário'))),
+        SnackBar(
+            content: Text(mensagemErro(e, acao: 'denunciar o comentário'))),
       );
     }
   }

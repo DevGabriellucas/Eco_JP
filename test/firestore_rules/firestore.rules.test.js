@@ -726,9 +726,9 @@ describe('nome do perfil atrelado a reserva', () => {
     // Variações que caem no mesmo slug: caixa, acento, invisível, decomposto.
     await assertFails(ref.set(perfil('ALICE')));
     await assertFails(ref.set(perfil('Alíce')));
-    await assertFails(ref.set(perfil('Al​ice')));
+    await assertFails(ref.set(perfil('Al\u200Bice')));
     await seedReserva('joao', 'joao', 'João');
-    await assertFails(ref.set(perfil('Joáo')));
+    await assertFails(ref.set(perfil('Joa\u0301o')));
   });
 
   test('NAO cria perfil sem reserva nenhuma', async () => {

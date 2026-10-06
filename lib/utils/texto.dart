@@ -4,7 +4,7 @@ const _comAcento = 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈ
 const _semAcento = 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC';
 
 final _invisivelOuCombinante =
-    RegExp(r'[\p{Cc}\p{Cf}̀-ͯ]', unicode: true);
+    RegExp(r'[\p{Cc}\p{Cf}\u0300-\u036F]', unicode: true);
 
 /// Remove acentos/diacríticos de [texto], preservando os demais caracteres.
 /// Útil para buscas e para gerar identificadores a partir de nomes.

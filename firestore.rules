@@ -106,7 +106,7 @@ service cloud.firestore {
 
     // Mesmo slug de UsuarioService.idDoNome (slugify em lib/utils/texto.dart).
     // Antes de mapear, descarta caracteres invisíveis (\p{Cc}, \p{Cf}) e
-    // acentos combinantes: "Jo​ão" ou "João" decomposto exibem o mesmo
+    // acentos combinantes: "Jo\u200Bão" ou "João" decomposto exibem o mesmo
     // nome que "João" e precisam cair no mesmo slug, senão escapam da reserva.
     function slugDoNome(nome) {
       return nome
