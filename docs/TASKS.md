@@ -3,13 +3,14 @@
 > Lista de trabalho viva. Marque `[x]` ao concluir e mova para "Feito" no fim do ciclo.
 > Prioridade: 🔴 bloqueia demo/LGPD · 🟡 importante · 🟢 melhoria.
 
-**Atualizado em:** 02/10/2026
+**Atualizado em:** 06/10/2026
 
 ---
 
 ## 🔴 Agora — antes de qualquer apresentação
 
-- [ ] Rodar `flutterfire configure` com o novo ID `br.com.ecojp.app` (`firebase_options.dart` ainda aponta para `com.example.ecoJp`).
+- [ ] Publicar regras e índices da análise de 06/10: `firebase deploy --only firestore:rules,firestore:indexes` (o índice de grupo `comentarios.userId` é exigido pela exclusão de conta).
+- [ ] iOS: rodar `flutterfire configure` para o bundle `br.com.ecojp.app` (`firebase_options.dart` ainda tem `iosBundleId: com.example.ecoJp`). O Android voltou a `com.example.eco_jp` (8cccfa9) e está coerente.
 - [ ] Atualizar restrição da chave do Maps (pacote + SHA-1) para o novo ID.
 - [ ] Criar secrets de assinatura no GitHub: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
 - [ ] Cadastrar SHA-1/SHA-256 (upload + Play App Signing) no Firebase e no App Check.
@@ -17,7 +18,8 @@
 
 ## 🔴 LGPD
 
-- [ ] Exclusão de conta: anonimizar `userName`/`userPhotoUrl` nos comentários do usuário.
+- [x] Exclusão de conta: anonimizar `userName`/`userPhotoUrl` nos comentários do usuário ("Usuário removido"; regra `isAnonimizacaoDoAutor`). Vale após publicar as regras.
+- [ ] Exclusão de conta: notificações que o usuário enviou continuam com `deUsuarioNome` na caixa de quem recebeu, e `denuncias_moderacao` guarda `denuncianteId`. Exige Cloud Function.
 - [ ] Exclusão de conta: apagar mídia no Cloudinary (exige upload assinado + Cloud Function).
 - [ ] Remoção de metadados no upload preset do Cloudinary (transformação).
 - [ ] Documentar quais dados são coletados, por quê e por quanto tempo (Fase 2 do ROADMAP).
@@ -50,6 +52,8 @@ Corrigidos em `Develop` em 02/10/2026 (lista original em `docs/Erro q precisa se
 - [x] Coleta de lixo por bairro não funciona: causa (asset fora do pubspec) já corrigida na Sprint 1; conferido de novo.
 - [ ] Link de verificação de e-mail chega expirado: o app agora confere ao voltar do e-mail e avisa que reenviar invalida o link anterior. **Falta conferir no Console** se a chave de API do Android tem restrição "Apps Android" — a página de confirmação do Firebase usa essa chave no navegador e, com essa restrição, mostra "link expirado". "Tela fecha sozinha" não foi reproduzido.
 - [x] Regras publicadas em `ecojp-8b952` (02/10/2026), incluindo as da Sprint 1 e a da sessão única.
+- [x] Mapa bege, só com o logo do Google: resolvido com a volta do `applicationId` para `com.example.eco_jp` (8cccfa9); o APK de 05/10 abriu o mapa. Volta a valer quando o ID mudar.
+- [ ] Botão "minha localização" do mapa (canto inferior esquerdo) fica em cima do logo do Google.
 
 ## 🟡 Escala e custo (dependem de `functions/`)
 
@@ -57,7 +61,17 @@ Corrigidos em `Develop` em 02/10/2026 (lista original em `docs/Erro q precisa se
 - [ ] Reações fora do array do documento (subcoleção ou contador distribuído).
 - [ ] Documento agregado para mapa, estatísticas e dados públicos (hoje leem até 500 docs).
 - [ ] Mapa por viewport/geohash.
-- [ ] Comprimir foto/vídeo no upload (~6× menos mídia).
+- [ ] Comprimir vídeo no upload (a foto já sai em 1600 px / qualidade 80; o vídeo sobe até 50 MB).
+- [ ] `nomes_reservados`: no máximo uma reserva por conta (hoje ilimitada, ver comentário nas regras).
+- [ ] Notificações geradas no servidor (hoje cliente→cliente).
+
+## 🟡 Arquitetura (análise de 06/10)
+
+- [ ] Services e repositories só por provider: tirar os `XService()` criados nas telas (27 em 12 arquivos) e injetar `FirebaseFirestore` pelo construtor, como já faz `OcorrenciaRepository`.
+- [ ] Estado do feed num `Notifier` (paginação, filtros e cache de contagem saem do `home_page`).
+- [ ] Agregação de `estatisticas_page` em funções puras testáveis.
+- [ ] Rotas no go_router para Detalhe, EditarPerfil e ConfiguracoesConta; trocar os 12 `Navigator.push`.
+- [ ] Fila offline para denúncia com mídia (hoje o upload ao Cloudinary falha sem sinal).
 
 ## 🟢 Melhorias
 
@@ -65,7 +79,7 @@ Corrigidos em `Develop` em 02/10/2026 (lista original em `docs/Erro q precisa se
 - [ ] Exportar dados também em JSON (portabilidade interoperável).
 - [ ] Completar dark mode nas telas restantes.
 - [ ] Revisão de UX/acessibilidade (Fase 5).
-- [ ] Ampliar testes de regras de moderação e LGPD.
+- [ ] Ampliar testes de regras de moderação e LGPD (06/10: +11 testes, ver bloco "brechas fechadas").
 - [ ] Roteiro de demonstração para Unipê, MP e parceiros.
 - [ ] Definir licença do repositório.
 

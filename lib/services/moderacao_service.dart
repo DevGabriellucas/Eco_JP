@@ -8,6 +8,7 @@ import '../data/repositories/ocorrencia_repository.dart';
 import '../models/denuncia_moderacao_model.dart';
 import '../utils/log_erros.dart';
 import 'analytics_service.dart';
+import 'rate_limiter.dart';
 
 class ModeracaoService {
   static final ModeracaoService instance = ModeracaoService();
@@ -20,6 +21,8 @@ class ModeracaoService {
   final AnalyticsService _analytics = AnalyticsService();
 
   String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
+
+  static const String _chaveLimiteDenuncia = 'denuncia_abuso';
 
   Future<void> denunciarOcorrencia({
     required String ocorrenciaId,
@@ -62,7 +65,13 @@ class ModeracaoService {
     String? detalhe,
   }) {
     return comLogDeErro('denunciar conteúdo', () async {
-      await _ref.add({
+      // As Rules exigem 30 s entre denúncias (respeitaIntervaloDeDenuncia);
+      // checar antes troca o permission-denied por "aguarde Xs" na tela.
+      RateLimiter.instance
+          .verificar(_chaveLimiteDenuncia, RateLimiter.intervaloDenuncia);
+      final db = FirebaseFirestore.instance;
+      final batch = db.batch();
+      batch.set(_ref.doc(), {
         'alvoTipo': alvoTipo,
         'ocorrenciaId': ocorrenciaId,
         'comentarioId': comentarioId,
@@ -72,6 +81,16 @@ class ModeracaoService {
         'status': 'pendente',
         'criadoEm': FieldValue.serverTimestamp(),
       });
+      batch.set(
+        db
+            .collection('usuarios')
+            .doc(denuncianteId)
+            .collection('meta')
+            .doc('denuncia'),
+        {'ultima': FieldValue.serverTimestamp()},
+      );
+      await batch.commit();
+      RateLimiter.instance.registrar(_chaveLimiteDenuncia);
       unawaited(_analytics.denunciaDeAbusoCriada(alvoTipo: alvoTipo));
     });
   }

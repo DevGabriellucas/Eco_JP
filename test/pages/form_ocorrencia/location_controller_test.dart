@@ -92,6 +92,34 @@ void main() {
       expect(controller.coordenadasConfirmadas, isTrue);
     });
 
+    test('denúncia anônima grava o endereço do GPS sem o número', () {
+      controller.aplicarPosicaoGps(
+        -7.11,
+        -34.86,
+        const EnderecoReverso(
+          endereco: 'Rua X, 123, Torre, João Pessoa',
+          bairro: 'Torre',
+          enderecoSemNumero: 'Rua X, Torre, João Pessoa',
+        ),
+      );
+
+      expect(
+        controller.enderecoPublico(anonima: true),
+        'Rua X, Torre, João Pessoa',
+      );
+      expect(
+        controller.enderecoPublico(anonima: false),
+        'Rua X, 123, Torre, João Pessoa',
+      );
+
+      // Editado à mão: vale o que a pessoa escreveu.
+      controller.enderecoCtrl.text = 'Praça Y, em frente ao mercado';
+      expect(
+        controller.enderecoPublico(anonima: true),
+        'Praça Y, em frente ao mercado',
+      );
+    });
+
     test('sem endereço: mantém a posição do GPS e não põe erro no campo', () {
       final aviso = controller.aplicarPosicaoGps(-7.11, -34.86, null);
 

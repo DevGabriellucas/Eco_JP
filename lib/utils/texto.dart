@@ -3,6 +3,9 @@
 const _comAcento = 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ';
 const _semAcento = 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC';
 
+final _invisivelOuCombinante =
+    RegExp(r'[\p{Cc}\p{Cf}̀-ͯ]', unicode: true);
+
 /// Remove acentos/diacríticos de [texto], preservando os demais caracteres.
 /// Útil para buscas e para gerar identificadores a partir de nomes.
 String removerAcentos(String texto) {
@@ -16,8 +19,12 @@ String removerAcentos(String texto) {
 
 /// Gera um identificador estável (kebab-case, sem acentos) a partir de [texto].
 /// Ex.: "Cidade Verde (Mangabeira)" -> "cidade-verde-mangabeira".
+///
+/// Descarta antes caracteres invisíveis e acentos combinantes, como
+/// `slugDoNome` nas Firestore Rules: os dois precisam gerar o mesmo slug, ou
+/// a regra recusa o perfil de quem reservou o nome pelo app.
 String slugify(String texto) {
-  return removerAcentos(texto)
+  return removerAcentos(texto.replaceAll(_invisivelOuCombinante, ''))
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');

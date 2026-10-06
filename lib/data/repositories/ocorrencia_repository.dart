@@ -566,24 +566,28 @@ class OcorrenciaRepository {
     return comLogDeErro('deletar ocorrência', () async {
       // Denúncia anônima tem documentos auxiliares (dono/info e o ponteiro
       // em minhas_denuncias_anonimas) que não são apagados em cascata pelo
-      // Firestore — precisam ser limpos manualmente antes/junto da exclusão
-      // do doc principal, senão ficam órfãos.
+      // Firestore. Vão no MESMO batch da denúncia: a regra de delete dela
+      // (isOwner) lê dono/info no estado anterior ao commit. Apagados antes,
+      // em escritas separadas, a denúncia ficava sem prova de autoria e o
+      // delete final recebia permission-denied, deixando-a pública.
       final ref = _ocorrenciasRef.doc(id);
       final snap = await ref.get();
       final data = snap.data();
       final uid = _currentUserId;
 
+      final batch = _firestore.batch();
+      batch.delete(ref);
       if (data?['anonima'] == true && uid != null) {
-        await _firestore
-            .collection('usuarios')
-            .doc(uid)
-            .collection('minhas_denuncias_anonimas')
-            .doc(id)
-            .delete();
-        await ref.collection('dono').doc('info').delete();
+        batch.delete(ref.collection('dono').doc('info'));
+        batch.delete(
+          _firestore
+              .collection('usuarios')
+              .doc(uid)
+              .collection('minhas_denuncias_anonimas')
+              .doc(id),
+        );
       }
-
-      await ref.delete();
+      await batch.commit();
     });
   }
 

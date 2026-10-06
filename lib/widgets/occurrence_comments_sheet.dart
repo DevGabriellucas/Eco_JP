@@ -449,10 +449,10 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Comentário enviado para moderação.')),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível denunciar.')),
+        SnackBar(content: Text(mensagemErro(e, acao: 'denunciar o comentário'))),
       );
     }
   }

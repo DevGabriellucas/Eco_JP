@@ -29,7 +29,15 @@ class EnderecoReverso {
   final String endereco;
   final String? bairro;
 
-  const EnderecoReverso({required this.endereco, this.bairro});
+  /// [endereco] sem o número da casa. Vai no lugar dele em denúncia anônima:
+  /// a posição do GPS costuma ser a do próprio denunciante.
+  final String enderecoSemNumero;
+
+  const EnderecoReverso({
+    required this.endereco,
+    this.bairro,
+    String? enderecoSemNumero,
+  }) : enderecoSemNumero = enderecoSemNumero ?? endereco;
 }
 
 /// Geocoding de endereços para o formulário de denúncia:
@@ -319,12 +327,15 @@ class GeocodingService {
     final n = limpo(numero);
     final b = limpo(bairro);
     if (r == null && b == null) return null;
-    final partes = [
-      if (r != null) n == null ? r : '$r, $n',
+    final resto = [
       if (b != null) b,
       limpo(cidade) ?? 'João Pessoa',
     ];
-    return EnderecoReverso(endereco: partes.join(', '), bairro: b);
+    return EnderecoReverso(
+      endereco: [if (r != null) n == null ? r : '$r, $n', ...resto].join(', '),
+      bairro: b,
+      enderecoSemNumero: [if (r != null) r, ...resto].join(', '),
+    );
   }
 
   static const _chavesRua = [

@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -140,15 +139,8 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
     _conquistasConferidas = conquistasDesbloqueadas;
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(uid)
-          .collection('meta')
-          .doc('conquistasNotificadas')
-          .get();
-
       final conquistasNotificadas =
-          Set<String>.from(doc.data()?['items'] ?? []);
+          await _usuarioService.conquistasNotificadas(uid);
 
       final novasConquistas =
           conquistasDesbloqueadas.difference(conquistasNotificadas);
@@ -161,12 +153,10 @@ class _PerfilPageState extends ConsumerState<PerfilPage> {
       }
 
       if (novasConquistas.isNotEmpty) {
-        await FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(uid)
-            .collection('meta')
-            .doc('conquistasNotificadas')
-            .set({'items': conquistasDesbloqueadas.toList()});
+        await _usuarioService.salvarConquistasNotificadas(
+          uid,
+          conquistasDesbloqueadas,
+        );
       }
     } catch (e) {
       // Tenta de novo na próxima mudança de dados.

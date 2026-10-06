@@ -102,6 +102,23 @@ class UsuarioService {
     return perfil;
   }
 
+  DocumentReference<Map<String, dynamic>> _conquistasNotificadasRef(
+          String uid) =>
+      _ref.doc(uid).collection('meta').doc('conquistasNotificadas');
+
+  /// Títulos das conquistas que já geraram notificação para [uid].
+  Future<Set<String>> conquistasNotificadas(String uid) async {
+    final doc = await _conquistasNotificadasRef(uid).get();
+    return Set<String>.from(doc.data()?['items'] ?? const []);
+  }
+
+  Future<void> salvarConquistasNotificadas(
+    String uid,
+    Iterable<String> titulos,
+  ) {
+    return _conquistasNotificadasRef(uid).set({'items': titulos.toList()});
+  }
+
   CollectionReference<Map<String, dynamic>> _seguindoRef(String uid) =>
       _ref.doc(uid).collection('seguindo');
 
@@ -158,6 +175,9 @@ class UsuarioService {
   /// Máximo de operações aceitas por um WriteBatch do Firestore.
   static const int _maxOpsPorLote = 500;
 
+  /// Nome exibido nos comentários de contas excluídas.
+  static const String nomeAnonimizado = 'Usuário removido';
+
   /// Denúncias anônimas por commit na exclusão de conta. Cada uma custa até
   /// 2 acessos a dono/info nas regras (exists + get em isOwner); 6 por lote
   /// fica em 12, abaixo do teto de 20 por requisição com folga.
@@ -173,10 +193,10 @@ class UsuarioService {
   /// falhar com permission-denied, porque o SDK já descartou o token. Por isso
   /// o chamador apaga os dados ANTES de excluir a conta do Auth.
   ///
-  /// Comentários feitos em denúncias de outras pessoas não são removidos —
-  /// exigiriam varrer todas as ocorrências. Ficam sem vínculo visível com o
-  /// perfil apagado (anonimização, LGPD art. 18, IV), como declara a Política
-  /// de Privacidade, item 6.
+  /// Comentários feitos em denúncias de outras pessoas não são removidos, para
+  /// não quebrar as conversas: nome e foto viram [nomeAnonimizado] e null
+  /// (anonimização, LGPD art. 18, IV), como declara a Política de
+  /// Privacidade, item 6.
   ///
   /// A exclusão NÃO é atômica: acima de 500 documentos ela é dividida em
   /// vários commits. Se um lote falhar, os anteriores já foram aplicados — uma
@@ -191,6 +211,19 @@ class UsuarioService {
       db,
       tamanho: _denunciasAnonimasPorLote * 3,
     );
+
+    // 0. Comentários em qualquer denúncia: anonimizados, não apagados. O
+    //    valor exato é exigido pelas Rules (isAnonimizacaoDoAutor).
+    final comentarios = await db
+        .collectionGroup('comentarios')
+        .where('userId', isEqualTo: uid)
+        .get();
+    for (final doc in comentarios.docs) {
+      lotes.atualizar(doc.reference, {
+        'userName': nomeAnonimizado,
+        'userPhotoUrl': null,
+      });
+    }
 
     // 1. Denúncias anônimas. O documento público NÃO guarda usuarioId (ver
     //    OcorrenciaRepository.cadastrarOcorrencia), então a query do passo 2
@@ -245,14 +278,16 @@ class UsuarioService {
     //    por uma conta que não existe mais. Só entra no lote se existir e for
     //    desta conta: contas criadas antes de nomes_reservados não têm
     //    reserva, e a regra nega apagar a de outra conta — num delete negado
-    //    o lote inteiro (com perfil e consentimento) falhava.
+    //    o lote inteiro (com perfil e consentimento) falhava. O delete em si
+    //    vai no passo 7, depois do perfil.
     final perfil = await _ref.doc(uid).get();
     final nome = perfil.data()?['nome'] as String?;
     final slug = nome == null ? null : idDoNome(nome);
+    DocumentReference<Map<String, dynamic>>? reservaDoNome;
     if (slug != null) {
       final reserva = await _nomesRef.doc(slug).get();
       if (reserva.exists && reserva.data()?['uid'] == uid) {
-        lotes.deletar(reserva.reference);
+        reservaDoNome = reserva.reference;
       }
     }
 
@@ -265,15 +300,19 @@ class UsuarioService {
       lotes.deletar(doc.reference);
     }
 
-    // 7. Estado privado (conquistas já notificadas, carimbo de reação, id da
-    //    sessão ativa),
+    // 7. Estado privado (conquistas já notificadas, id da sessão ativa),
     //    consentimento e perfil por último: nada mais depende deles.
-    lotes
-        .deletar(_ref.doc(uid).collection('meta').doc('conquistasNotificadas'));
-    lotes.deletar(_ref.doc(uid).collection('meta').doc('reacao'));
-    lotes.deletar(_ref.doc(uid).collection('meta').doc('sessao'));
+    final meta = _ref.doc(uid).collection('meta');
+    lotes.deletar(meta.doc('conquistasNotificadas'));
+    lotes.deletar(meta.doc('sessao'));
     lotes.deletar(db.collection('consentimentos').doc(uid));
     lotes.deletar(_ref.doc(uid));
+    // Carimbos de limite e reserva do nome DEPOIS do perfil: as Rules só
+    // deixam apagá-los quando o perfil não existe mais (no mesmo lote ou num
+    // anterior).
+    lotes.deletar(meta.doc('reacao'));
+    lotes.deletar(meta.doc('denuncia'));
+    if (reservaDoNome != null) lotes.deletar(reservaDoNome);
 
     await lotesAnonimas.commit();
     await lotes.commit();
@@ -363,17 +402,21 @@ class _LotesDeExclusao {
 
   final FirebaseFirestore _db;
   final int tamanho;
-  final List<DocumentReference<Object?>> _refs = [];
+  final List<void Function(WriteBatch)> _ops = [];
 
-  void deletar(DocumentReference<Object?> ref) => _refs.add(ref);
+  void deletar(DocumentReference<Object?> ref) =>
+      _ops.add((lote) => lote.delete(ref));
 
-  /// Aplica as exclusões acumuladas, um lote por vez e em ordem.
+  void atualizar(DocumentReference<Object?> ref, Map<String, Object?> dados) =>
+      _ops.add((lote) => lote.update(ref, dados));
+
+  /// Aplica as operações acumuladas, um lote por vez e em ordem.
   Future<void> commit() async {
-    for (var inicio = 0; inicio < _refs.length; inicio += tamanho) {
-      final fim = (inicio + tamanho).clamp(0, _refs.length);
+    for (var inicio = 0; inicio < _ops.length; inicio += tamanho) {
+      final fim = (inicio + tamanho).clamp(0, _ops.length);
       final lote = _db.batch();
-      for (final ref in _refs.sublist(inicio, fim)) {
-        lote.delete(ref);
+      for (final op in _ops.sublist(inicio, fim)) {
+        op(lote);
       }
       await lote.commit();
     }

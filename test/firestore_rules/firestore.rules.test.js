@@ -66,6 +66,16 @@ function ocorrenciaValida(uid, extra = {}) {
   };
 }
 
+// Denúncia de abuso grava, no mesmo batch, o carimbo usuarios/{uid}/meta/denuncia
+// (ver respeitaIntervaloDeDenuncia nas regras).
+function reportarAbuso(db, uid, denuncia) {
+  const batch = db.batch();
+  batch.set(db.collection('denuncias_moderacao').doc(), denuncia);
+  batch.set(db.collection('usuarios').doc(uid).collection('meta').doc('denuncia'),
+    { ultima: serverTimestamp() });
+  return batch.commit();
+}
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
@@ -264,6 +274,20 @@ describe('denuncia anonima (dono/info no mesmo batch)', () => {
     }
     return batch.commit();
   }
+
+  test('exclusao individual: denuncia, dono/info e ponteiro no mesmo batch', async () => {
+    await seedAnonimaDeAlice('ind1');
+    const db = verifiedContext(testEnv, 'alice');
+    await assertSucceeds(batchExclusao(db, ['ind1']));
+  });
+
+  test('exclusao individual em escritas separadas perde a autoria (documenta o bug)', async () => {
+    await seedAnonimaDeAlice('ind2');
+    const db = verifiedContext(testEnv, 'alice');
+    const ref = db.collection('ocorrencias').doc('ind2');
+    await assertSucceeds(ref.collection('dono').doc('info').delete());
+    await assertFails(ref.delete());
+  });
 
   test('exclusao de conta: lote de 6 denuncias anonimas passa', async () => {
     const ids = [...Array(6).keys()].map((i) => `ex${i}`);
@@ -646,8 +670,17 @@ describe('ciclo oficial exige evento de auditoria no mesmo batch', () => {
   });
 });
 
+// Reserva gravada direto (sem regras), como o cadastro deixaria.
+async function seedReserva(slug, uid, nome = slug) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection('nomes_reservados').doc(slug)
+      .set({ uid, nome, criadoEm: new Date() });
+  });
+}
+
 describe('perfis de usuario', () => {
   test('usuario edita o proprio perfil', async () => {
+    await seedReserva('alice', 'alice', 'Alice');
     const db = verifiedContext(testEnv, 'alice');
     await assertSucceeds(
       db.collection('usuarios').doc('alice').set({
@@ -679,6 +712,82 @@ describe('perfis de usuario', () => {
         bairro: '',
       }),
     );
+  });
+});
+
+describe('nome do perfil atrelado a reserva', () => {
+  const perfil = (nome, extra = {}) => ({ nome, bio: '', bairro: '', ...extra });
+
+  test('NAO cria perfil com o nome reservado por outra conta', async () => {
+    await seedReserva('alice', 'alice', 'Alice');
+    const db = verifiedContext(testEnv, 'mallory');
+    const ref = db.collection('usuarios').doc('mallory');
+    await assertFails(ref.set(perfil('Alice')));
+    // Variações que caem no mesmo slug: caixa, acento, invisível, decomposto.
+    await assertFails(ref.set(perfil('ALICE')));
+    await assertFails(ref.set(perfil('Alíce')));
+    await assertFails(ref.set(perfil('Al​ice')));
+    await seedReserva('joao', 'joao', 'João');
+    await assertFails(ref.set(perfil('Joáo')));
+  });
+
+  test('NAO cria perfil sem reserva nenhuma', async () => {
+    const db = verifiedContext(testEnv, 'mallory');
+    await assertFails(db.collection('usuarios').doc('mallory').set(perfil('Mallory')));
+  });
+
+  test('cria perfil com nome acentuado reservado pelo slug do app', async () => {
+    await seedReserva('jose-da-silva', 'jose', 'José da Silva');
+    const db = verifiedContext(testEnv, 'jose');
+    await assertSucceeds(db.collection('usuarios').doc('jose').set(perfil('José da Silva')));
+  });
+
+  test('perfil legado (sem reserva) edita a bio mantendo o nome', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().collection('usuarios').doc('velho').set(perfil('Velho'));
+    });
+    const ref = verifiedContext(testEnv, 'velho').collection('usuarios').doc('velho');
+    await assertSucceeds(ref.set(perfil('Velho', { bio: 'nova bio' })));
+    await assertFails(ref.set(perfil('Outro Nome')));
+  });
+
+  test('troca de nome so com a reserva do nome novo', async () => {
+    await seedReserva('alice', 'alice', 'Alice');
+    await seedReserva('bob', 'bob', 'Bob');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().collection('usuarios').doc('alice').set(perfil('Alice'));
+    });
+    const db = verifiedContext(testEnv, 'alice');
+    const ref = db.collection('usuarios').doc('alice');
+    await assertFails(ref.set(perfil('Bob')));
+    await assertSucceeds(
+      db.collection('nomes_reservados').doc('alice-nova')
+        .set({ uid: 'alice', nome: 'Alice Nova', criadoEm: serverTimestamp() }),
+    );
+    await assertSucceeds(ref.set(perfil('Alice Nova')));
+  });
+
+  test('reserva do nome em uso NAO pode ser liberada; a antiga, sim', async () => {
+    await seedReserva('alice', 'alice', 'Alice');
+    await seedReserva('alice-nova', 'alice', 'Alice Nova');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().collection('usuarios').doc('alice').set(perfil('Alice Nova'));
+    });
+    const db = verifiedContext(testEnv, 'alice');
+    await assertFails(db.collection('nomes_reservados').doc('alice-nova').delete());
+    await assertSucceeds(db.collection('nomes_reservados').doc('alice').delete());
+  });
+
+  test('exclusao de conta: reserva sai junto com o perfil', async () => {
+    await seedReserva('alice', 'alice', 'Alice');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().collection('usuarios').doc('alice').set(perfil('Alice'));
+    });
+    const db = verifiedContext(testEnv, 'alice');
+    const batch = db.batch();
+    batch.delete(db.collection('usuarios').doc('alice'));
+    batch.delete(db.collection('nomes_reservados').doc('alice'));
+    await assertSucceeds(batch.commit());
   });
 });
 
@@ -986,6 +1095,42 @@ describe('conteudo ocultado pela moderacao', () => {
     await assertSucceeds(com.where('oculto', '==', false).orderBy('dataCriacao').get());
   });
 
+  test('comentario de denuncia oculta ou apagada: terceiro NAO le', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      const c = { texto: 'z', userId: 'bob', userName: 'Bob', oculto: false, dataCriacao: new Date() };
+      await f.collection('ocorrencias').doc('oculta').collection('comentarios').doc('c1').set(c);
+      // Comentário órfão: a denúncia pai foi apagada.
+      await f.collection('ocorrencias').doc('apagada').collection('comentarios').doc('c2').set(c);
+    });
+    const db = verifiedContext(testEnv, 'mallory');
+    const daOculta = db.collection('ocorrencias').doc('oculta').collection('comentarios');
+    const daApagada = db.collection('ocorrencias').doc('apagada').collection('comentarios');
+    await assertFails(daOculta.doc('c1').get());
+    await assertFails(daOculta.where('oculto', '==', false).get());
+    await assertFails(daApagada.doc('c2').get());
+    await assertFails(daApagada.where('oculto', '==', false).get());
+  });
+
+  test('comentario de denuncia oculta: dono, autoridade e autor leem', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().collection('ocorrencias').doc('oculta').collection('comentarios').doc('c1')
+        .set({ texto: 'z', userId: 'bob', userName: 'Bob', oculto: false, dataCriacao: new Date() });
+    });
+    for (const uid of ['alice', 'pref', 'bob']) {
+      await assertSucceeds(
+        verifiedContext(testEnv, uid).collection('ocorrencias').doc('oculta')
+          .collection('comentarios').doc('c1').get(),
+      );
+    }
+    await assertSucceeds(
+      verifiedContext(testEnv, 'alice').collection('ocorrencias').doc('oculta')
+        .collection('comentarios').where('oculto', '==', false).get(),
+    );
+  });
+
   test('NAO cria denuncia ja oculta', async () => {
     const db = verifiedContext(testEnv, 'alice');
     await assertFails(db.collection('ocorrencias').add(ocorrenciaValida('alice', { oculto: true })));
@@ -1185,8 +1330,8 @@ describe('pares positivo/negativo que faltavam (card 40)', () => {
       denuncianteId: 'bob', motivo: 'Spam', detalhe: null, status: 'pendente',
       criadoEm: serverTimestamp(),
     };
-    await assertSucceeds(db.collection('denuncias_moderacao').add(denuncia));
-    await assertFails(db.collection('denuncias_moderacao').add({ ...denuncia, denuncianteId: 'carol' }));
+    await assertSucceeds(reportarAbuso(db, 'bob', denuncia));
+    await assertFails(reportarAbuso(db, 'bob', { ...denuncia, denuncianteId: 'carol' }));
     await assertFails(db.collection('denuncias_moderacao').doc('x').get());
   });
 });
@@ -1219,5 +1364,134 @@ describe('selo de curtida da autoridade em comentario', () => {
     await seed();
     await assertSucceeds(com(verifiedContext(testEnv, 'alice'))
       .update({ likedBy: ['alice'], likes: 1 }));
+  });
+});
+
+describe('brechas fechadas na analise de arquitetura (06/10)', () => {
+  async function seed() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await f.collection('ocorrencias').doc('oB')
+        .set({ ...ocorrenciaValida('alice'), dataCriacao: new Date(), shares: 0 });
+      await f.collection('usuarios').doc('bob').set({ nome: 'Bob', bio: '', bairro: '' });
+      await f.collection('ocorrencias').doc('oB').collection('comentarios').doc('cBob')
+        .set({
+          texto: 'oi', userId: 'bob', userName: 'Bob', userPhotoUrl: 'https://res.cloudinary.com/dmdghbgac/image/upload/v1/bob.jpg',
+          dataCriacao: new Date(), parentId: null, likedBy: [], likes: 0, oculto: false,
+        });
+      await f.collection('notificacoes').doc('alice').collection('items').doc('n1')
+        .set({
+          tipo: 'curtida', deUsuarioNome: 'Bob', ocorrenciaId: 'oB',
+          ocorrenciaTitulo: 'Buraco na rua', dataCriacao: new Date(), lida: false,
+        });
+    });
+  }
+
+  const denuncia = (uid) => ({
+    alvoTipo: 'ocorrencia', ocorrenciaId: 'oB', comentarioId: null,
+    denuncianteId: uid, motivo: 'Spam', detalhe: null, status: 'pendente',
+    criadoEm: serverTimestamp(),
+  });
+
+  test('notificacao: dono marca como lida', async () => {
+    await seed();
+    const db = verifiedContext(testEnv, 'alice');
+    await assertSucceeds(db.collection('notificacoes').doc('alice').collection('items')
+      .doc('n1').update({ lida: true }));
+  });
+
+  test('notificacao: dono NAO reescreve remetente, titulo ou tipo', async () => {
+    await seed();
+    const ref = verifiedContext(testEnv, 'alice')
+      .collection('notificacoes').doc('alice').collection('items').doc('n1');
+    await assertFails(ref.update({ deUsuarioNome: 'Prefeitura' }));
+    await assertFails(ref.update({ ocorrenciaTitulo: 'outro' }));
+    await assertFails(ref.update({ tipo: 'status_resolvida', lida: true }));
+    await assertFails(ref.update({ lida: 'sim' }));
+  });
+
+  test('compartilhamento: conta sem e-mail verificado NAO registra', async () => {
+    await seed();
+    const db = unverifiedContext(testEnv, 'bob');
+    const ref = db.collection('ocorrencias').doc('oB');
+    const batch = db.batch();
+    batch.update(ref, { shares: firestore.increment(1) });
+    batch.set(ref.collection('compartilhamentos').doc('bob'), { uid: 'bob', criadoEm: serverTimestamp() });
+    await assertFails(batch.commit());
+  });
+
+  test('denuncia de abuso: NAO cria sem o carimbo no mesmo batch', async () => {
+    await seed();
+    const db = verifiedContext(testEnv, 'bob');
+    await assertFails(db.collection('denuncias_moderacao').add(denuncia('bob')));
+  });
+
+  test('denuncia de abuso: segunda em menos de 30 s e negada', async () => {
+    await seed();
+    const db = verifiedContext(testEnv, 'bob');
+    await assertSucceeds(reportarAbuso(db, 'bob', denuncia('bob')));
+    await assertFails(reportarAbuso(db, 'bob', denuncia('bob')));
+  });
+
+  test('denuncia de abuso: carimbo antigo (mais de 30 s) libera nova denuncia', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().collection('usuarios').doc('bob').collection('meta').doc('denuncia')
+        .set({ ultima: new Date(Date.now() - 60 * 1000) });
+    });
+    await assertSucceeds(reportarAbuso(verifiedContext(testEnv, 'bob'), 'bob', denuncia('bob')));
+  });
+
+  test('carimbos de limite NAO podem ser apagados enquanto o perfil existe', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const meta = ctx.firestore().collection('usuarios').doc('bob').collection('meta');
+      await meta.doc('reacao').set({ ultima: new Date() });
+      await meta.doc('denuncia').set({ ultima: new Date() });
+    });
+    const meta = verifiedContext(testEnv, 'bob').collection('usuarios').doc('bob').collection('meta');
+    await assertFails(meta.doc('reacao').delete());
+    await assertFails(meta.doc('denuncia').delete());
+  });
+
+  test('carimbos de limite saem junto com o perfil (exclusao de conta)', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const meta = ctx.firestore().collection('usuarios').doc('bob').collection('meta');
+      await meta.doc('reacao').set({ ultima: new Date() });
+      await meta.doc('denuncia').set({ ultima: new Date() });
+    });
+    const db = verifiedContext(testEnv, 'bob');
+    const perfil = db.collection('usuarios').doc('bob');
+    const batch = db.batch();
+    batch.delete(perfil);
+    batch.delete(perfil.collection('meta').doc('reacao'));
+    batch.delete(perfil.collection('meta').doc('denuncia'));
+    await assertSucceeds(batch.commit());
+  });
+
+  test('comentario: autor anonimiza o proprio na exclusao de conta', async () => {
+    await seed();
+    const ref = verifiedContext(testEnv, 'bob')
+      .collection('ocorrencias').doc('oB').collection('comentarios').doc('cBob');
+    await assertSucceeds(ref.update({ userName: 'Usuário removido', userPhotoUrl: null }));
+  });
+
+  test('comentario: anonimizacao NAO aceita outro nome nem comentario alheio', async () => {
+    await seed();
+    const doBob = verifiedContext(testEnv, 'bob')
+      .collection('ocorrencias').doc('oB').collection('comentarios').doc('cBob');
+    await assertFails(doBob.update({ userName: 'Prefeitura', userPhotoUrl: null }));
+    await assertFails(doBob.update({ userName: 'Usuário removido', userPhotoUrl: null, texto: 'x' }));
+    const daAlice = verifiedContext(testEnv, 'alice')
+      .collection('ocorrencias').doc('oB').collection('comentarios').doc('cBob');
+    await assertFails(daAlice.update({ userName: 'Usuário removido', userPhotoUrl: null }));
+  });
+
+  test('comentario: autor acha os proprios comentarios em todas as denuncias', async () => {
+    await seed();
+    const db = verifiedContext(testEnv, 'bob');
+    await assertSucceeds(db.collectionGroup('comentarios').where('userId', '==', 'bob').get());
+    await assertFails(db.collectionGroup('comentarios').where('userId', '==', 'alice').get());
   });
 });

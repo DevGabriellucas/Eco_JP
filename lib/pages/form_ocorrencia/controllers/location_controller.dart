@@ -41,6 +41,21 @@ class LocationController extends ChangeNotifier {
 
   String get endereco => enderecoCtrl.text.trim();
 
+  /// Último endereço vindo do GPS, para trocar pela versão sem número.
+  EnderecoReverso? _enderecoGps;
+
+  /// Texto gravado na denúncia. Anônima com o endereço do GPS ainda intacto
+  /// sai sem o número da casa: as coordenadas já são arredondadas, mas
+  /// "Rua X, 123" apontava a posição exata do denunciante. Endereço digitado
+  /// ou escolhido nas sugestões fica como a pessoa escreveu.
+  String enderecoPublico({required bool anonima}) {
+    final gps = _enderecoGps;
+    if (anonima && gps != null && endereco == gps.endereco) {
+      return gps.enderecoSemNumero;
+    }
+    return endereco;
+  }
+
   bool get coordenadasConfirmadas => coordenadaValida(latitude, longitude);
 
   /// Coordenada dentro de João Pessoa (mesmos limites das regras).
@@ -191,6 +206,7 @@ class LocationController extends ChangeNotifier {
     latitude = lat;
     longitude = lon;
     bairro = addr?.bairro;
+    _enderecoGps = addr;
     enderecoCtrl.text = addr?.endereco ?? textoSemEndereco;
     sugestoes = [];
     mostrarSug = false;

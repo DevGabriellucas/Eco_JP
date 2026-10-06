@@ -445,10 +445,11 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
         id: '',
         titulo: _tituloCtrl.text.trim(),
         descricao: _descricaoCtrl.text.trim(),
-        localizacao: _location.endereco,
-        // Anônima: coordenadas arredondadas (~100 m). Com "usar localização
-        // atual", a posição exata do denunciante ficava legível para
-        // qualquer usuário e podia identificá-lo (a casa dele, por exemplo).
+        // Anônima: endereço do GPS sem o número e coordenadas arredondadas
+        // (~100 m). Com "usar localização atual", a posição exata do
+        // denunciante ficava legível para qualquer usuário e podia
+        // identificá-lo (a casa dele, por exemplo).
+        localizacao: _location.enderecoPublico(anonima: _anonima),
         latitude: _anonima ? _arredondarCoordenada(lat!) : lat!,
         longitude: _anonima ? _arredondarCoordenada(lon!) : lon!,
         bairro: _location.bairro,

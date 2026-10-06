@@ -104,6 +104,35 @@ service cloud.firestore {
       return name == null || (name is string && name == nomeDoPerfil());
     }
 
+    // Mesmo slug de UsuarioService.idDoNome (slugify em lib/utils/texto.dart).
+    // Antes de mapear, descarta caracteres invisíveis (\p{Cc}, \p{Cf}) e
+    // acentos combinantes: "Jo​ão" ou "João" decomposto exibem o mesmo
+    // nome que "João" e precisam cair no mesmo slug, senão escapam da reserva.
+    function slugDoNome(nome) {
+      return nome
+        .replace('[\\p{Cc}\\p{Cf}\\x{0300}-\\x{036F}]', '')
+        .replace('[áàâãäÁÀÂÃÄ]', 'a')
+        .replace('[éèêëÉÈÊË]', 'e')
+        .replace('[íìîïÍÌÎÏ]', 'i')
+        .replace('[óòôõöÓÒÔÕÖ]', 'o')
+        .replace('[úùûüÚÙÛÜ]', 'u')
+        .replace('[çÇ]', 'c')
+        .lower()
+        .replace('[^a-z0-9]+', '-')
+        .replace('^-+|-+$', '');
+    }
+
+    // O nome do perfil só vale se a conta tem a reserva dele em
+    // nomes_reservados. Sem isto um cliente modificado gravava no próprio
+    // perfil o nome que outra conta reservou e comentava com ele.
+    function nomeReservadoPor(nome, uid) {
+      let slug = slugDoNome(nome);
+      let reserva = /databases/$(database)/documents/nomes_reservados/$(slug);
+      return slug.size() > 0
+        && exists(reserva)
+        && get(reserva).data.uid == uid;
+    }
+
     // Foto pública só do Cloudinary do projeto ou do avatar do Google. Com
     // URL livre, uma imagem num servidor próprio coletaria o IP de todo
     // mundo que abrisse o feed.
@@ -348,6 +377,14 @@ service cloud.firestore {
           || request.time > get(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/reacao).data.ultima + duration.value(1, 's'));
     }
 
+    // Mesmo esquema para denúncias de abuso: sem limite, uma conta enchia a
+    // fila da autoridade (lida com teto de 200) e escondia denúncias reais.
+    function respeitaIntervaloDeDenuncia() {
+      return getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/denuncia).data.ultima == request.time
+        && (!exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/denuncia)
+          || request.time > get(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/denuncia).data.ultima + duration.value(30, 's'));
+    }
+
     // Toda ação oficial grava, no mesmo batch, um evento em historico/ e o ID
     // dele em `ultimoEventoId`. Exigir o evento (getAfter) garante a trilha
     // de auditoria — antes ela era opcional e podia ser pulada.
@@ -447,6 +484,21 @@ service cloud.firestore {
       return resource == null || !('oculto' in data) || data.oculto == false;
     }
 
+    // A ocorrência existe e quem lê pode vê-la (mesmo critério do get dela).
+    // Usada nas subcoleções que não podem sobreviver à denúncia pai.
+    function paiLegivel(ocorrenciaId) {
+      let pai = /databases/$(database)/documents/ocorrencias/$(ocorrenciaId);
+      let dono = /databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/dono/info;
+      return exists(pai)
+        && (!('oculto' in get(pai).data)
+          || get(pai).data.oculto == false
+          || get(pai).data.get('usuarioId', null) == request.auth.uid
+          || isAutoridade()
+          || (get(pai).data.get('anonima', false) == true
+            && exists(dono)
+            && get(dono).data.usuarioId == request.auth.uid));
+    }
+
     function isValidComment(data, ocorrenciaId) {
       return exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId))
         && data.keys().hasOnly([
@@ -492,6 +544,16 @@ service cloud.firestore {
           (removedCurrentUser(resource.data.get('likedBy', []), request.resource.data.likedBy)
             && request.resource.data.likes == resource.data.get('likes', 0) - 1)
         );
+    }
+
+    // Exclusão de conta: o autor troca nome e foto por um marcador neutro nos
+    // comentários que ficam em denúncias alheias (Política de Privacidade,
+    // item 6). Não exige e-mail verificado: quem comentou já tinha verificado.
+    function isAnonimizacaoDoAutor() {
+      return resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userName', 'userPhotoUrl'])
+        && request.resource.data.userName == 'Usuário removido'
+        && request.resource.data.userPhotoUrl == null;
     }
 
     function isValidCommentTextUpdate() {
@@ -690,7 +752,7 @@ service cloud.firestore {
       // +1 em `shares` no mesmo batch; ver isValidShareUpdate.
       match /compartilhamentos/{uid} {
         allow read, delete: if signedIn() && request.auth.uid == uid;
-        allow create: if signedIn()
+        allow create: if emailVerificado()
           && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['uid', 'criadoEm'])
           && request.resource.data.uid == uid
@@ -702,12 +764,17 @@ service cloud.firestore {
 
       match /comentarios/{comentarioId} {
         // Mesma lógica das ocorrências: comentário ocultado só para o autor e
-        // a autoridade.
+        // a autoridade. E a denúncia pai precisa ser legível por quem lê:
+        // antes, com o ID, um terceiro lia os comentários de uma denúncia
+        // ocultada ou apagada. (O autor segue lendo os próprios pela regra
+        // de grupo abaixo.)
         allow get: if signedIn()
+          && paiLegivel(ocorrenciaId)
           && (naoOculto(resource.data)
             || resource.data.userId == request.auth.uid
             || isAutoridade());
         allow list: if signedIn()
+          && paiLegivel(ocorrenciaId)
           && (resource.data.oculto == false
             || resource.data.userId == request.auth.uid
             || isAutoridade());
@@ -716,9 +783,10 @@ service cloud.firestore {
           && isValidComment(request.resource.data, ocorrenciaId);
         allow delete: if signedIn() && resource.data.userId == request.auth.uid;
         // Curtidas/texto pelo autor; ocultação por abuso pela autoridade.
-        allow update: if emailVerificado()
-          && (isValidCommentLikeUpdate() || isValidCommentTextUpdate()
-            || (isAutoridade() && isValidOcultarUpdate()));
+        allow update: if (signedIn() && isAnonimizacaoDoAutor())
+          || (emailVerificado()
+            && (isValidCommentLikeUpdate() || isValidCommentTextUpdate()
+              || (isAutoridade() && isValidOcultarUpdate())));
       }
 
       // Linha do tempo de auditoria: só a autoridade registra eventos das ações
@@ -763,11 +831,23 @@ service cloud.firestore {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
+    // Idem para os comentários do próprio usuário, que a exclusão de conta
+    // anonimiza (isAnonimizacaoDoAutor).
+    match /{caminho=**}/comentarios/{comentarioId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
     match /usuarios/{userId} {
       allow read: if signedIn();
+      // Nome novo (create, ou update que troca o slug) exige a reserva. Update
+      // que mantém o slug passa sem ela: contas anteriores a nomes_reservados
+      // continuam editando bio, bairro e foto.
       allow create, update: if signedIn()
         && request.auth.uid == userId
-        && isValidUserProfile(request.resource.data);
+        && isValidUserProfile(request.resource.data)
+        && ((resource != null
+            && slugDoNome(request.resource.data.nome) == slugDoNome(resource.data.nome))
+          || nomeReservadoPor(request.resource.data.nome, userId));
       // LGPD art. 18 — direito à exclusão: o próprio usuário pode apagar seu perfil.
       allow delete: if signedIn() && request.auth.uid == userId;
 
@@ -794,7 +874,12 @@ service cloud.firestore {
       // lista de conquistas já notificadas). Sem esta regra o catch-all
       // negava a escrita e nenhuma notificação de conquista saía.
       match /meta/{docId} {
-        allow read, delete: if signedIn() && request.auth.uid == userId;
+        allow read: if signedIn() && request.auth.uid == userId;
+        // Os carimbos de limite (reacao, denuncia) só saem junto com o perfil,
+        // na exclusão de conta. Apagá-los à parte zerava o intervalo mínimo.
+        allow delete: if signedIn() && request.auth.uid == userId
+          && (!(docId in ['reacao', 'denuncia'])
+            || !existsAfter(/databases/$(database)/documents/usuarios/$(userId)));
         allow create, update: if signedIn()
           && request.auth.uid == userId
           && ((docId == 'conquistasNotificadas'
@@ -802,7 +887,7 @@ service cloud.firestore {
               && request.resource.data.items is list
               && request.resource.data.items.size() <= 50)
             // Carimbo da última reação (ver respeitaIntervaloDeReacao).
-            || (docId == 'reacao'
+            || (docId in ['reacao', 'denuncia']
               && request.resource.data.keys().hasOnly(['ultima'])
               && request.resource.data.ultima == request.time)
             // Id da sessão ativa (uma por conta; ver SessaoService). Só o
@@ -852,11 +937,11 @@ service cloud.firestore {
     // reservado é avaliado como update e negado, então só quem chega primeiro
     // escreve. Não há transação no cliente.
     //
-    // Limitação conhecida: nada aqui prova que o slug reservado corresponde ao
-    // campo `nome` do perfil, porque no cadastro a reserva precede a criação do
-    // perfil. Uma conta pode reservar um nome que não usa. Fechar isso exige
-    // uma Cloud Function com trigger em usuarios/{uid} — ver
-    // docs/adr/0001-backend-firebase-vs-supabase.md.
+    // O vínculo com o perfil fica em usuarios/{uid}: nome novo só com a
+    // reserva do slug dele (nomeReservadoPor). Limitação conhecida: uma conta
+    // ainda pode reservar nomes que não usa. Limitar a uma reserva por conta
+    // exige uma Cloud Function (ADR 0001, commit 4f14498; ver
+    // docs/ARCHITECTURE.md).
     match /nomes_reservados/{slug} {
       allow read: if signedIn();
       allow create: if signedIn()
@@ -873,11 +958,21 @@ service cloud.firestore {
         && slug.matches('^[a-z0-9]+(-[a-z0-9]+)*$')
         && slug.size() <= 60;
       allow update: if false;
-      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+      // Só libera a reserva quem não está mais usando o nome (troca de nome
+      // já salva, ou perfil apagado na exclusão de conta). Antes dava para
+      // soltar a reserva e seguir com o nome, deixando outra conta pegá-lo.
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid
+        && (!existsAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+          || slugDoNome(getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.nome) != slug);
     }
 
     match /notificacoes/{donoId}/items/{notifId} {
-      allow read, update, delete: if signedIn() && request.auth.uid == donoId;
+      allow read, delete: if signedIn() && request.auth.uid == donoId;
+      // O dono só marca como lida. Antes podia reescrever remetente, título e
+      // tipo da notificação recebida.
+      allow update: if signedIn() && request.auth.uid == donoId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lida'])
+        && request.resource.data.lida is bool;
       allow create: if emailVerificado() && (
         // Interação: outro usuário notifica o dono da denúncia.
         (request.auth.uid != donoId
@@ -897,7 +992,8 @@ service cloud.firestore {
     // (Admin), nunca pelo app — por isso nenhuma escrita é permitida aqui.
     match /denuncias_moderacao/{denunciaId} {
       allow create: if emailVerificado()
-        && isValidModerationReport(request.resource.data);
+        && isValidModerationReport(request.resource.data)
+        && respeitaIntervaloDeDenuncia();
       allow read, delete: if isAutoridade();
       // Resolver: só sai de 'pendente' para uma decisão válida, com quem e
       // quando (antes a autoridade podia reescrever qualquer campo).

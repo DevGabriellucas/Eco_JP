@@ -22,6 +22,18 @@ void main() {
       );
     });
 
+    test('acento decomposto cai no mesmo slug (igual a slugDoNome nas Rules)',
+        () {
+      expect(
+        UsuarioService.idDoNome('Joa${String.fromCharCode(0x0301)}o Silva'),
+        'joao-silva',
+      );
+      expect(
+        UsuarioService.idDoNome('Ana${String.fromCharCode(0x00AD)}maria'),
+        'anamaria',
+      );
+    });
+
     test('nome sem letra nem dígito não tem slug', () {
       expect(UsuarioService.idDoNome('---'), isNull);
       expect(UsuarioService.idDoNome(String.fromCharCode(0x200B)), isNull);
