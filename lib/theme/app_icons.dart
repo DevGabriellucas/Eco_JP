@@ -49,7 +49,14 @@ abstract final class AppIllustrations {
   /// Curvas de nível claras (bege) para telas de fundo branco, como o login.
   /// Recorte 320x230, usado no canto superior direito.
   static const contourLinesLight = '$_dir/contour_lines_light.svg';
+
+  /// Ilustração da confirmação de e-mail para fundo escuro (círculo escuro,
+  /// envelope verde-claro).
   static const emailBranch = '$_dir/email_branch.svg';
+
+  /// A mesma para fundo claro: círculo branco com borda clara, envelope e
+  /// ponto no verde primário. Cópia de [emailBranch] trocando só essas cores.
+  static const emailBranchLight = '$_dir/email_branch_light.svg';
   static const initialPageBranch = '$_dir/initial_page_branch.svg';
   static const splashBottom = '$_dir/splash_bottom.svg';
   static const stylePattern = '$_dir/style_pattern.svg';
@@ -58,6 +65,7 @@ abstract final class AppIllustrations {
     contourLines,
     contourLinesLight,
     emailBranch,
+    emailBranchLight,
     initialPageBranch,
     splashBottom,
     stylePattern,

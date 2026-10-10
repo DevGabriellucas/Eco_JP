@@ -125,8 +125,11 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
         .recarregarEVerificarEmail()
         .whenComplete(() => _checagem = null));
     if (!mounted) return;
-    if (!silencioso) setState(() => _verificando = false);
     if (ok) {
+      // Confirmado: o botão segue carregando até o router trocar de tela
+      // (ele ainda carrega perfil e consentimento). Antes voltava ao normal
+      // e a tela ficava parada, sem sinal de que algo acontecia.
+      setState(() => _verificando = true);
       _confirmado = true;
       _poll?.cancel();
       // O e-mail confirmado não chega pelo authStateChanges; invalidar o
@@ -134,6 +137,7 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
       // do router libera o acesso (home ou consentimento).
       ref.invalidate(authStateChangesProvider);
     } else if (!silencioso) {
+      setState(() => _verificando = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -254,7 +258,7 @@ class _Conteudo extends StatelessWidget {
         Center(
           child: RepaintBoundary(
             child: SvgPicture.asset(
-              AppIllustrations.emailBranch,
+              AppIllustrations.emailBranchLight,
               width: (largura * 0.67).clamp(200.0, 300.0),
               excludeFromSemantics: true,
             ),

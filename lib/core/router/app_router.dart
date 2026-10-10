@@ -119,6 +119,17 @@ class _RouterNotifier extends ChangeNotifier {
 
   final Ref _ref;
 
+  /// Enquanto um estado ainda carrega: sem valor nenhum (abertura do app)
+  /// segura na splash; recarregando (já tinha valor) fica na tela atual, sem
+  /// decidir com o valor velho. Antes as recargas também iam para a splash:
+  /// ao confirmar o e-mail ou depois do login a tela trocava de repente pela
+  /// splash verde-escura e só então ia ao destino. O _RouterNotifier reavalia
+  /// quando o valor novo chega.
+  String? _aguardar(AsyncValue<Object?> estado, String loc) {
+    if (!estado.hasValue) return loc == Routes.splash ? null : Routes.splash;
+    return null;
+  }
+
   String? redirect(BuildContext context, GoRouterState state) {
     final authState = _ref.read(authStateChangesProvider);
     final loc = state.matchedLocation;
@@ -126,8 +137,11 @@ class _RouterNotifier extends ChangeNotifier {
     // Segura na splash até os 3 s mínimos (contados desde a abertura do app)
     // e enquanto o Firebase resolve a sessão inicial.
     final splashMinimo = _ref.read(splashMinimoProvider);
-    if (!splashMinimo.hasValue || authState.isLoading || !authState.hasValue) {
+    if (!splashMinimo.hasValue) {
       return loc == Routes.splash ? null : Routes.splash;
+    }
+    if (authState.isLoading || !authState.hasValue) {
+      return _aguardar(authState, loc);
     }
 
     final user = authState.value;
@@ -155,13 +169,13 @@ class _RouterNotifier extends ChangeNotifier {
     // Perfil com nome reservado (primeiro login Google cria aqui).
     final perfilState = _ref.read(perfilGarantidoProvider);
     if (perfilState.isLoading || !perfilState.hasValue) {
-      return loc == Routes.splash ? null : Routes.splash;
+      return _aguardar(perfilState, loc);
     }
 
     // Trava de consentimento (LGPD).
     final consentState = _ref.read(consentStatusProvider);
     if (consentState.isLoading || !consentState.hasValue) {
-      return loc == Routes.splash ? null : Routes.splash;
+      return _aguardar(consentState, loc);
     }
     if (consentState.value ?? false) {
       return loc == Routes.consentimento ? null : Routes.consentimento;

@@ -102,6 +102,21 @@ void main() {
     expect(auth.checagens, 2);
   });
 
+  testWidgets('confirmado: "Já confirmei" segue carregando até trocar de tela',
+      (tester) async {
+    auth.recargaLenta = Completer<bool>()..complete(true);
+    await montar(tester);
+
+    await tester.tap(find.text('Já confirmei'));
+    await tester.pump();
+    await tester.pump();
+
+    // O router ainda carrega perfil e consentimento: sem o indicador a tela
+    // ficava parada, parecendo que nada aconteceu.
+    expect(find.text('Já confirmei'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
   testWidgets('recarga lenta: o timer não empilha outra checagem',
       (tester) async {
     auth.recargaLenta = Completer<bool>();

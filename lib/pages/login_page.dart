@@ -62,12 +62,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     if (!mounted) return;
     // Sucesso: o redirect do router leva para /home (ou para o gate de
-    // consentimento) reagindo à mudança de authState.
+    // consentimento) reagindo à mudança de authState. O botão segue
+    // carregando até a troca de tela (o router ainda carrega perfil e
+    // consentimento); só volta ao normal no erro.
+    if (result.success) return;
     setState(() {
       _isLoadingGoogle = false;
-      if (!result.success) {
-        _errorMessage = result.message ?? 'Erro ao entrar com Google';
-      }
+      _errorMessage = result.message ?? 'Erro ao entrar com Google';
     });
   }
 
@@ -86,13 +87,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!mounted) return;
     // Sucesso: o redirect do router assume a navegação (home / verificação
     // de e-mail / consentimento, conforme o estado da conta). O erro aparece
-    // só abaixo da senha; antes saía também num snackbar, repetido.
+    // só abaixo da senha; antes saía também num snackbar, repetido. Com
+    // sucesso o botão segue carregando até a troca de tela.
+    if (result.success) return;
     setState(() {
       _isLoading = false;
-      if (!result.success) {
-        _errorMessage = result.message ?? 'Erro ao fazer login';
-        _erroCredenciais = true;
-      }
+      _errorMessage = result.message ?? 'Erro ao fazer login';
+      _erroCredenciais = true;
     });
   }
 

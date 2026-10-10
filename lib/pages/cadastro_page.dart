@@ -162,6 +162,15 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
       // perfil (perfilGarantidoProvider) completa o que faltar após a
       // verificação do e-mail, reaproveitando a reserva se ela foi feita.
       debugPrint('Erro pós-cadastro: $e');
+      // A conta existe e o redirect vai levar à confirmação, que diz
+      // "Enviamos um link…": tenta mandar o e-mail mesmo assim (antes não
+      // saía, e a pessoa esperava um link que nunca chegava). Se falhar de
+      // novo, o "Reenviar" da tela continua lá.
+      try {
+        await authService.enviarEmailVerificacao();
+      } catch (e2) {
+        debugPrint('Envio do e-mail após erro no cadastro falhou: $e2');
+      }
       if (mounted) setState(() => _isLoading = false);
     } finally {
       // Libera o redirect: com conta criada vai para a verificação; sem conta

@@ -1,6 +1,9 @@
 import 'package:eco_jp/features/auth/providers/auth_providers.dart';
 import 'package:eco_jp/pages/cadastro_page.dart';
 import 'package:eco_jp/services/auth_service.dart';
+import 'package:eco_jp/services/consent_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:eco_jp/widgets/marca/icone_svg.dart';
 import 'package:eco_jp/theme/app_icons.dart';
 import 'package:flutter/material.dart';
@@ -10,13 +13,29 @@ import 'package:flutter_test/flutter_test.dart';
 /// Conta quantas vezes tentaram criar conta, sem tocar no Firebase.
 class _AuthFalso extends Fake implements AuthService {
   int cadastros = 0;
+  int envios = 0;
+
+  /// Quando definido, o cadastro "cria" esta conta (e o fluxo segue para
+  /// a reserva do nome, que falha sem Firebase).
+  User? contaCriada;
 
   @override
   Future<AuthResult> cadastrar(String email, String password) async {
     cadastros++;
+    if (contaCriada != null) {
+      return AuthResult(success: true, user: contaCriada);
+    }
     return AuthResult(success: false, message: 'falso');
   }
+
+  @override
+  Future<AuthResult> enviarEmailVerificacao() async {
+    envios++;
+    return AuthResult(success: true);
+  }
 }
+
+class _ConsentFalso extends Fake implements ConsentService {}
 
 void main() {
   late _AuthFalso auth;
@@ -33,7 +52,10 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [authServiceProvider.overrideWithValue(auth)],
+        overrides: [
+          authServiceProvider.overrideWithValue(auth),
+          consentServiceProvider.overrideWithValue(_ConsentFalso()),
+        ],
         child: MaterialApp(
           home: MediaQuery(
             data: MediaQueryData(
@@ -100,6 +122,30 @@ void main() {
     await tester.enterText(campo(3), 'Abcdef12!@');
     await tester.pump();
     expect(temCheck(), isTrue);
+  });
+
+  testWidgets('erro depois de criar a conta ainda tenta enviar o e-mail',
+      (tester) async {
+    auth.contaCriada = MockUser(uid: 'nova', email: 'maria@email.com');
+    await montar(tester);
+    await tester.enterText(campo(0), 'Maria Silva');
+    await tester.enterText(campo(1), 'maria@email.com');
+    await tester.enterText(campo(2), 'Abcdef12!@');
+    await tester.enterText(campo(3), 'Abcdef12!@');
+    // Espera a rolagem do ensureVisible assentar antes de tocar.
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Cadastrar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cadastrar'));
+    await tester.pumpAndSettle();
+
+    // A reserva do nome falha (sem Firebase): a conta existe e a tela de
+    // confirmação diz "Enviamos um link", então o e-mail precisa sair.
+    expect(auth.cadastros, 1);
+    expect(auth.envios, 1);
   });
 
   testWidgets('sem aceite dos termos não tenta criar a conta', (tester) async {
