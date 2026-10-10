@@ -96,6 +96,21 @@ void main() {
     });
   }
 
+  testWidgets('tablet: conteúdo limitado a 480 e logo alinhado ao título',
+      (tester) async {
+    await montar(tester, const Size(800, 1280));
+
+    final botao =
+        tester.getRect(find.widgetWithText(ElevatedButton, 'Começar'));
+    expect(botao.width, lessThanOrEqualTo(480));
+    expect(botao.center.dx, closeTo(400, 0.5));
+
+    final titulo =
+        tester.getRect(find.text('Registre problemas da sua cidade'));
+    final logo = tester.getRect(find.bySemanticsLabel('ecohub'));
+    expect(logo.left, closeTo(titulo.left, 0.5));
+  });
+
   const tamanhos = {
     'pequeno 360x640': Size(360, 640),
     'iPhone 390x844': Size(390, 844),

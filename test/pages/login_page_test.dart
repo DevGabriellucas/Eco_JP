@@ -25,6 +25,7 @@ void main() {
     WidgetTester tester, {
     Size tamanho = const Size(360, 800),
     double escalaTexto = 1.0,
+    double teclado = 0,
   }) async {
     tester.view.physicalSize = tamanho;
     tester.view.devicePixelRatio = 1.0;
@@ -37,6 +38,7 @@ void main() {
             data: MediaQueryData(
               size: tamanho,
               padding: const EdgeInsets.only(top: 24, bottom: 24),
+              viewInsets: EdgeInsets.only(bottom: teclado),
               textScaler: TextScaler.linear(escalaTexto),
             ),
             child: const LoginPage(),
@@ -80,6 +82,37 @@ void main() {
     expect(auth.tentativas, 1);
     // Só abaixo da senha; antes aparecia também num snackbar.
     expect(find.text('Email ou senha inválidos.'), findsOneWidget);
+  });
+
+  for (final tamanho in const [Size(800, 1280), Size(800, 360)]) {
+    testWidgets('formulário limitado a 440 e centralizado: $tamanho',
+        (tester) async {
+      await montar(tester, tamanho: tamanho);
+      final email = tester.getRect(find.byType(TextField).first);
+      expect(email.width, lessThanOrEqualTo(440));
+      expect(email.center.dx, closeTo(tamanho.width / 2, 0.5));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('teclado aberto: sem overflow e rodapé alcançável',
+      (tester) async {
+    await montar(tester, teclado: 300);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Cadastre-se'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Cadastre-se').hitTestable(), findsOneWidget);
+  });
+
+  testWidgets('rodapé fica no pé da tela quando sobra espaço', (tester) async {
+    await montar(tester, tamanho: const Size(412, 915));
+    final rodape = tester.getRect(find.text('Cadastre-se'));
+    // Pé da tela: 915 - padding inferior (24) - folga do rodapé.
+    expect(rodape.bottom, greaterThan(915 - 24 - 60));
   });
 
   const tamanhos = {

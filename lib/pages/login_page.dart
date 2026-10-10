@@ -10,6 +10,7 @@ import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/brand_colors.dart';
 import '../theme/brand_fonts.dart';
+import '../utils/margem_responsiva.dart';
 
 /// Login por e-mail/senha ou Google. Depois do login quem navega é o
 /// redirect do router (home, verificação de e-mail ou consentimento).
@@ -23,6 +24,9 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 const _margem = 24.0;
+// Em tablet e paisagem o formulário não estica: coluna de até 440 dp,
+// centralizada.
+const _larguraMaxConteudo = 440.0;
 const _raio = 12.0;
 const _alturaBotao = 52.0;
 
@@ -233,17 +237,27 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
               ),
               SafeArea(
-                child: CustomScrollView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  slivers: [
-                    // Ocupa a tela toda quando cabe (rodapé no pé da tela) e
-                    // rola quando não cabe (teclado aberto, tela baixa).
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _conteudo(largura),
+                child: LayoutBuilder(
+                  // Altura mínima = tela: o rodapé fica no pé quando sobra
+                  // espaço e rola junto quando não cabe (teclado, tela
+                  // baixa). Antes era SliverFillRemaining, que mede a altura
+                  // intrínseca do formulário inteiro a cada layout — a cada
+                  // frame da animação do teclado.
+                  builder: (context, c) => SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: c.maxHeight),
+                      child: _conteudo(
+                        largura,
+                        margemResponsiva(
+                          c.maxWidth,
+                          margemMinima: _margem,
+                          larguraMaxima: _larguraMaxConteudo,
+                        ),
+                      ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -253,14 +267,31 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     );
   }
 
-  Widget _conteudo(double largura) {
+  Widget _conteudo(double largura, double margem) {
+    // spaceBetween com altura mínima: formulário em cima, rodapé embaixo,
+    // sem Spacer (que exigiria altura limitada) nem medição intrínseca.
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _formulario(largura, margem),
+        const Padding(
+          padding: EdgeInsets.only(top: 24, bottom: 8),
+          child: _RodapeCadastro(),
+        ),
+      ],
+    );
+  }
+
+  Widget _formulario(double largura, double margem) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Align(
           alignment: Alignment.centerLeft,
           child: Padding(
-            padding: const EdgeInsets.only(left: 12, top: 4),
+            // O IconButton tem 12 de folga interna: a seta fica na margem.
+            padding: EdgeInsets.only(left: margem - 12, top: 4),
             child: IconButton(
               tooltip: 'Voltar',
               onPressed: _voltar,
@@ -277,7 +308,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: _margem),
+          padding: EdgeInsets.symmetric(horizontal: margem),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -411,11 +442,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ],
           ),
         ),
-        // Empurra o rodapé para o pé da tela quando sobra espaço.
-        const Spacer(),
-        const SizedBox(height: 24),
-        const _RodapeCadastro(),
-        const SizedBox(height: 8),
       ],
     );
   }

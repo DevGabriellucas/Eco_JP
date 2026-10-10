@@ -23,9 +23,26 @@ class SplashPage extends StatefulWidget {
 
   final bool animarEntrada;
 
+  /// Espera as fontes antes do fade. Trocável só em teste, para simular uma
+  /// fonte que não termina de carregar.
+  @visibleForTesting
+  static Future<void> Function() esperarFontes = _esperarFontesPendentes;
+
   @override
   State<SplashPage> createState() => _SplashPageState();
 }
+
+// pendingFonts ignora a lista que recebe e espera TODAS as fontes pendentes,
+// inclusive a Poppins que o tema baixa da internet. Por isso o limite curto
+// em _mostrarQuandoPronto: as fontes da splash são embutidas e carregam em
+// milissegundos. Montar a lista já dispara o carregamento das fontes da
+// splash, mesmo antes do primeiro build.
+Future<void> _esperarFontesPendentes() => GoogleFonts.pendingFonts(
+      [BrandFonts.tagline, BrandFonts.caption],
+    ).then((_) {});
+
+Future<void> _comLimite(Future<void> tarefa, Duration limite) =>
+    tarefa.timeout(limite).catchError((Object _) {});
 
 class _SplashPageState extends State<SplashPage>
     with SingleTickerProviderStateMixin {
@@ -44,24 +61,29 @@ class _SplashPageState extends State<SplashPage>
     super.didChangeDependencies();
     if (_preparado) return;
     _preparado = true;
+    // Só a primeira splash (a que anima) pré-carrega; a da rota /splash
+    // repetiria os mesmos pedidos.
+    if (!widget.animarEntrada) return;
     _precarregarProximasTelas();
-    if (widget.animarEntrada) unawaited(_mostrarQuandoPronto());
+    unawaited(_mostrarQuandoPronto());
   }
 
   /// Só mostra o conteúdo depois que os SVGs e as fontes desta tela estão
-  /// carregados; antes o logo e os textos apareciam "pulando". Limite de 1 s
-  /// para um asset lento não deixar a tela vazia.
+  /// carregados; antes o logo e os textos apareciam "pulando". Cada espera
+  /// tem limite, para nada deixar a tela vazia: o pior caso é um asset
+  /// aparecer um frame depois.
   Future<void> _mostrarQuandoPronto() async {
-    try {
-      await Future.wait([
-        precacheSvg(AppIllustrations.contourLines),
-        precacheSvg(AppLogos.ecohub),
-        precacheSvg(AppIllustrations.splashBottom),
-        GoogleFonts.pendingFonts([BrandFonts.tagline, BrandFonts.caption]),
-      ]).timeout(const Duration(seconds: 1));
-    } catch (_) {
-      // Mostra assim mesmo: o pior caso é o asset aparecer um frame depois.
-    }
+    await Future.wait([
+      _comLimite(
+        Future.wait([
+          precacheSvg(AppIllustrations.contourLines),
+          precacheSvg(AppLogos.ecohub),
+          precacheSvg(AppIllustrations.splashBottom),
+        ]),
+        const Duration(seconds: 1),
+      ),
+      _comLimite(SplashPage.esperarFontes(), const Duration(milliseconds: 300)),
+    ]);
     // Começa depois de um frame desenhado, para a animação não competir com o
     // primeiro frame (que substitui a splash nativa). endOfFrame, e não
     // addPostFrameCallback: numa tela parada nenhum frame novo seria pedido e
@@ -71,16 +93,9 @@ class _SplashPageState extends State<SplashPage>
   }
 
   /// Telas que vêm logo depois (inicial, login): sem esperar, só para não
-  /// carregarem as imagens na hora.
+  /// carregarem os SVGs na hora. Sem as fotos do cadastro: eram ~8 MB
+  /// decodificados na abertura para uma tela fora do caminho principal.
   void _precarregarProximasTelas() {
-    unawaited(precacheImage(
-      const AssetImage('assets/images/joaopessoa.jpg'),
-      context,
-    ));
-    unawaited(precacheImage(
-      const AssetImage('assets/images/logo_ecojp.png'),
-      context,
-    ));
     for (final svg in const [
       AppIllustrations.initialPageBranch,
       AppIcons.camera,

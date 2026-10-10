@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:eco_jp/pages/inicializacao_erro_page.dart';
 import 'package:eco_jp/pages/splash_page.dart';
+import 'package:eco_jp/theme/app_icons.dart';
+import 'package:eco_jp/utils/precache_svg.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,6 +81,47 @@ void main() {
       }
     });
   }
+
+  testWidgets('fonte que não termina de carregar não segura a splash',
+      (tester) async {
+    // Simula a Poppins do tema baixando da rede sem fim: pendingFonts espera
+    // todas as fontes, inclusive as que a splash não usa.
+    final original = SplashPage.esperarFontes;
+    SplashPage.esperarFontes = () => Completer<void>().future;
+    addTearDown(() => SplashPage.esperarFontes = original);
+
+    // SVGs já em cache (o carregamento real não avança no relógio falso do
+    // teste): assim só a espera das fontes pode atrasar o fade.
+    await tester.runAsync(
+      () => Future.wait([
+        precacheSvg(AppIllustrations.contourLines),
+        precacheSvg(AppLogos.ecohub),
+        precacheSvg(AppIllustrations.splashBottom),
+      ]),
+    );
+
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const MaterialApp(home: SplashPage()));
+
+    FadeTransition fade() => tester.widget<FadeTransition>(
+          find
+              .descendant(
+                of: find.byType(SplashPage),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        );
+
+    // Limite das fontes (300 ms), um frame para o fade começar e os 400 ms
+    // dele: visível em ~0,8 s. Com o limite antigo (1 s esperando todas as
+    // fontes) ainda estaria invisível aqui.
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(fade().opacity.value, 1.0);
+  });
 
   testWidgets('entrada animada termina visível', (tester) async {
     await _montar(tester, const Size(360, 800));

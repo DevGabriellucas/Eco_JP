@@ -7,6 +7,7 @@ import '../core/router/routes.dart';
 import '../theme/app_icons.dart';
 import '../theme/brand_colors.dart';
 import '../theme/brand_fonts.dart';
+import '../utils/margem_responsiva.dart';
 
 /// Onboarding de primeiro uso (pré-login): topo com a ilustração da trilha e
 /// um sheet branco com 3 slides deslizáveis e os CTAs de cadastro/login,
@@ -118,6 +119,8 @@ class _Topo extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, c) {
         final larguraLogo = (c.maxWidth * 0.38).clamp(120.0, 170.0);
+        // Mesma margem do sheet: em tablet o logo segue alinhado ao título.
+        final margem = _margemConteudo(c.maxWidth);
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -158,12 +161,7 @@ class _Topo extends StatelessWidget {
               child: Align(
                 alignment: Alignment.topLeft,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    _margemLateral,
-                    16,
-                    _margemLateral,
-                    0,
-                  ),
+                  padding: EdgeInsets.fromLTRB(margem, 16, margem, 0),
                   child: SvgPicture.asset(
                     AppLogos.ecohub,
                     width: larguraLogo,
@@ -181,6 +179,16 @@ class _Topo extends StatelessWidget {
   }
 }
 
+// Em tablet e paisagem o conteúdo não estica: título, texto e botão ficam numa
+// coluna de até 480 dp, centralizada.
+const _larguraMaxConteudo = 480.0;
+
+double _margemConteudo(double largura) => margemResponsiva(
+      largura,
+      margemMinima: _margemLateral,
+      larguraMaxima: _larguraMaxConteudo,
+    );
+
 // Enquanto o SVG carrega (ou se falhar), não desenha nada: o verde do
 // Scaffold fica por trás, sem flash branco.
 Widget _vazio(BuildContext context) => const SizedBox.shrink();
@@ -195,6 +203,7 @@ class _Sheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final margem = _margemConteudo(MediaQuery.sizeOf(context).width);
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: BrandColors.surfaceLight,
@@ -205,12 +214,7 @@ class _Sheet extends StatelessWidget {
         child: SingleChildScrollView(
           // Sem padding embaixo: a área de toque do link (48 dp) e a SafeArea
           // já dão o respiro; com mais 8 o link ficava longe da borda.
-          padding: const EdgeInsets.fromLTRB(
-            _margemLateral,
-            31,
-            _margemLateral,
-            0,
-          ),
+          padding: EdgeInsets.fromLTRB(margem, 31, margem, 0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
