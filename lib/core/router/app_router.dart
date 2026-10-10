@@ -146,11 +146,17 @@ class _RouterNotifier extends ChangeNotifier {
 
     final user = authState.value;
 
-    // Cadastro criando conta/reserva/perfil: fica em /cadastro até terminar
+    // Cadastro criando conta/reserva/perfil: não sai do lugar até terminar
     // (sucesso leva à verificação; nome em uso apaga a conta e mostra o erro).
-    if (loc == Routes.cadastro && _ref.read(cadastroEmAndamentoProvider)) {
-      return null;
-    }
+    //
+    // Sem checar `loc == /cadastro`: o cadastro abre por push (inicial →
+    // login → cadastro), e no refresh o go_router avalia o redirect com a
+    // tela de BAIXO da pilha (/inicial), não com o /cadastro. A trava nunca
+    // valia: criar a conta levava na hora à confirmação, o cadastro seguia
+    // invisível e, com nome já em uso, apagava a conta — a pessoa via a
+    // confirmação e logo era jogada para a inicial, sem mensagem nenhuma.
+    // Só o cadastro liga este flag, e o desliga no finally.
+    if (_ref.read(cadastroEmAndamentoProvider)) return null;
 
     // Não autenticado: só telas públicas.
     if (user == null) {

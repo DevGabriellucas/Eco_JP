@@ -67,6 +67,13 @@
   `BrandColors.brandDeep` em `colors.xml` e no `LaunchScreen.storyboard`: o nativo não lê o
   Dart, então mudar um sem os outros faz a tela "piscar" na abertura. O `flutter_native_splash`
   saiu do projeto; os PNGs que ele gerou foram apagados.
+- **10/10/2026 — go_router: o redirect de refresh enxerga a tela de BAIXO da pilha.** Com telas
+  abertas por `push` (inicial → login → cadastro), `state.matchedLocation` no redirect global
+  é `/inicial`, não `/cadastro`. Regra que dependa de `loc == <rota empilhada>` não vale. Era a
+  causa da "tela de confirmação que fecha sozinha": a trava do cadastro nunca segurava, o app ia
+  à confirmação no meio do cadastro e, com nome já em uso, o cadastro apagava a conta por trás.
+  A trava agora é só o flag `cadastroEmAndamentoProvider` (teste em
+  `test/core/fluxo_cadastro_router_test.dart`).
 - **Link de verificação "expirado":** suspeita (não confirmada) de restrição "Apps Android"
   na chave de API do Android; a página de confirmação do Firebase usa essa chave no
   navegador.
