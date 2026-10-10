@@ -41,8 +41,22 @@
 | `hint` | `#8A8A8A` | `#8B938C` | Placeholders |
 | `border` | `#D8DED6` | `#2B322D` | Divisórias e contornos |
 
-**Regra:** telas usam `context.pal.<token>` para neutros e `AppColors.<token>` para acento.
-Nunca hex solto.
+### Paleta do Figma — `BrandColors` (`lib/theme/brand_colors.dart`)
+
+Cores extraídas das telas do Figma, fixas (não mudam com o tema).
+
+| Token | Hex | Uso |
+|---|---|---|
+| `brandDeep` | `#08382E` | Verde profundo de marca, fundo de destaque |
+| `background` | `#1A2420` | Fundo de tela escuro |
+| `accent` | `#52D5A0` | Botões primários, links, realces |
+| `onAccent` | `#070C0A` | Texto e ícone sobre `accent` |
+| `textPrimary` | `#F6F8F7` | Títulos, texto de campos e botões sobre fundo escuro |
+| `textSecondary` | `#C7D0CB` | Subtítulos e texto de apoio |
+| `textTertiary` | `#FFFFFF80` | Rodapés e legendas (branco 50%) |
+
+**Regra:** telas usam `context.pal.<token>` para neutros, `AppColors.<token>` para acento
+e `BrandColors.<token>` para a paleta do Figma. Nunca hex solto.
 
 ## 3. Tipografia
 
