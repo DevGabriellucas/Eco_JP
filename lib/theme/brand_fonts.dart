@@ -15,6 +15,24 @@ abstract final class BrandFonts {
   static const medium = FontWeight.w500;
   static const semiBold = FontWeight.w600;
 
+  // Estilos nomeados. Valores medidos na imagem do Figma (frame 360x800),
+  // não lidos do arquivo: ajuste aqui quando tiver os números exatos.
+  // Variações (cor, tamanho) por copyWith na tela.
+
+  /// Frase curta em caixa alta e espaçada, como "NATUREZA CONECTADA".
+  static final tagline = mono(
+    fontSize: 10,
+    fontWeight: medium,
+    letterSpacing: 2.4,
+  );
+
+  /// Legenda pequena, como a localização no rodapé da splash.
+  static final caption = mono(
+    fontSize: 10,
+    fontWeight: regular,
+    letterSpacing: 1.0,
+  );
+
   /// Inter: texto de interface (títulos, corpo, botões, campos).
   static TextStyle sans({
     double? fontSize,

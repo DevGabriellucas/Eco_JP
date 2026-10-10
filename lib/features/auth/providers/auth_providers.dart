@@ -62,11 +62,14 @@ final perfilGarantidoProvider = FutureProvider<bool>((ref) async {
       user.providerData.every((p) => p.providerId == 'password');
   if (apenasSenha && !user.emailVerified) return true;
   try {
-    await UsuarioService.instance.garantirPerfil(
-      user.uid,
-      nomeSugerido: user.displayName,
-      fotoUrl: fotoPublicaPermitida(user.photoURL),
-    );
+    // Com limite: sem ele, rede ruim deixava o app parado na splash.
+    await UsuarioService.instance
+        .garantirPerfil(
+          user.uid,
+          nomeSugerido: user.displayName,
+          fotoUrl: fotoPublicaPermitida(user.photoURL),
+        )
+        .timeout(const Duration(seconds: 10));
   } catch (e) {
     debugPrint('Não foi possível garantir o perfil: $e');
   }
@@ -87,5 +90,10 @@ final consentStatusProvider = FutureProvider<bool>((ref) async {
       user.providerData.every((p) => p.providerId == 'password');
   if (apenasSenha && !user.emailVerified) return false;
 
-  return ref.watch(consentServiceProvider).precisaConsentir(user.uid);
+  // Passou do limite: trata como "precisa consentir", a mesma falha fechada
+  // do ConsentService em caso de erro. Sem o limite o app ficava na splash.
+  return ref
+      .watch(consentServiceProvider)
+      .precisaConsentir(user.uid)
+      .timeout(const Duration(seconds: 10), onTimeout: () => true);
 });

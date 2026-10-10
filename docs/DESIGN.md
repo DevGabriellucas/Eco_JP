@@ -73,6 +73,22 @@ e `BrandColors.<token>` para a paleta do Figma. Nunca hex solto.
   Funcionam offline e não fazem requisição ao Google; outro peso é baixado da internet.
 - Licenças (SIL OFL 1.1) em `assets/fonts/OFL-*.txt`, registradas na tela de licenças.
 - Nada de `fontFamily` solto em tela: use `BrandFonts` ou o `TextTheme`.
+- Estilos nomeados (variação por `copyWith`):
+
+| Estilo | Fonte | Uso |
+|---|---|---|
+| `BrandFonts.tagline` | Plex Mono 500, 10, espaçamento 2,4 | Frase curta em caixa alta ("NATUREZA CONECTADA") |
+| `BrandFonts.caption` | Plex Mono 400, 10, espaçamento 1,0 | Legendas (localização na splash) |
+
+  Os valores foram medidos na imagem do Figma, não lidos do arquivo; ajuste quando tiver os
+  números exatos.
+
+### Splash
+
+`lib/pages/splash_page.dart`, fundo `BrandColors.brandDeep`. A splash nativa (Android e iOS)
+é só essa cor, replicada em `android/app/src/main/res/values/colors.xml`
+(`splash_background`) e em `ios/Runner/Base.lproj/LaunchScreen.storyboard`: mude os três
+juntos.
 
 ## 4. Componentes
 

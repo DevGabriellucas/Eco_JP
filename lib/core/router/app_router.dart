@@ -14,7 +14,9 @@ import '../../pages/login_page.dart';
 import '../../pages/notificacoes_page.dart';
 import '../../pages/ocorrencia_deep_link_page.dart';
 import '../../pages/perfil/perfil_publico_page.dart';
+import '../../pages/splash_page.dart';
 import '../../pages/verificacao_email_page.dart';
+import '../inicializacao.dart';
 import 'routes.dart';
 
 /// Router central do app. Substitui o `AuthCheck`/`_ConsentGate` que ficavam
@@ -28,8 +30,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     redirect: notifier.redirect,
     routes: [
       GoRoute(
-          path: Routes.splash,
-          builder: (context, state) => const _SplashScreen()),
+        path: Routes.splash,
+        // Mesmo visual da splash da inicialização, já visível: a troca entre
+        // as duas não aparece.
+        builder: (context, state) => const SplashPage(animarEntrada: false),
+      ),
       GoRoute(
           path: Routes.inicial,
           builder: (context, state) => const InicialPage()),
@@ -109,6 +114,7 @@ class _RouterNotifier extends ChangeNotifier {
     _ref.listen(perfilGarantidoProvider, (previous, next) => notifyListeners());
     _ref.listen(
         cadastroEmAndamentoProvider, (previous, next) => notifyListeners());
+    _ref.listen(splashMinimoProvider, (previous, next) => notifyListeners());
   }
 
   final Ref _ref;
@@ -117,8 +123,10 @@ class _RouterNotifier extends ChangeNotifier {
     final authState = _ref.read(authStateChangesProvider);
     final loc = state.matchedLocation;
 
-    // Enquanto o Firebase resolve a sessão inicial, segura na splash.
-    if (authState.isLoading || !authState.hasValue) {
+    // Segura na splash até os 3 s mínimos (contados desde a abertura do app)
+    // e enquanto o Firebase resolve a sessão inicial.
+    final splashMinimo = _ref.read(splashMinimoProvider);
+    if (!splashMinimo.hasValue || authState.isLoading || !authState.hasValue) {
       return loc == Routes.splash ? null : Routes.splash;
     }
 
@@ -170,15 +178,5 @@ class _RouterNotifier extends ChangeNotifier {
     };
     if (portoes.contains(loc)) return Routes.home;
     return null;
-  }
-}
-
-/// Tela mínima exibida enquanto o estado de auth/consentimento é resolvido.
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

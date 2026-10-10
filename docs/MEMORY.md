@@ -60,6 +60,13 @@
   documento guarda só o id, sem data nem aparelho, para não virar log de acesso, que a
   política não prevê. Efeito colateral: conta de órgão compartilhada entre servidores se
   derruba sozinha.
+- **10/10/2026 — Splash: Firebase inicializa depois do `runApp`** (`lib/core/inicializacao.dart`),
+  com a splash Flutter já na tela; o `MyApp`/router só monta quando termina, porque os
+  serviços usam o Firebase na criação. O tempo mínimo de 3 s conta desde a abertura e quem
+  espera por ele é o redirect do router. A cor da splash nativa é cópia de
+  `BrandColors.brandDeep` em `colors.xml` e no `LaunchScreen.storyboard`: o nativo não lê o
+  Dart, então mudar um sem os outros faz a tela "piscar" na abertura. O `flutter_native_splash`
+  saiu do projeto; os PNGs que ele gerou foram apagados.
 - **Link de verificação "expirado":** suspeita (não confirmada) de restrição "Apps Android"
   na chave de API do Android; a página de confirmação do Firebase usa essa chave no
   navegador.
