@@ -9,6 +9,7 @@ import '../models/usuario_model.dart';
 import '../services/usuario_service.dart';
 import '../utils/texto.dart';
 import 'legal/documentos_legais.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 
 class CadastroPage extends ConsumerStatefulWidget {
@@ -338,7 +339,7 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
                               iconSize: 44,
                               onPressed: () => context.go(Routes.inicial),
                               icon: SvgPicture.asset(
-                                'assets/icons/seta.svg',
+                                AppIcons.arrowLeft,
                                 width: 44,
                                 height: 44,
                               ),

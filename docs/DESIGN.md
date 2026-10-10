@@ -88,6 +88,18 @@ e `BrandColors.<token>` para a paleta do Figma. Nunca hex solto.
 | Estados de lista (`widgets/feed_states.dart`) | Vazio, carregando e erro com ação de tentar de novo |
 | Aviso de recorte (`widgets/aviso_recorte.dart`) | Quando o limite de 500 registros foi atingido, mostra o total real |
 
+### Ícones e ilustrações — `lib/theme/app_icons.dart`
+
+| Pasta | Conteúdo | Acesso |
+|---|---|---|
+| `assets/icons/ui/` | Ícones de interface | `AppIcons.<nome>` |
+| `assets/icons/illustrations/` | Ilustrações e padrões decorativos | `AppIllustrations.<nome>` |
+| `assets/icons/logos/` | Logo do app e marcas de terceiros | `AppLogos.<nome>` |
+
+Arquivos em `snake_case`, sem sufixo `_icon`. Nunca escreva o caminho do asset na tela;
+arquivo novo ganha constante em `app_icons.dart` (e entra na lista `todos`, que o teste
+`test/theme/app_icons_test.dart` confere).
+
 Raios: 10 (inputs, snackbar) e 12 (botões, cards). Elevação zero; separação por cor de
 superfície e borda.
 

@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -277,7 +278,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               iconSize: 44,
                               onPressed: () => context.go(Routes.inicial),
                               icon: SvgPicture.asset(
-                                'assets/icons/seta.svg',
+                                AppIcons.arrowLeft,
                                 width: 44,
                                 height: 44,
                               ),
@@ -447,7 +448,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   SvgPicture.asset(
-                                                    'assets/icons/google_icon.svg',
+                                                    AppLogos.google,
                                                     width: 20,
                                                     height: 20,
                                                   ),
