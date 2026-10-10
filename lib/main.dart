@@ -13,12 +13,14 @@ import 'core/sessao_unica.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/theme_mode_provider.dart';
 import 'theme/app_theme.dart';
+import 'theme/brand_fonts.dart';
 import 'utils/crashlytics.dart';
 
 void main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      BrandFonts.registrarLicencas();
       try {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,

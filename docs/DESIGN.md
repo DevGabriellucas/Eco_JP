@@ -65,6 +65,15 @@ e `BrandColors.<token>` para a paleta do Figma. Nunca hex solto.
 - Definidas no `TextTheme` central: um `Text` que só ajusta tamanho/peso herda a família.
 - App bar: Poppins 18, peso 700, centralizado.
 
+### Fontes do Figma — `BrandFonts` (`lib/theme/brand_fonts.dart`)
+
+- **Inter** (`BrandFonts.sans`) para texto de interface e **IBM Plex Mono**
+  (`BrandFonts.mono`) para números, códigos e rótulos técnicos.
+- Pesos embutidos em `assets/fonts/`: 400 (`regular`), 500 (`medium`) e 600 (`semiBold`).
+  Funcionam offline e não fazem requisição ao Google; outro peso é baixado da internet.
+- Licenças (SIL OFL 1.1) em `assets/fonts/OFL-*.txt`, registradas na tela de licenças.
+- Nada de `fontFamily` solto em tela: use `BrandFonts` ou o `TextTheme`.
+
 ## 4. Componentes
 
 | Componente | Padrão |
