@@ -31,4 +31,6 @@ abstract final class BrandColors {
   static const textOnLight = Color(0xFF1A2420); // títulos no claro
   static const textOnLightMuted = Color(0xFF5F6B66); // texto de apoio no claro
   static const neutralSoft = Color(0xFFD3D9D6); // indicador inativo, divisórias
+  // Valor do Figma (não estimado). Contraste ~5:1 sobre branco.
+  static const linkSecondary = Color(0xFF287894); // links secundários no claro
 }

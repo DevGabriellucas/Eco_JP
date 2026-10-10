@@ -45,6 +45,10 @@ abstract final class AppIllustrations {
   /// Curvas de nível em tela cheia (frame 360x800 do Figma). Preferir a
   /// [stylePattern], que é um recorte pequeno e fica ampliado demais.
   static const contourLines = '$_dir/contour_lines.svg';
+
+  /// Curvas de nível claras (bege) para telas de fundo branco, como o login.
+  /// Recorte 320x230, usado no canto superior direito.
+  static const contourLinesLight = '$_dir/contour_lines_light.svg';
   static const emailBranch = '$_dir/email_branch.svg';
   static const initialPageBranch = '$_dir/initial_page_branch.svg';
   static const splashBottom = '$_dir/splash_bottom.svg';
@@ -52,6 +56,7 @@ abstract final class AppIllustrations {
 
   static const todos = [
     contourLines,
+    contourLinesLight,
     emailBranch,
     initialPageBranch,
     splashBottom,
@@ -62,8 +67,12 @@ abstract final class AppIllustrations {
 abstract final class AppLogos {
   static const _dir = 'assets/icons/logos';
 
+  /// Logo para fundo escuro ("hub" branco).
   static const ecohub = '$_dir/ecohub.svg';
+
+  /// Logo para fundo claro ("hub" verde-escuro).
+  static const ecohubOnLight = '$_dir/ecohub_on_light.svg';
   static const google = '$_dir/google.svg';
 
-  static const todos = [ecohub, google];
+  static const todos = [ecohub, ecohubOnLight, google];
 }

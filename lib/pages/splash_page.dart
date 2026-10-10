@@ -88,6 +88,12 @@ class _SplashPageState extends State<SplashPage>
       AppIcons.safeShield,
       AppIcons.arrowLeft,
       AppLogos.google,
+      // Login
+      AppIllustrations.contourLinesLight,
+      AppLogos.ecohubOnLight,
+      AppIcons.arrowBack,
+      AppIcons.message,
+      AppIcons.eyeClosed,
     ]) {
       unawaited(precacheSvg(svg).catchError((_) {}));
     }

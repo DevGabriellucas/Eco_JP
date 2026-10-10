@@ -1,19 +1,30 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+
 import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import '../theme/brand_colors.dart';
+import '../theme/brand_fonts.dart';
 
+/// Login por e-mail/senha ou Google. Depois do login quem navega é o
+/// redirect do router (home, verificação de e-mail ou consentimento).
+///
+/// Medidas do mockup do Figma (frame de ~360 de largura).
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
 }
+
+const _margem = 24.0;
+const _raio = 12.0;
+const _alturaBotao = 52.0;
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _emailController = TextEditingController();
@@ -22,6 +33,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _isLoadingGoogle = false;
   bool _senhaVisivel = false;
   String? _errorMessage;
+
+  bool get _ocupado => _isLoading || _isLoadingGoogle;
 
   @override
   void dispose() {
@@ -39,19 +52,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final result = await ref.read(authServiceProvider).loginGoogle();
 
     if (!mounted) return;
-    setState(() => _isLoadingGoogle = false);
-
-    // Em caso de sucesso, o redirect do router leva para /home (ou para o
-    // gate de consentimento) reagindo à mudança de authState.
-    if (!result.success) {
-      setState(() => _errorMessage = result.message);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message ?? 'Erro ao entrar com Google')),
-      );
-    }
+    // Sucesso: o redirect do router leva para /home (ou para o gate de
+    // consentimento) reagindo à mudança de authState.
+    setState(() {
+      _isLoadingGoogle = false;
+      if (!result.success) {
+        _errorMessage = result.message ?? 'Erro ao entrar com Google';
+      }
+    });
   }
 
   Future<void> _handleLogin() async {
+    if (_ocupado) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -62,21 +74,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         .login(_emailController.text.trim(), _passwordController.text);
 
     if (!mounted) return;
-
-    setState(() => _isLoading = false);
-
-    // Sucesso → o redirect do router assume a navegação (home / verificação de
-    // e-mail / consentimento, conforme o estado da conta).
-    if (!result.success) {
-      setState(() => _errorMessage = result.message);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message ?? 'Erro ao fazer login')),
-      );
-    }
+    // Sucesso: o redirect do router assume a navegação (home / verificação
+    // de e-mail / consentimento, conforme o estado da conta). O erro aparece
+    // só abaixo da senha; antes saía também num snackbar, repetido.
+    setState(() {
+      _isLoading = false;
+      if (!result.success) {
+        _errorMessage = result.message ?? 'Erro ao fazer login';
+      }
+    });
   }
 
   Future<void> _handleEsqueceuSenha() async {
-    final pal = context.pal;
     final emailCtrl = TextEditingController(text: _emailController.text.trim());
     bool enviando = false;
 
@@ -86,16 +95,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             return AlertDialog(
-              backgroundColor: pal.surface,
+              backgroundColor: BrandColors.surfaceLight,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
               title: Text(
                 'Recuperar senha',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
+                style: BrandFonts.label.copyWith(
                   fontSize: 18,
-                  color: pal.ink,
+                  color: BrandColors.textOnLight,
                 ),
               ),
               content: Column(
@@ -103,41 +111,31 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Digite seu email e enviaremos um link para você redefinir sua senha.',
-                    style: TextStyle(fontSize: 14, color: pal.muted),
+                    'Digite seu email e enviaremos um link para você '
+                    'redefinir sua senha.',
+                    style: BrandFonts.body.copyWith(
+                      fontSize: 14,
+                      color: BrandColors.textOnLightMuted,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     autofocus: true,
-                    style: TextStyle(fontSize: 14, color: pal.ink),
-                    decoration: InputDecoration(
-                      hintText: 'Email',
-                      hintStyle: TextStyle(color: pal.hint, fontSize: 14),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 14,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: pal.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: pal.ink, width: 1.5),
-                      ),
-                    ),
+                    style: _estiloCampo,
+                    decoration: _decoracaoCampo(hint: 'seu@email.com'),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: enviando ? null : () => Navigator.of(ctx).pop(),
-                  child: const Text(
-                    'Cancelar',
-                    style: TextStyle(color: AppColors.hint),
+                  style: TextButton.styleFrom(
+                    foregroundColor: BrandColors.textOnLightMuted,
+                    textStyle: BrandFonts.label.copyWith(fontSize: 14),
                   ),
+                  child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
                   onPressed: enviando
@@ -172,22 +170,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: pal.ink,
-                    foregroundColor: pal.surface,
+                    backgroundColor: BrandColors.primary,
+                    foregroundColor: BrandColors.onPrimary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(_raio),
                     ),
+                    textStyle: BrandFonts.label.copyWith(fontSize: 14),
                   ),
                   child: enviando
-                      ? SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: pal.surface,
-                          ),
-                        )
+                      ? const _Carregando(cor: BrandColors.onPrimary)
                       : const Text('Enviar'),
                 ),
               ],
@@ -202,380 +194,431 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => emailCtrl.dispose());
   }
 
+  void _voltar() {
+    // Veio da inicial por push: volta para ela no mesmo slide. Sem tela
+    // anterior (link externo, redirect), vai para a inicial.
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(Routes.inicial);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pal = context.pal;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double logoSize = (screenWidth * 0.32).clamp(110.0, 150.0);
-    const double baseWidth = 430.0;
-    final double paddingLateral = (38.0 / baseWidth) * screenWidth;
+    final largura = MediaQuery.sizeOf(context).width;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A1018),
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        toolbarHeight: 0,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        systemNavigationBarColor: BrandColors.surfaceLight,
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
-      body: Stack(
-        children: [
-          // 1. Imagem de Fundo (20% opacidade)
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.2,
-              child: Image.asset(
-                'assets/images/joaopessoa.jpg',
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                errorBuilder: (context, error, stackTrace) =>
-                    Container(color: const Color(0xFF0A1018)),
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.3,
+        child: Scaffold(
+          backgroundColor: BrandColors.surfaceLight,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Curvas de nível no canto superior direito, como no mockup.
+              Positioned(
+                top: 0,
+                right: 0,
+                child: RepaintBoundary(
+                  child: SvgPicture.asset(
+                    AppIllustrations.contourLinesLight,
+                    width: largura * 320 / 360,
+                    excludeFromSemantics: true,
+                  ),
+                ),
               ),
-            ),
+              SafeArea(
+                child: CustomScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  slivers: [
+                    // Ocupa a tela toda quando cabe (rodapé no pé da tela) e
+                    // rola quando não cabe (teclado aberto, tela baixa).
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _conteudo(largura),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
 
-          // 2. Gradiente Suavizado
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x33FFFFFF), Color(0x4D000000)],
-                  stops: [0.28, 0.80],
+  Widget _conteudo(double largura) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 12, top: 4),
+            child: IconButton(
+              tooltip: 'Voltar',
+              onPressed: _voltar,
+              icon: SvgPicture.asset(
+                AppIcons.arrowBack,
+                width: 24,
+                height: 24,
+                colorFilter: const ColorFilter.mode(
+                  BrandColors.textOnLight,
+                  BlendMode.srcIn,
                 ),
               ),
             ),
           ),
-
-          // 3. Conteúdo
-          Positioned.fill(
-            child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                        maxWidth: constraints.maxWidth,
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: paddingLateral,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // IconButton: alvo de 48 dp e rótulo "Voltar" para leitores
-                            // de tela (o GestureDetector com SVG não tinha nenhum).
-                            IconButton(
-                              tooltip: 'Voltar',
-                              padding: EdgeInsets.zero,
-                              iconSize: 44,
-                              onPressed: () => context.go(Routes.inicial),
-                              icon: SvgPicture.asset(
-                                AppIcons.arrowLeft,
-                                width: 44,
-                                height: 44,
-                              ),
-                            ),
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                child: SizedBox(
-                                  width: logoSize,
-                                  height: logoSize,
-                                  child: Image.asset(
-                                    'assets/images/logo_ecojp.png',
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: pal.surface,
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                              padding: const EdgeInsets.all(24.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _buildLabel('Email'),
-                                  const SizedBox(height: 8),
-                                  _buildInput(
-                                    controller: _emailController,
-                                    hint: 'Email',
-                                    keyboardType: TextInputType.emailAddress,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildLabel('Senha'),
-                                  const SizedBox(height: 8),
-                                  _buildInput(
-                                    controller: _passwordController,
-                                    hint: 'Senha',
-                                    obscure: !_senhaVisivel,
-                                    suffix: IconButton(
-                                      tooltip: _senhaVisivel
-                                          ? 'Ocultar senha'
-                                          : 'Mostrar senha',
-                                      icon: Icon(
-                                        _senhaVisivel
-                                            ? Icons.visibility_off_outlined
-                                            : Icons.visibility_outlined,
-                                        size: 18,
-                                        color: pal.hint,
-                                      ),
-                                      onPressed: () => setState(
-                                        () => _senhaVisivel = !_senhaVisivel,
-                                      ),
-                                    ),
-                                  ),
-                                  if (_errorMessage != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(
-                                        _errorMessage!,
-                                        style: const TextStyle(
-                                          color: Colors.red,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  const SizedBox(height: 20),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 48,
-                                    child: ElevatedButton(
-                                      // Desabilitado também durante o login
-                                      // Google (dois logins em paralelo).
-                                      onPressed:
-                                          (_isLoading || _isLoadingGoogle)
-                                              ? null
-                                              : _handleLogin,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: pal.ink,
-                                        foregroundColor: pal.surface,
-                                        disabledBackgroundColor:
-                                            pal.ink.withValues(alpha: 0.6),
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        textStyle: const TextStyle(
-                                          fontFamily: 'Roboto',
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      child: _isLoading
-                                          ? SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                color: pal.surface,
-                                                strokeWidth: 2,
-                                              ),
-                                            )
-                                          : const Text('Logar'),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  GestureDetector(
-                                    onTap: _handleEsqueceuSenha,
-                                    child: Text(
-                                      'Esqueceu a senha?',
-                                      style: TextStyle(
-                                        fontFamily: 'Roboto',
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w400,
-                                        color: pal.ink,
-                                        decoration: TextDecoration.underline,
-                                        decorationColor: pal.ink,
-                                      ),
-                                    ),
-                                  ),
-                                  if (kIsWeb ||
-                                      defaultTargetPlatform ==
-                                          TargetPlatform.android ||
-                                      defaultTargetPlatform ==
-                                          TargetPlatform.iOS) ...[
-                                    const SizedBox(height: 24),
-                                    Center(
-                                      child: OutlinedButton(
-                                        onPressed:
-                                            (_isLoading || _isLoadingGoogle)
-                                                ? null
-                                                : _handleLoginGoogle,
-                                        style: OutlinedButton.styleFrom(
-                                          backgroundColor: pal.surface,
-                                          side: BorderSide(
-                                            color: pal.border,
-                                            width: 1,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              28,
-                                            ),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 24,
-                                            vertical: 12,
-                                          ),
-                                          elevation: 0,
-                                        ),
-                                        child: _isLoadingGoogle
-                                            ? SizedBox(
-                                                width: 20,
-                                                height: 20,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: pal.ink,
-                                                ),
-                                              )
-                                            : Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  SvgPicture.asset(
-                                                    AppLogos.google,
-                                                    width: 20,
-                                                    height: 20,
-                                                  ),
-                                                  const SizedBox(width: 12),
-                                                  Text(
-                                                    'Logar com Google',
-                                                    style: TextStyle(
-                                                      fontFamily: 'Roboto',
-                                                      fontSize: 14,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color: pal.ink,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 20),
-                                  Center(
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        context.push(Routes.cadastro);
-                                      },
-                                      child: RichText(
-                                        text: TextSpan(
-                                          style: TextStyle(
-                                            fontFamily: 'Roboto',
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w400,
-                                            color: pal.ink,
-                                          ),
-                                          children: [
-                                            const TextSpan(
-                                              text: 'Não tem conta? ',
-                                            ),
-                                            TextSpan(
-                                              text: 'Cadastre-se',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                decoration:
-                                                    TextDecoration.underline,
-                                                decorationColor: pal.ink,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: _margem),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SvgPicture.asset(
+                  AppLogos.ecohubOnLight,
+                  width: (largura * 137 / 360).clamp(120.0, 180.0),
+                  semanticsLabel: 'ecohub',
+                ),
+              ),
+              const SizedBox(height: 36),
+              Text(
+                'Entrar',
+                style: BrandFonts.heading.copyWith(
+                  color: BrandColors.textOnLight,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Acompanhe e registre denúncias na sua cidade.',
+                style: BrandFonts.body.copyWith(
+                  fontSize: 16,
+                  color: BrandColors.textOnLightMuted,
+                ),
+              ),
+              const SizedBox(height: 24),
+              AutofillGroup(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Campo(
+                      rotulo: 'EMAIL',
+                      child: TextField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [AutofillHints.email],
+                        autocorrect: false,
+                        style: _estiloCampo,
+                        decoration: _decoracaoCampo(
+                          hint: 'seu@email.com',
+                          prefixo: AppIcons.message,
                         ),
                       ),
                     ),
-                  );
-                },
+                    const SizedBox(height: 22),
+                    _Campo(
+                      rotulo: 'SENHA',
+                      child: TextField(
+                        controller: _passwordController,
+                        obscureText: !_senhaVisivel,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
+                        onSubmitted: (_) => _handleLogin(),
+                        style: _estiloCampo,
+                        decoration: _decoracaoCampo(
+                          hint: 'Sua senha',
+                          erro: _errorMessage != null,
+                          sufixo: IconButton(
+                            tooltip: _senhaVisivel
+                                ? 'Ocultar senha'
+                                : 'Mostrar senha',
+                            onPressed: () =>
+                                setState(() => _senhaVisivel = !_senhaVisivel),
+                            // Só existe o ícone de olho fechado nos assets.
+                            icon: const _IconeSvg(AppIcons.eyeClosed),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _errorMessage!,
+                    style: BrandFonts.body.copyWith(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: AppColors.danger,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _ocupado ? null : _handleEsqueceuSenha,
+                  style: TextButton.styleFrom(
+                    foregroundColor: BrandColors.linkSecondary,
+                    minimumSize: const Size(48, 48),
+                    padding: EdgeInsets.zero,
+                    textStyle: BrandFonts.label.copyWith(fontSize: 14),
+                  ),
+                  child: const Text('Esqueceu a senha?'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                // Desabilitado também durante o login Google (dois logins em
+                // paralelo).
+                onPressed: _ocupado ? null : _handleLogin,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: BrandColors.primary,
+                  foregroundColor: BrandColors.onPrimary,
+                  disabledBackgroundColor:
+                      BrandColors.primary.withValues(alpha: 0.6),
+                  disabledForegroundColor: BrandColors.onPrimary,
+                  minimumSize: const Size.fromHeight(_alturaBotao),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(_raio),
+                  ),
+                  textStyle: BrandFonts.label,
+                ),
+                child: _isLoading
+                    ? const _Carregando(cor: BrandColors.onPrimary)
+                    : const Text('Logar'),
+              ),
+              const SizedBox(height: 20),
+              const _Divisor(),
+              const SizedBox(height: 20),
+              _BotaoGoogle(
+                carregando: _isLoadingGoogle,
+                onPressed: _ocupado ? null : _handleLoginGoogle,
+              ),
+            ],
+          ),
+        ),
+        // Empurra o rodapé para o pé da tela quando sobra espaço.
+        const Spacer(),
+        const SizedBox(height: 24),
+        const _RodapeCadastro(),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+final _estiloCampo = BrandFonts.body.copyWith(
+  fontSize: 16,
+  height: 1.25,
+  color: BrandColors.textOnLight,
+);
+
+InputDecoration _decoracaoCampo({
+  required String hint,
+  String? prefixo,
+  Widget? sufixo,
+  bool erro = false,
+}) {
+  OutlineInputBorder borda(Color cor, double largura) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(_raio),
+        borderSide: BorderSide(color: cor, width: largura),
+      );
+
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: _estiloCampo.copyWith(color: BrandColors.textOnLightMuted),
+    filled: true,
+    fillColor: BrandColors.surfaceLight,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    prefixIcon: prefixo == null
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(left: 16, right: 12),
+            child: _IconeSvg(prefixo),
+          ),
+    prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+    suffixIcon: sufixo,
+    enabledBorder: borda(
+      erro ? AppColors.danger : BrandColors.neutralSoft,
+      1,
+    ),
+    focusedBorder: borda(
+      erro ? AppColors.danger : BrandColors.primary,
+      1.5,
+    ),
+  );
+}
+
+/// Ícone dos campos: os SVGs vêm do Figma claros (para fundo escuro); aqui o
+/// fundo é branco, então pinta com o cinza de apoio.
+class _IconeSvg extends StatelessWidget {
+  const _IconeSvg(this.asset);
+
+  final String asset;
+
+  @override
+  Widget build(BuildContext context) {
+    return SvgPicture.asset(
+      asset,
+      width: 20,
+      height: 20,
+      excludeFromSemantics: true,
+      colorFilter: const ColorFilter.mode(
+        BrandColors.textOnLightMuted,
+        BlendMode.srcIn,
+      ),
+    );
+  }
+}
+
+class _Campo extends StatelessWidget {
+  const _Campo({required this.rotulo, required this.child});
+
+  final String rotulo;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          rotulo,
+          style: BrandFonts.caption.copyWith(
+            letterSpacing: 1.5,
+            color: BrandColors.textOnLight,
+          ),
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+}
+
+class _Divisor extends StatelessWidget {
+  const _Divisor();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: BrandColors.neutralSoft)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'ou',
+            style: BrandFonts.caption.copyWith(
+              color: BrandColors.textOnLightMuted,
             ),
           ),
-        ],
-      ),
+        ),
+        const Expanded(child: Divider(color: BrandColors.neutralSoft)),
+      ],
     );
   }
+}
 
-  Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontFamily: 'Roboto',
-        fontSize: 15,
-        fontWeight: FontWeight.w500,
-        color: context.pal.ink,
+class _BotaoGoogle extends StatelessWidget {
+  const _BotaoGoogle({required this.carregando, required this.onPressed});
+
+  final bool carregando;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        backgroundColor: BrandColors.surfaceLight,
+        foregroundColor: BrandColors.textOnLight,
+        side: const BorderSide(color: BrandColors.neutralSoft),
+        minimumSize: const Size.fromHeight(_alturaBotao),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_raio),
+        ),
+        textStyle: BrandFonts.label.copyWith(fontSize: 15),
       ),
+      child: carregando
+          ? const _Carregando(cor: BrandColors.textOnLight)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SvgPicture.asset(
+                  AppLogos.google,
+                  width: 20,
+                  height: 20,
+                  excludeFromSemantics: true,
+                ),
+                const SizedBox(width: 12),
+                const Flexible(
+                  child: Text(
+                    'Logar com Google',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
     );
   }
+}
 
-  Widget _buildInput({
-    required TextEditingController controller,
-    required String hint,
-    TextInputType keyboardType = TextInputType.text,
-    bool obscure = false,
-    Widget? suffix,
-  }) {
-    final pal = context.pal;
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      obscureText: obscure,
-      style: TextStyle(fontFamily: 'Roboto', fontSize: 14, color: pal.ink),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(
-          fontFamily: 'Roboto',
-          fontSize: 14,
-          color: pal.hint,
-          fontWeight: FontWeight.w400,
+class _RodapeCadastro extends StatelessWidget {
+  const _RodapeCadastro();
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          'Não tem conta?',
+          style: BrandFonts.body.copyWith(
+            fontSize: 15,
+            color: BrandColors.textOnLightMuted,
+          ),
         ),
-        suffixIcon: suffix,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
+        TextButton(
+          onPressed: () => context.push(Routes.cadastro),
+          style: TextButton.styleFrom(
+            foregroundColor: BrandColors.primary,
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            textStyle: BrandFonts.label.copyWith(fontSize: 15),
+          ),
+          child: const Text('Cadastre-se'),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: pal.border, width: 1),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: pal.ink, width: 1.5),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Colors.red, width: 1),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Colors.red, width: 1.5),
-        ),
-        filled: true,
-        fillColor: pal.surface,
-        isDense: true,
-      ),
+      ],
+    );
+  }
+}
+
+class _Carregando extends StatelessWidget {
+  const _Carregando({required this.cor});
+
+  final Color cor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 20,
+      height: 20,
+      child: CircularProgressIndicator(strokeWidth: 2, color: cor),
     );
   }
 }

@@ -61,6 +61,7 @@ Cores extraídas das telas do Figma, fixas (não mudam com o tema).
 | `textOnLight` | `#1A2420` | Títulos sobre claro |
 | `textOnLightMuted` | `#5F6B66` | Texto de apoio sobre claro |
 | `neutralSoft` | `#D3D9D6` | Indicador inativo, divisórias |
+| `linkSecondary` | `#287894` | Links secundários sobre claro ("Esqueceu a senha?"); valor do Figma |
 
 As sete últimas foram estimadas na imagem do onboarding (só `primary` saiu de um SVG do
 Figma); confira no Figma.
@@ -124,6 +125,10 @@ juntos.
 | `assets/icons/ui/` | Ícones de interface | `AppIcons.<nome>` |
 | `assets/icons/illustrations/` | Ilustrações e padrões decorativos | `AppIllustrations.<nome>` |
 | `assets/icons/logos/` | Logo do app e marcas de terceiros | `AppLogos.<nome>` |
+
+Variantes por fundo: `AppLogos.ecohub` (fundo escuro) e `AppLogos.ecohubOnLight` (fundo
+claro); `AppIllustrations.contourLines` (tela cheia, fundo escuro) e `contourLinesLight`
+(recorte bege para fundo claro).
 
 Arquivos em `snake_case`, sem sufixo `_icon`. Nunca escreva o caminho do asset na tela;
 arquivo novo ganha constante em `app_icons.dart` (e entra na lista `todos`, que o teste
