@@ -81,8 +81,23 @@ class _SplashPageState extends State<SplashPage>
       const AssetImage('assets/images/logo_ecojp.png'),
       context,
     ));
-    unawaited(precacheSvg(AppIcons.arrowLeft).catchError((_) {}));
-    unawaited(precacheSvg(AppLogos.google).catchError((_) {}));
+    for (final svg in const [
+      AppIllustrations.initialPageBranch,
+      AppIcons.camera,
+      AppIcons.clock,
+      AppIcons.safeShield,
+      AppIcons.arrowLeft,
+      AppLogos.google,
+    ]) {
+      unawaited(precacheSvg(svg).catchError((_) {}));
+    }
+    // Criar os estilos já dispara o carregamento da Inter (embutida); assim a
+    // inicial abre sem troca de fonte visível.
+    unawaited(GoogleFonts.pendingFonts([
+      BrandFonts.heading,
+      BrandFonts.body,
+      BrandFonts.label,
+    ]).catchError((_) => <void>[]));
   }
 
   @override

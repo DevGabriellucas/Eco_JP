@@ -43,10 +43,16 @@ abstract final class AppIllustrations {
   static const _dir = 'assets/icons/illustrations';
 
   static const emailBranch = '$_dir/email_branch.svg';
+  static const initialPageBranch = '$_dir/initial_page_branch.svg';
   static const splashBottom = '$_dir/splash_bottom.svg';
   static const stylePattern = '$_dir/style_pattern.svg';
 
-  static const todos = [emailBranch, splashBottom, stylePattern];
+  static const todos = [
+    emailBranch,
+    initialPageBranch,
+    splashBottom,
+    stylePattern,
+  ];
 }
 
 abstract final class AppLogos {

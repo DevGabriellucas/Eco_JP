@@ -20,4 +20,15 @@ abstract final class BrandColors {
   static const textSecondary = Color(0xFFC7D0CB); // subtítulos e apoio
   // No Figma é #FFFFFF80 (RRGGBBAA); no Flutter o alfa vem primeiro.
   static const textTertiary = Color(0x80FFFFFF); // rodapés e legendas
+
+  // Superfícies claras (sheet branco do onboarding). Valores estimados na
+  // imagem do Figma, não lidos do arquivo: confira e ajuste aqui.
+  // `primary` é o verde do miolo dos pontos em initial_page_branch.svg.
+  static const primary = Color(0xFF087F5B); // botão primário e links no claro
+  static const onPrimary = Color(0xFFFFFFFF); // texto sobre `primary`
+  static const surfaceLight = Color(0xFFFFFFFF); // sheet / cartão claro
+  static const primarySoft = Color(0xFFE8F3EE); // fundo de ícone no claro
+  static const textOnLight = Color(0xFF1A2420); // títulos no claro
+  static const textOnLightMuted = Color(0xFF5F6B66); // texto de apoio no claro
+  static const neutralSoft = Color(0xFFD3D9D6); // indicador inativo, divisórias
 }

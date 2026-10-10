@@ -26,6 +26,31 @@ abstract final class BrandFonts {
     letterSpacing: 2.4,
   );
 
+  /// Título de tela (onboarding). Medido no frame 390x844.
+  // letterSpacing 0 explícito: sem ele o Text herda o 0.25 do bodyMedium do
+  // Material 3 e as linhas quebram em lugares diferentes do Figma.
+  static final heading = sans(
+    fontSize: 28,
+    fontWeight: semiBold,
+    height: 1.3,
+    letterSpacing: 0,
+  );
+
+  /// Texto corrido de apoio.
+  static final body = sans(
+    fontSize: 16,
+    fontWeight: regular,
+    height: 1.6,
+    letterSpacing: 0,
+  );
+
+  /// Rótulo de botão e link.
+  static final label = sans(
+    fontSize: 16,
+    fontWeight: semiBold,
+    letterSpacing: 0,
+  );
+
   /// Legenda pequena, como a localização no rodapé da splash.
   static final caption = mono(
     fontSize: 10,

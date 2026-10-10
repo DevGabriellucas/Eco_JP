@@ -54,6 +54,16 @@ Cores extraídas das telas do Figma, fixas (não mudam com o tema).
 | `textPrimary` | `#F6F8F7` | Títulos, texto de campos e botões sobre fundo escuro |
 | `textSecondary` | `#C7D0CB` | Subtítulos e texto de apoio |
 | `textTertiary` | `#FFFFFF80` | Rodapés e legendas (branco 50%) |
+| `primary` | `#087F5B` | Botão primário e links sobre fundo claro |
+| `onPrimary` | `#FFFFFF` | Texto sobre `primary` |
+| `surfaceLight` | `#FFFFFF` | Sheet / cartão claro |
+| `primarySoft` | `#E8F3EE` | Fundo de ícone sobre claro |
+| `textOnLight` | `#1A2420` | Títulos sobre claro |
+| `textOnLightMuted` | `#5F6B66` | Texto de apoio sobre claro |
+| `neutralSoft` | `#D3D9D6` | Indicador inativo, divisórias |
+
+As sete últimas foram estimadas na imagem do onboarding (só `primary` saiu de um SVG do
+Figma); confira no Figma.
 
 **Regra:** telas usam `context.pal.<token>` para neutros, `AppColors.<token>` para acento
 e `BrandColors.<token>` para a paleta do Figma. Nunca hex solto.
@@ -79,6 +89,9 @@ e `BrandColors.<token>` para a paleta do Figma. Nunca hex solto.
 |---|---|---|
 | `BrandFonts.tagline` | Plex Mono 500, 10, espaçamento 2,4 | Frase curta em caixa alta ("NATUREZA CONECTADA") |
 | `BrandFonts.caption` | Plex Mono 400, 10, espaçamento 1,0 | Legendas (localização na splash) |
+| `BrandFonts.heading` | Inter 600, 28, altura 1,3 | Título de tela (onboarding) |
+| `BrandFonts.body` | Inter 400, 16, altura 1,6 | Texto corrido de apoio |
+| `BrandFonts.label` | Inter 600, 16 | Botões e links |
 
   Os valores foram medidos na imagem do Figma, não lidos do arquivo; ajuste quando tiver os
   números exatos.
