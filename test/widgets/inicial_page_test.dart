@@ -1,4 +1,5 @@
 import 'package:eco_jp/pages/inicial_page.dart';
+import 'package:eco_jp/theme/app_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -66,6 +67,34 @@ void main() {
     // 3 no topo + o ícone do slide visível (o PageView só monta o atual).
     expect(find.byType(SvgPicture), findsNWidgets(4));
   });
+
+  // Regressão: a trilha ficava numa caixa começando a 23% do topo com
+  // BoxFit.cover; em tela baixa o cover cortava o topo do SVG na borda da
+  // caixa e a trilha terminava "no ar". Agora ela tem a proporção natural do
+  // SVG, na largura da tela, apoiada no sheet.
+  for (final tamanho in const [Size(412, 732), Size(390, 844)]) {
+    testWidgets('trilha inteira, na largura da tela e sobre o sheet: $tamanho',
+        (tester) async {
+      await montar(tester, tamanho);
+
+      final trilha = tester.getRect(find.byWidgetPredicate(
+        (w) =>
+            w is SvgPicture &&
+            w.bytesLoader is SvgAssetLoader &&
+            (w.bytesLoader as SvgAssetLoader).assetName ==
+                AppIllustrations.initialPageBranch,
+      ));
+      final topoDoSheet = tester.getRect(find.byType(PageView)).top - 31;
+
+      expect(trilha.width, closeTo(tamanho.width, 0.5));
+      expect(trilha.height, closeTo(tamanho.width * 280 / 360, 0.5));
+      expect(trilha.bottom, closeTo(topoDoSheet, 0.5));
+
+      final logo = tester.getRect(find.bySemanticsLabel('ecohub'));
+      expect(logo.top, greaterThanOrEqualTo(0));
+      expect(logo.bottom, lessThan(topoDoSheet));
+    });
+  }
 
   const tamanhos = {
     'pequeno 360x640': Size(360, 640),

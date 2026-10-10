@@ -89,8 +89,8 @@ e `BrandColors.<token>` para a paleta do Figma. Nunca hex solto.
 |---|---|---|
 | `BrandFonts.tagline` | Plex Mono 500, 10, espaçamento 2,4 | Frase curta em caixa alta ("NATUREZA CONECTADA") |
 | `BrandFonts.caption` | Plex Mono 400, 10, espaçamento 1,0 | Legendas (localização na splash) |
-| `BrandFonts.heading` | Inter 600, 28, altura 1,3 | Título de tela (onboarding) |
-| `BrandFonts.body` | Inter 400, 16, altura 1,6 | Texto corrido de apoio |
+| `BrandFonts.heading` | Inter 600, 30, altura 1,3 | Título de tela (onboarding) |
+| `BrandFonts.body` | Inter 400, 17, altura 1,5 | Texto corrido de apoio |
 | `BrandFonts.label` | Inter 600, 16 | Botões e links |
 
   Os valores foram medidos na imagem do Figma, não lidos do arquivo; ajuste quando tiver os

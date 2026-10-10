@@ -29,8 +29,10 @@ abstract final class BrandFonts {
   /// Título de tela (onboarding). Medido no frame 390x844.
   // letterSpacing 0 explícito: sem ele o Text herda o 0.25 do bodyMedium do
   // Material 3 e as linhas quebram em lugares diferentes do Figma.
+  // 30 e 17: comparando a largura das linhas no mockup com um print do app
+  // (Inter real), 28/16 ficavam ~7% menores que o Figma.
   static final heading = sans(
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: semiBold,
     height: 1.3,
     letterSpacing: 0,
@@ -38,9 +40,9 @@ abstract final class BrandFonts {
 
   /// Texto corrido de apoio.
   static final body = sans(
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: regular,
-    height: 1.6,
+    height: 1.5,
     letterSpacing: 0,
   );
 

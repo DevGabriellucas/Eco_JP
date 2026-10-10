@@ -133,18 +133,20 @@ class _Topo extends StatelessWidget {
                 errorBuilder: _vazioErro,
               ),
             ),
-            // No mockup a trilha começa a ~23% da altura do topo e encosta
-            // no sheet.
+            // Trilha na largura da tela, com a proporção do próprio SVG,
+            // apoiada no sheet. Se não couber, o Stack corta na borda de
+            // cima da tela e a trilha "sai" da tela como no mockup. Antes ela
+            // ficava numa caixa a partir de 23% do topo com cover, e em tela
+            // baixa era cortada no meio do verde, terminando no ar.
             Positioned(
               left: 0,
               right: 0,
-              top: c.maxHeight * 0.23,
               bottom: 0,
-              child: const RepaintBoundary(
+              child: RepaintBoundary(
                 child: SvgPicture(
-                  SvgAssetLoader(AppIllustrations.initialPageBranch),
-                  fit: BoxFit.cover,
-                  alignment: Alignment.bottomCenter,
+                  const SvgAssetLoader(AppIllustrations.initialPageBranch),
+                  width: c.maxWidth,
+                  fit: BoxFit.fitWidth,
                   excludeFromSemantics: true,
                   placeholderBuilder: _vazio,
                   errorBuilder: _vazioErro,
@@ -201,11 +203,13 @@ class _Sheet extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
+          // Sem padding embaixo: a área de toque do link (48 dp) e a SafeArea
+          // já dão o respiro; com mais 8 o link ficava longe da borda.
           padding: const EdgeInsets.fromLTRB(
             _margemLateral,
             31,
             _margemLateral,
-            8,
+            0,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
