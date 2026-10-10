@@ -42,12 +42,16 @@ abstract final class AppIcons {
 abstract final class AppIllustrations {
   static const _dir = 'assets/icons/illustrations';
 
+  /// Curvas de nível em tela cheia (frame 360x800 do Figma). Preferir a
+  /// [stylePattern], que é um recorte pequeno e fica ampliado demais.
+  static const contourLines = '$_dir/contour_lines.svg';
   static const emailBranch = '$_dir/email_branch.svg';
   static const initialPageBranch = '$_dir/initial_page_branch.svg';
   static const splashBottom = '$_dir/splash_bottom.svg';
   static const stylePattern = '$_dir/style_pattern.svg';
 
   static const todos = [
+    contourLines,
     emailBranch,
     initialPageBranch,
     splashBottom,

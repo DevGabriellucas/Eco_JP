@@ -54,6 +54,30 @@ void main() {
     });
   }
 
+  // Regressão: a SafeArea era filha não posicionada do Stack, a Column
+  // ficava com a largura do filho mais largo e tudo colava à esquerda.
+  for (final tamanho in const [
+    Size(360, 800),
+    Size(320, 568),
+    Size(800, 1280),
+  ]) {
+    testWidgets('conteúdo centralizado na horizontal: $tamanho',
+        (tester) async {
+      await _montar(tester, tamanho);
+      final centro = tamanho.width / 2;
+      final svgs = find.byType(SvgPicture);
+      // Índices 1 e 2: logo e régua (o 0 é o fundo, que cobre a tela).
+      for (final alvo in [
+        svgs.at(1),
+        svgs.at(2),
+        find.text('NATUREZA CONECTADA'),
+        find.textContaining('JOÃO PESSOA'),
+      ]) {
+        expect(tester.getCenter(alvo).dx, closeTo(centro, 1.0));
+      }
+    });
+  }
+
   testWidgets('entrada animada termina visível', (tester) async {
     await _montar(tester, const Size(360, 800));
     final fade = tester.widget<FadeTransition>(

@@ -54,7 +54,7 @@ class _SplashPageState extends State<SplashPage>
   Future<void> _mostrarQuandoPronto() async {
     try {
       await Future.wait([
-        precacheSvg(AppIllustrations.stylePattern),
+        precacheSvg(AppIllustrations.contourLines),
         precacheSvg(AppLogos.ecohub),
         precacheSvg(AppIllustrations.splashBottom),
         GoogleFonts.pendingFonts([BrandFonts.tagline, BrandFonts.caption]),
@@ -117,14 +117,17 @@ class _SplashPageState extends State<SplashPage>
         backgroundColor: BrandColors.brandDeep,
         body: FadeTransition(
           opacity: _entrada,
+          // StackFit.expand: sem ele a SafeArea (filha não posicionada)
+          // recebia restrições folgadas, a Column ficava com a largura do
+          // filho mais largo e o conteúdo colava à esquerda.
           child: Stack(
+            fit: StackFit.expand,
             children: [
-              Positioned.fill(
-                child: RepaintBoundary(
-                  child: SvgPicture.asset(
-                    AppIllustrations.stylePattern,
-                    fit: BoxFit.cover,
-                  ),
+              RepaintBoundary(
+                child: SvgPicture.asset(
+                  AppIllustrations.contourLines,
+                  fit: BoxFit.cover,
+                  excludeFromSemantics: true,
                 ),
               ),
               SafeArea(

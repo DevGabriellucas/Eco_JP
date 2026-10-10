@@ -121,10 +121,13 @@ class _Topo extends StatelessWidget {
         return Stack(
           fit: StackFit.expand,
           children: [
+            // Fundo em tela cheia alinhado pelo topo: o topo da tela é o topo
+            // do frame do Figma, então a escala fica perto de 1x.
             const RepaintBoundary(
               child: SvgPicture(
-                SvgAssetLoader(AppIllustrations.stylePattern),
+                SvgAssetLoader(AppIllustrations.contourLines),
                 fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
                 excludeFromSemantics: true,
                 placeholderBuilder: _vazio,
                 errorBuilder: _vazioErro,
