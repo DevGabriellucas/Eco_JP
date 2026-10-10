@@ -124,6 +124,7 @@ void main() {
     'frame 360x800': Size(360, 800),
     'tablet 800x1280': Size(800, 1280),
     'paisagem 800x360': Size(800, 360),
+    'paisagem baixa 640x320': Size(640, 320),
   };
 
   for (final MapEntry(key: nome, value: tamanho) in tamanhos.entries) {

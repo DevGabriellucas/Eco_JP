@@ -37,6 +37,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _isLoading = false;
   bool _isLoadingGoogle = false;
   bool _senhaVisivel = false;
+  // Borda vermelha nos campos só para erro de e-mail/senha; erro do login
+  // Google aparece no texto, mas não marca a senha.
+  bool _erroCredenciais = false;
   String? _errorMessage;
 
   bool get _ocupado => _isLoading || _isLoadingGoogle;
@@ -52,6 +55,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() {
       _isLoadingGoogle = true;
       _errorMessage = null;
+      _erroCredenciais = false;
     });
 
     final result = await ref.read(authServiceProvider).loginGoogle();
@@ -72,6 +76,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _erroCredenciais = false;
     });
 
     final result = await ref
@@ -86,6 +91,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _isLoading = false;
       if (!result.success) {
         _errorMessage = result.message ?? 'Erro ao fazer login';
+        _erroCredenciais = true;
       }
     });
   }
@@ -100,6 +106,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             return AlertDialog(
+              // Diálogo abre fora da árvore da tela (sem o limite de fonte):
+              // com fonte grande e teclado aberto o conteúdo não cabia.
+              scrollable: true,
               backgroundColor: BrandColors.surfaceLight,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -209,7 +218,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
-        maxScaleFactor: 1.3,
+        maxScaleFactor: 2.0,
         child: Scaffold(
           backgroundColor: BrandColors.surfaceLight,
           body: Stack(
@@ -222,7 +231,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 child: RepaintBoundary(
                   child: SvgPicture.asset(
                     AppIllustrations.contourLinesLight,
-                    width: largura * 320 / 360,
+                    // Teto de 480 de referência: em tablet o desenho ficava 2,2x
+                    // maior, com traço grosso.
+                    width: (largura < 480 ? largura : 480) * 320 / 360,
                     excludeFromSemantics: true,
                   ),
                 ),
@@ -330,7 +341,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         style: estiloCampoMarca,
                         decoration: decoracaoCampoMarca(
                           hint: 'Sua senha',
-                          erro: _errorMessage != null,
+                          erro: _erroCredenciais,
                           sufixo: IconButton(
                             tooltip: _senhaVisivel
                                 ? 'Ocultar senha'

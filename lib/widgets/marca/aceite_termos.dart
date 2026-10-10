@@ -51,6 +51,10 @@ class _AceiteTermosState extends State<AceiteTermos> {
 
     return InkWell(
       onTap: onChanged == null ? null : () => onChanged(!widget.valor),
+      // O toque na linha é só atalho visual; para o leitor de tela quem
+      // marca é o Checkbox (com rótulo). Antes a linha virava um "botão"
+      // sem nome, anunciado junto com a caixa.
+      excludeFromSemantics: true,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -61,6 +65,8 @@ class _AceiteTermosState extends State<AceiteTermos> {
               height: 24,
               child: Checkbox(
                 value: widget.valor,
+                semanticLabel:
+                    'Aceito a Política de Privacidade e os Termos de Uso',
                 onChanged:
                     onChanged == null ? null : (v) => onChanged(v ?? false),
                 activeColor: BrandColors.primary,

@@ -82,7 +82,7 @@ class _InicialPageState extends State<InicialPage> {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
-        maxScaleFactor: 1.3,
+        maxScaleFactor: 2.0,
         child: Scaffold(
           backgroundColor: BrandColors.brandDeep,
           body: LayoutBuilder(

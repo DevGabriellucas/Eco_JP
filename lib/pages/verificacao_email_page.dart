@@ -37,6 +37,12 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
   int _cooldown = 0;
   bool _verificando = false;
   bool _enviando = false;
+  bool _saindo = false;
+  bool _confirmado = false;
+
+  // Recarga em andamento, compartilhada: com rede lenta o timer chamava de
+  // novo antes da anterior terminar e as recargas se empilhavam.
+  Future<bool>? _checagem;
 
   @override
   void initState() {
@@ -48,6 +54,11 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
     // anterior. Quem precisar usa "Reenviar".
     // O status de verificação não chega pelo authStateChanges, então checamos
     // periodicamente enquanto a tela está aberta.
+    _iniciarPoll();
+  }
+
+  void _iniciarPoll() {
+    _poll?.cancel();
     _poll = Timer.periodic(
       const Duration(seconds: 4),
       (_) => _checarVerificacao(silencioso: true),
@@ -58,8 +69,19 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
   // esperar o próximo ciclo do timer.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checarVerificacao(silencioso: true);
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_confirmado) return;
+        _checarVerificacao(silencioso: true);
+        _iniciarPoll();
+      // Em segundo plano não consulta a rede (bateria e dados); volta a
+      // conferir quando o app reabre.
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        _poll?.cancel();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        break;
     }
   }
 
@@ -99,10 +121,13 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
   Future<void> _checarVerificacao({bool silencioso = false}) async {
     if (_verificando) return;
     if (!silencioso) setState(() => _verificando = true);
-    final ok = await _authService.recarregarEVerificarEmail();
+    final ok = await (_checagem ??= _authService
+        .recarregarEVerificarEmail()
+        .whenComplete(() => _checagem = null));
     if (!mounted) return;
     if (!silencioso) setState(() => _verificando = false);
     if (ok) {
+      _confirmado = true;
       _poll?.cancel();
       // O e-mail confirmado não chega pelo authStateChanges; invalidar o
       // provider força uma nova emissão com emailVerified=true e o redirect
@@ -120,9 +145,16 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
   }
 
   Future<void> _sair() async {
+    if (_saindo) return;
+    // Um toque só: antes um segundo toque chamava o logout de novo.
+    setState(() => _saindo = true);
     _poll?.cancel();
     // O logout emite null no authStateChanges e o redirect leva à tela inicial.
-    await _authService.sair();
+    try {
+      await _authService.sair();
+    } finally {
+      if (mounted) setState(() => _saindo = false);
+    }
   }
 
   @override
@@ -136,7 +168,7 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
-        maxScaleFactor: 1.3,
+        maxScaleFactor: 2.0,
         child: Scaffold(
           backgroundColor: BrandColors.surfaceLight,
           body: CorpoRolavel(
@@ -193,7 +225,7 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
         ),
         const SizedBox(height: 8),
         TextButton(
-          onPressed: _sair,
+          onPressed: _saindo ? null : _sair,
           style: TextButton.styleFrom(
             foregroundColor: BrandColors.primary,
             minimumSize: const Size(48, 48),

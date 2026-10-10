@@ -14,6 +14,16 @@ class _AuthFalso extends Fake implements AuthService {
     tentativas++;
     return AuthResult(success: false, message: 'Email ou senha inválidos.');
   }
+
+  @override
+  Future<AuthResult> loginGoogle() async =>
+      AuthResult(success: false, message: 'Login cancelado.');
+}
+
+/// Cor da borda do campo de senha quando não está focado.
+Color? _bordaSenha(WidgetTester tester) {
+  final campo = tester.widget<TextField>(find.byType(TextField).at(1));
+  return campo.decoration?.enabledBorder?.borderSide.color;
 }
 
 void main() {
@@ -72,6 +82,44 @@ void main() {
     expect(find.byTooltip('Ocultar senha'), findsOneWidget);
   });
 
+  testWidgets('erro do Google não deixa a senha com borda de erro',
+      (tester) async {
+    await montar(tester);
+    final bordaNormal = _bordaSenha(tester);
+
+    await tester.ensureVisible(find.text('Logar com Google'));
+    await tester.tap(find.text('Logar com Google'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Login cancelado.'), findsOneWidget);
+    expect(_bordaSenha(tester), bordaNormal);
+  });
+
+  testWidgets('erro de senha marca o campo', (tester) async {
+    await montar(tester);
+    final bordaNormal = _bordaSenha(tester);
+    await tester.tap(find.text('Logar'));
+    await tester.pumpAndSettle();
+    expect(_bordaSenha(tester), isNot(bordaNormal));
+  });
+
+  testWidgets('diálogo de recuperar senha não estoura com fonte e teclado',
+      (tester) async {
+    // O diálogo abre fora da tela, com a fonte do sistema sem limite.
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await montar(tester, tamanho: const Size(360, 640));
+
+    await tester.ensureVisible(find.text('Esqueceu a senha?'));
+    await tester.tap(find.text('Esqueceu a senha?'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recuperar senha'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('falha no login mostra a mensagem uma vez', (tester) async {
     await montar(tester);
     await tester.enterText(find.byType(TextField).at(0), 'a@b.com');
@@ -120,6 +168,7 @@ void main() {
     'frame 360x800': Size(360, 800),
     'alto 412x915': Size(412, 915),
     'paisagem 800x360': Size(800, 360),
+    'paisagem baixa 640x320': Size(640, 320),
   };
 
   for (final MapEntry(key: nome, value: tamanho) in tamanhos.entries) {

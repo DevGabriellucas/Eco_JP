@@ -71,6 +71,17 @@ const _topicos = [
 class _ConsentimentoPageState extends State<ConsentimentoPage> {
   bool _aceito = false;
   bool _processando = false;
+  bool _saindo = false;
+
+  /// Um toque só: antes um segundo toque chamava o logout de novo.
+  Future<void> _recusar() async {
+    setState(() => _saindo = true);
+    try {
+      await widget.onRecusar();
+    } finally {
+      if (mounted) setState(() => _saindo = false);
+    }
+  }
 
   void _abrirDocumento(String titulo, String conteudo) {
     Navigator.of(context).push(
@@ -104,7 +115,7 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
-        maxScaleFactor: 1.3,
+        maxScaleFactor: 2.0,
         child: Scaffold(
           backgroundColor: BrandColors.surfaceLight,
           body: SafeArea(
@@ -115,25 +126,38 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                   margemMinima: MedidasMarca.margemLateral,
                   larguraMaxima: MedidasMarca.larguraMaxConteudo,
                 );
+                final explicacao = Padding(
+                  padding: EdgeInsets.fromLTRB(margem, 24, margem, 16),
+                  child: const _Explicacao(),
+                );
+                const divisoria = Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: BrandColors.neutralSoft,
+                );
+                final acoes = Padding(
+                  padding: EdgeInsets.fromLTRB(margem, 12, margem, 8),
+                  child: _acoes(),
+                );
+
+                // Tela baixa (paisagem, fonte grande): a área de aceite fixa
+                // não caberia (estourava em 640x320 com fonte 2x), então a
+                // página inteira rola.
+                if (c.maxHeight < 560) {
+                  return SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [explicacao, divisoria, acoes],
+                    ),
+                  );
+                }
+                // Normal: a explicação rola; aceite e botões ficam fixos.
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // A explicação rola; aceite e botões ficam fixos embaixo.
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: EdgeInsets.fromLTRB(margem, 24, margem, 16),
-                        child: const _Explicacao(),
-                      ),
-                    ),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: BrandColors.neutralSoft,
-                    ),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(margem, 12, margem, 8),
-                      child: _acoes(),
-                    ),
+                    Expanded(child: SingleChildScrollView(child: explicacao)),
+                    divisoria,
+                    acoes,
                   ],
                 );
               },
@@ -165,7 +189,7 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
         ),
         const SizedBox(height: 4),
         TextButton(
-          onPressed: _processando ? null : widget.onRecusar,
+          onPressed: (_processando || _saindo) ? null : _recusar,
           style: TextButton.styleFrom(
             foregroundColor: BrandColors.textOnLight,
             minimumSize: const Size(48, 48),

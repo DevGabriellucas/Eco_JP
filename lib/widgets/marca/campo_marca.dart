@@ -17,20 +17,35 @@ class CampoMarca extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // O leitor de tela anuncia o campo com o rótulo ("Email, campo de
+    // texto"); sem isso ele só lia o hint, que some quando há texto. Não é
+    // MergeSemantics: ele engoliria o botão do olho que fica dentro do campo
+    // de senha.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          rotulo,
-          style: BrandFonts.caption.copyWith(
-            letterSpacing: 1.5,
-            color: BrandColors.textOnLight,
+        ExcludeSemantics(
+          child: Text(
+            rotulo,
+            style: BrandFonts.caption.copyWith(
+              letterSpacing: 1.5,
+              color: BrandColors.textOnLight,
+            ),
           ),
         ),
         const SizedBox(height: 8),
-        child,
+        Semantics(label: _rotuloFalado, child: child),
       ],
     );
+  }
+
+  /// "REPETIR SENHA" → "Repetir senha": em caixa alta alguns leitores
+  /// soletram a palavra.
+  String get _rotuloFalado {
+    final minusculo = rotulo.toLowerCase();
+    return minusculo.isEmpty
+        ? minusculo
+        : minusculo[0].toUpperCase() + minusculo.substring(1);
   }
 }
 

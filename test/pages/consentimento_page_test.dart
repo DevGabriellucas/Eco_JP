@@ -29,7 +29,12 @@ void main() {
           ),
           child: ConsentimentoPage(
             onAceitar: () async => aceites++,
-            onRecusar: () async => recusas++,
+            // Logout leva um tempo: um segundo toque nesse intervalo não
+            // pode chamar de novo.
+            onRecusar: () async {
+              recusas++;
+              await Future<void>.delayed(const Duration(milliseconds: 500));
+            },
           ),
         ),
       ),
@@ -66,10 +71,12 @@ void main() {
     expect(aceites, 1);
   });
 
-  testWidgets('"Não concordo" chama onRecusar', (tester) async {
+  testWidgets('"Não concordo" chama onRecusar uma vez só', (tester) async {
     await montar(tester);
     await tester.tap(find.text('Não concordo / sair'));
     await tester.pump();
+    await tester.tap(find.text('Não concordo / sair'));
+    await tester.pump(const Duration(seconds: 1));
     expect(recusas, 1);
   });
 
@@ -78,6 +85,7 @@ void main() {
     'frame 360x800': Size(360, 800),
     'tablet 800x1280': Size(800, 1280),
     'paisagem 800x360': Size(800, 360),
+    'paisagem baixa 640x320': Size(640, 320),
   };
 
   for (final MapEntry(key: nome, value: tamanho) in tamanhos.entries) {
