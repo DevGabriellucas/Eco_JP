@@ -7,10 +7,18 @@ import 'package:go_router/go_router.dart';
 import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../theme/app_icons.dart';
-import '../theme/app_theme.dart';
 import '../theme/brand_colors.dart';
 import '../theme/brand_fonts.dart';
-import '../utils/margem_responsiva.dart';
+import '../widgets/marca/botao_primario.dart';
+import '../widgets/marca/botao_secundario.dart';
+import '../widgets/marca/botao_voltar.dart';
+import '../widgets/marca/campo_marca.dart';
+import '../widgets/marca/corpo_rolavel.dart';
+import '../widgets/marca/icone_svg.dart';
+import '../widgets/marca/indicador_carregando.dart';
+import '../widgets/marca/medidas_marca.dart';
+import '../widgets/marca/rodape_link.dart';
+import '../widgets/marca/texto_erro.dart';
 
 /// Login por e-mail/senha ou Google. Depois do login quem navega é o
 /// redirect do router (home, verificação de e-mail ou consentimento).
@@ -22,13 +30,6 @@ class LoginPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
 }
-
-const _margem = 24.0;
-// Em tablet e paisagem o formulário não estica: coluna de até 440 dp,
-// centralizada.
-const _larguraMaxConteudo = 440.0;
-const _raio = 12.0;
-const _alturaBotao = 52.0;
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _emailController = TextEditingController();
@@ -127,8 +128,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     autofocus: true,
-                    style: _estiloCampo,
-                    decoration: _decoracaoCampo(hint: 'seu@email.com'),
+                    style: estiloCampoMarca,
+                    decoration: decoracaoCampoMarca(hint: 'seu@email.com'),
                   ),
                 ],
               ),
@@ -178,12 +179,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     foregroundColor: BrandColors.onPrimary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(_raio),
+                      borderRadius: BorderRadius.circular(MedidasMarca.raio),
                     ),
                     textStyle: BrandFonts.label.copyWith(fontSize: 14),
                   ),
                   child: enviando
-                      ? const _Carregando(cor: BrandColors.onPrimary)
+                      ? const IndicadorCarregando(cor: BrandColors.onPrimary)
                       : const Text('Enviar'),
                 ),
               ],
@@ -196,16 +197,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     // Descarta o controller só depois do fechamento do diálogo terminar,
     // pelo mesmo motivo do unfocus acima.
     WidgetsBinding.instance.addPostFrameCallback((_) => emailCtrl.dispose());
-  }
-
-  void _voltar() {
-    // Veio da inicial por push: volta para ela no mesmo slide. Sem tela
-    // anterior (link externo, redirect), vai para a inicial.
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go(Routes.inicial);
-    }
   }
 
   @override
@@ -236,29 +227,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 ),
               ),
-              SafeArea(
-                child: LayoutBuilder(
-                  // Altura mínima = tela: o rodapé fica no pé quando sobra
-                  // espaço e rola junto quando não cabe (teclado, tela
-                  // baixa). Antes era SliverFillRemaining, que mede a altura
-                  // intrínseca do formulário inteiro a cada layout — a cada
-                  // frame da animação do teclado.
-                  builder: (context, c) => SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: c.maxHeight),
-                      child: _conteudo(
-                        largura,
-                        margemResponsiva(
-                          c.maxWidth,
-                          margemMinima: _margem,
-                          larguraMaxima: _larguraMaxConteudo,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              CorpoRolavel(
+                builder: (context, margem) => _conteudo(largura, margem),
               ),
             ],
           ),
@@ -275,9 +245,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _formulario(largura, margem),
-        const Padding(
-          padding: EdgeInsets.only(top: 24, bottom: 8),
-          child: _RodapeCadastro(),
+        Padding(
+          padding: const EdgeInsets.only(top: 24, bottom: 8),
+          child: RodapeLink(
+            pergunta: 'Não tem conta?',
+            acao: 'Cadastre-se',
+            onPressed: () => context.push(Routes.cadastro),
+          ),
         ),
       ],
     );
@@ -292,19 +266,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           child: Padding(
             // O IconButton tem 12 de folga interna: a seta fica na margem.
             padding: EdgeInsets.only(left: margem - 12, top: 4),
-            child: IconButton(
-              tooltip: 'Voltar',
-              onPressed: _voltar,
-              icon: SvgPicture.asset(
-                AppIcons.arrowBack,
-                width: 24,
-                height: 24,
-                colorFilter: const ColorFilter.mode(
-                  BrandColors.textOnLight,
-                  BlendMode.srcIn,
-                ),
-              ),
-            ),
+            child: const BotaoVoltar(rotaSemAnterior: Routes.inicial),
           ),
         ),
         Padding(
@@ -341,7 +303,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _Campo(
+                    CampoMarca(
                       rotulo: 'EMAIL',
                       child: TextField(
                         controller: _emailController,
@@ -349,15 +311,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         textInputAction: TextInputAction.next,
                         autofillHints: const [AutofillHints.email],
                         autocorrect: false,
-                        style: _estiloCampo,
-                        decoration: _decoracaoCampo(
+                        style: estiloCampoMarca,
+                        decoration: decoracaoCampoMarca(
                           hint: 'seu@email.com',
                           prefixo: AppIcons.message,
                         ),
                       ),
                     ),
                     const SizedBox(height: 22),
-                    _Campo(
+                    CampoMarca(
                       rotulo: 'SENHA',
                       child: TextField(
                         controller: _passwordController,
@@ -365,8 +327,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         textInputAction: TextInputAction.done,
                         autofillHints: const [AutofillHints.password],
                         onSubmitted: (_) => _handleLogin(),
-                        style: _estiloCampo,
-                        decoration: _decoracaoCampo(
+                        style: estiloCampoMarca,
+                        decoration: decoracaoCampoMarca(
                           hint: 'Sua senha',
                           erro: _errorMessage != null,
                           sufixo: IconButton(
@@ -376,7 +338,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             onPressed: () =>
                                 setState(() => _senhaVisivel = !_senhaVisivel),
                             // Só existe o ícone de olho fechado nos assets.
-                            icon: const _IconeSvg(AppIcons.eyeClosed),
+                            icon: const IconeSvg(AppIcons.eyeClosed),
                           ),
                         ),
                       ),
@@ -387,14 +349,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               if (_errorMessage != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    _errorMessage!,
-                    style: BrandFonts.body.copyWith(
-                      fontSize: 13,
-                      height: 1.4,
-                      color: AppColors.danger,
-                    ),
-                  ),
+                  child: TextoErro(_errorMessage!),
                 ),
               const SizedBox(height: 4),
               Align(
@@ -411,126 +366,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
               ),
               const SizedBox(height: 8),
-              ElevatedButton(
+              BotaoPrimario(
+                texto: 'Logar',
+                carregando: _isLoading,
                 // Desabilitado também durante o login Google (dois logins em
                 // paralelo).
                 onPressed: _ocupado ? null : _handleLogin,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: BrandColors.primary,
-                  foregroundColor: BrandColors.onPrimary,
-                  disabledBackgroundColor:
-                      BrandColors.primary.withValues(alpha: 0.6),
-                  disabledForegroundColor: BrandColors.onPrimary,
-                  minimumSize: const Size.fromHeight(_alturaBotao),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(_raio),
-                  ),
-                  textStyle: BrandFonts.label,
-                ),
-                child: _isLoading
-                    ? const _Carregando(cor: BrandColors.onPrimary)
-                    : const Text('Logar'),
               ),
               const SizedBox(height: 20),
               const _Divisor(),
               const SizedBox(height: 20),
-              _BotaoGoogle(
+              BotaoSecundario(
+                texto: 'Logar com Google',
                 carregando: _isLoadingGoogle,
                 onPressed: _ocupado ? null : _handleLoginGoogle,
+                icone: SvgPicture.asset(
+                  AppLogos.google,
+                  width: 20,
+                  height: 20,
+                  excludeFromSemantics: true,
+                ),
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
-}
-
-final _estiloCampo = BrandFonts.body.copyWith(
-  fontSize: 16,
-  height: 1.25,
-  color: BrandColors.textOnLight,
-);
-
-InputDecoration _decoracaoCampo({
-  required String hint,
-  String? prefixo,
-  Widget? sufixo,
-  bool erro = false,
-}) {
-  OutlineInputBorder borda(Color cor, double largura) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_raio),
-        borderSide: BorderSide(color: cor, width: largura),
-      );
-
-  return InputDecoration(
-    hintText: hint,
-    hintStyle: _estiloCampo.copyWith(color: BrandColors.textOnLightMuted),
-    filled: true,
-    fillColor: BrandColors.surfaceLight,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-    prefixIcon: prefixo == null
-        ? null
-        : Padding(
-            padding: const EdgeInsets.only(left: 16, right: 12),
-            child: _IconeSvg(prefixo),
-          ),
-    prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-    suffixIcon: sufixo,
-    enabledBorder: borda(
-      erro ? AppColors.danger : BrandColors.neutralSoft,
-      1,
-    ),
-    focusedBorder: borda(
-      erro ? AppColors.danger : BrandColors.primary,
-      1.5,
-    ),
-  );
-}
-
-/// Ícone dos campos: os SVGs vêm do Figma claros (para fundo escuro); aqui o
-/// fundo é branco, então pinta com o cinza de apoio.
-class _IconeSvg extends StatelessWidget {
-  const _IconeSvg(this.asset);
-
-  final String asset;
-
-  @override
-  Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      asset,
-      width: 20,
-      height: 20,
-      excludeFromSemantics: true,
-      colorFilter: const ColorFilter.mode(
-        BrandColors.textOnLightMuted,
-        BlendMode.srcIn,
-      ),
-    );
-  }
-}
-
-class _Campo extends StatelessWidget {
-  const _Campo({required this.rotulo, required this.child});
-
-  final String rotulo;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          rotulo,
-          style: BrandFonts.caption.copyWith(
-            letterSpacing: 1.5,
-            color: BrandColors.textOnLight,
-          ),
-        ),
-        const SizedBox(height: 8),
-        child,
       ],
     );
   }
@@ -555,96 +414,6 @@ class _Divisor extends StatelessWidget {
         ),
         const Expanded(child: Divider(color: BrandColors.neutralSoft)),
       ],
-    );
-  }
-}
-
-class _BotaoGoogle extends StatelessWidget {
-  const _BotaoGoogle({required this.carregando, required this.onPressed});
-
-  final bool carregando;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        backgroundColor: BrandColors.surfaceLight,
-        foregroundColor: BrandColors.textOnLight,
-        side: const BorderSide(color: BrandColors.neutralSoft),
-        minimumSize: const Size.fromHeight(_alturaBotao),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(_raio),
-        ),
-        textStyle: BrandFonts.label.copyWith(fontSize: 15),
-      ),
-      child: carregando
-          ? const _Carregando(cor: BrandColors.textOnLight)
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SvgPicture.asset(
-                  AppLogos.google,
-                  width: 20,
-                  height: 20,
-                  excludeFromSemantics: true,
-                ),
-                const SizedBox(width: 12),
-                const Flexible(
-                  child: Text(
-                    'Logar com Google',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-}
-
-class _RodapeCadastro extends StatelessWidget {
-  const _RodapeCadastro();
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text(
-          'Não tem conta?',
-          style: BrandFonts.body.copyWith(
-            fontSize: 15,
-            color: BrandColors.textOnLightMuted,
-          ),
-        ),
-        TextButton(
-          onPressed: () => context.push(Routes.cadastro),
-          style: TextButton.styleFrom(
-            foregroundColor: BrandColors.primary,
-            minimumSize: const Size(48, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            textStyle: BrandFonts.label.copyWith(fontSize: 15),
-          ),
-          child: const Text('Cadastre-se'),
-        ),
-      ],
-    );
-  }
-}
-
-class _Carregando extends StatelessWidget {
-  const _Carregando({required this.cor});
-
-  final Color cor;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 20,
-      height: 20,
-      child: CircularProgressIndicator(strokeWidth: 2, color: cor),
     );
   }
 }
