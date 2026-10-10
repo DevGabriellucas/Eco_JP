@@ -109,6 +109,12 @@ class _SplashPageState extends State<SplashPage>
       AppIcons.arrowBack,
       AppIcons.message,
       AppIcons.eyeClosed,
+      // Cadastro, confirmação de e-mail e consentimento
+      AppIcons.people,
+      AppIcons.check,
+      AppIcons.send,
+      AppIcons.trash,
+      AppIllustrations.emailBranch,
     ]) {
       unawaited(precacheSvg(svg).catchError((_) {}));
     }

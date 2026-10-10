@@ -1,10 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../features/auth/providers/auth_providers.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_icons.dart';
+import '../theme/brand_colors.dart';
+import '../theme/brand_fonts.dart';
+import '../widgets/marca/botao_primario.dart';
+import '../widgets/marca/botao_secundario.dart';
+import '../widgets/marca/corpo_rolavel.dart';
+import '../widgets/marca/icone_svg.dart';
+import '../widgets/marca/medidas_marca.dart';
 
 /// Tela exibida quando o usuário entrou com e-mail/senha mas ainda não
 /// confirmou o e-mail. Bloqueia o acesso ao app até a confirmação.
@@ -118,123 +127,32 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
 
   @override
   Widget build(BuildContext context) {
-    final pal = context.pal;
     final email = _authService.emailAtual ?? 'seu e-mail';
+    final largura = MediaQuery.sizeOf(context).width;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A1018),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(maxWidth: 420),
-              decoration: BoxDecoration(
-                color: pal.surface,
-                borderRadius: BorderRadius.circular(28),
-              ),
-              padding: const EdgeInsets.all(28),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        systemNavigationBarColor: BrandColors.surfaceLight,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.3,
+        child: Scaffold(
+          backgroundColor: BrandColors.surfaceLight,
+          body: CorpoRolavel(
+            // Três itens com spaceBetween: o bloco de conteúdo fica
+            // centralizado no espaço acima dos botões, que ficam no pé.
+            builder: (context, margem) => Padding(
+              padding: EdgeInsets.fromLTRB(margem, 16, margem, 8),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.mark_email_unread_outlined,
-                    size: 64,
-                    color: pal.ink,
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Confirme seu e-mail',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: pal.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text.rich(
-                    TextSpan(
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: pal.muted,
-                      ),
-                      children: [
-                        const TextSpan(
-                          text: 'Enviamos um link de confirmação para\n',
-                        ),
-                        TextSpan(
-                          text: email,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: pal.ink,
-                          ),
-                        ),
-                        const TextSpan(
-                          text:
-                              '.\n\nAbra o e-mail, toque no link e volte aqui. '
-                              'A tela libera o acesso automaticamente. '
-                              'Não chegou? Confira o spam ou peça outro abaixo.',
-                        ),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed:
-                          _verificando ? null : () => _checarVerificacao(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: pal.ink,
-                        foregroundColor: pal.surface,
-                        disabledBackgroundColor: pal.ink.withValues(alpha: 0.6),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      child: _verificando
-                          ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: pal.surface,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Text('Já confirmei'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: (_cooldown > 0 || _enviando) ? null : _reenviar,
-                    child: Text(
-                      _cooldown > 0
-                          ? 'Reenviar e-mail em ${_cooldown}s'
-                          : 'Reenviar e-mail',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: _cooldown > 0 ? pal.hint : pal.ink,
-                      ),
-                    ),
-                  ),
-                  Divider(height: 24, color: pal.border),
-                  TextButton(
-                    onPressed: _sair,
-                    child: Text(
-                      'Usar outra conta',
-                      style: TextStyle(fontSize: 14, color: pal.muted),
-                    ),
+                  const SizedBox.shrink(),
+                  _Conteudo(email: email, largura: largura),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 32),
+                    child: _acoes(),
                   ),
                 ],
               ),
@@ -242,6 +160,132 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _acoes() {
+    final esperando = _cooldown > 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        BotaoPrimario(
+          texto: 'Já confirmei',
+          carregando: _verificando,
+          onPressed: _verificando ? null : () => _checarVerificacao(),
+          icone: const IconeSvg(
+            AppIcons.check,
+            cor: BrandColors.onPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        BotaoSecundario(
+          texto: esperando
+              ? 'Reenviar e-mail em ${_cooldown}s'
+              : 'Reenviar e-mail',
+          carregando: _enviando,
+          onPressed: (esperando || _enviando) ? null : _reenviar,
+          icone: IconeSvg(
+            AppIcons.send,
+            cor: esperando
+                ? BrandColors.textOnLightMuted
+                : BrandColors.textOnLight,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: _sair,
+          style: TextButton.styleFrom(
+            foregroundColor: BrandColors.primary,
+            minimumSize: const Size(48, 48),
+            textStyle: BrandFonts.label.copyWith(fontSize: 15),
+          ),
+          child: const Text('Usar outra conta'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Ilustração, título, e-mail e aviso. Não depende do estado da tela: o
+/// contador do reenvio reconstrói só os botões.
+class _Conteudo extends StatelessWidget {
+  const _Conteudo({required this.email, required this.largura});
+
+  final String email;
+  final double largura;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: RepaintBoundary(
+            child: SvgPicture.asset(
+              AppIllustrations.emailBranch,
+              width: (largura * 0.67).clamp(200.0, 300.0),
+              excludeFromSemantics: true,
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Confirme seu e-mail',
+          textAlign: TextAlign.center,
+          style: BrandFonts.heading.copyWith(color: BrandColors.textOnLight),
+        ),
+        const SizedBox(height: 12),
+        Text.rich(
+          TextSpan(
+            style: BrandFonts.body.copyWith(
+              fontSize: 16,
+              color: BrandColors.textOnLightMuted,
+            ),
+            children: [
+              const TextSpan(text: 'Enviamos um link de confirmação para\n'),
+              TextSpan(
+                text: email,
+                style: BrandFonts.label.copyWith(
+                  color: BrandColors.textOnLight,
+                ),
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: BrandColors.primarySoft,
+            borderRadius: BorderRadius.circular(MedidasMarca.raio),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 2),
+                child: IconeSvg(
+                  AppIcons.clock,
+                  cor: BrandColors.linkSecondary,
+                  tamanho: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'A tela libera o acesso automaticamente. Não chegou? '
+                  'Confira o spam ou peça outro abaixo.',
+                  style: BrandFonts.body.copyWith(
+                    fontSize: 14,
+                    color: BrandColors.textOnLightMuted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

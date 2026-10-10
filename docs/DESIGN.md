@@ -118,6 +118,22 @@ juntos.
 | Estados de lista (`widgets/feed_states.dart`) | Vazio, carregando e erro com ação de tentar de novo |
 | Aviso de recorte (`widgets/aviso_recorte.dart`) | Quando o limite de 500 registros foi atingido, mostra o total real |
 
+### Componentes de marca (`lib/widgets/marca/`)
+
+Usados nas telas claras do fluxo de entrada (login, cadastro, confirmação de e-mail,
+consentimento). Tela nova desse estilo monta com eles em vez de repetir estilos.
+
+| Componente | Uso |
+|---|---|
+| `CorpoRolavel` | Corpo de formulário: altura mínima da tela, rola quando não cabe, margem responsiva (coluna de até 440 dp em tablet) |
+| `CampoMarca` + `decoracaoCampoMarca` / `estiloCampoMarca` | Rótulo mono em caixa alta + campo branco, raio 12, foco `primary`, erro `danger` |
+| `BotaoPrimario` / `BotaoSecundario` | Ação principal (`primary`) e secundária (contornado), altura 52, com ícone e "carregando" |
+| `BotaoVoltar` | Seta de voltar; sem tela anterior, vai para a rota informada |
+| `AceiteTermos` | Caixa + "Li e aceito a Política… e os Termos…", com links inline |
+| `RodapeLink` | "Pergunta? Ação" no pé da tela |
+| `TextoErro` | Erro de formulário, uma vez só (sem snackbar repetido) |
+| `IconeSvg` | Ícone de `assets/icons/` pintado com um token |
+
 ### Ícones e ilustrações — `lib/theme/app_icons.dart`
 
 | Pasta | Conteúdo | Acesso |
