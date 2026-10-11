@@ -49,7 +49,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
-    - assets/icons/
+    # Subpastas não entram sozinhas: cada uma precisa da sua linha
+    # (caminhos centralizados em lib/theme/app_icons.dart).
+    - assets/icons/ui/
+    - assets/icons/illustrations/
+    - assets/icons/logos/
     # Cronograma de coleta (RotaColetaService). Sem esta linha o arquivo não
     # entra no build e o guia de coleta aparecia vazio sem aviso.
     - assets/data/

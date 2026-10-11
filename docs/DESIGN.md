@@ -41,8 +41,33 @@
 | `hint` | `#8A8A8A` | `#8B938C` | Placeholders |
 | `border` | `#D8DED6` | `#2B322D` | Divisórias e contornos |
 
-**Regra:** telas usam `context.pal.<token>` para neutros e `AppColors.<token>` para acento.
-Nunca hex solto.
+### Paleta do Figma — `BrandColors` (`lib/theme/brand_colors.dart`)
+
+Cores extraídas das telas do Figma, fixas (não mudam com o tema).
+
+| Token | Hex | Uso |
+|---|---|---|
+| `brandDeep` | `#08382E` | Verde profundo de marca, fundo de destaque |
+| `background` | `#1A2420` | Fundo de tela escuro |
+| `accent` | `#52D5A0` | Botões primários, links, realces |
+| `onAccent` | `#070C0A` | Texto e ícone sobre `accent` |
+| `textPrimary` | `#F6F8F7` | Títulos, texto de campos e botões sobre fundo escuro |
+| `textSecondary` | `#C7D0CB` | Subtítulos e texto de apoio |
+| `textTertiary` | `#FFFFFF80` | Rodapés e legendas (branco 50%) |
+| `primary` | `#087F5B` | Botão primário e links sobre fundo claro |
+| `onPrimary` | `#FFFFFF` | Texto sobre `primary` |
+| `surfaceLight` | `#FFFFFF` | Sheet / cartão claro |
+| `primarySoft` | `#E8F3EE` | Fundo de ícone sobre claro |
+| `textOnLight` | `#1A2420` | Títulos sobre claro |
+| `textOnLightMuted` | `#5F6B66` | Texto de apoio sobre claro |
+| `neutralSoft` | `#D3D9D6` | Indicador inativo, divisórias |
+| `linkSecondary` | `#287894` | Links secundários sobre claro ("Esqueceu a senha?"); valor do Figma |
+
+As sete últimas foram estimadas na imagem do onboarding (só `primary` saiu de um SVG do
+Figma); confira no Figma.
+
+**Regra:** telas usam `context.pal.<token>` para neutros, `AppColors.<token>` para acento
+e `BrandColors.<token>` para a paleta do Figma. Nunca hex solto.
 
 ## 3. Tipografia
 
@@ -50,6 +75,34 @@ Nunca hex solto.
 - **Inter** no corpo e rótulos (`body*`, `label*`) — legibilidade em tela pequena.
 - Definidas no `TextTheme` central: um `Text` que só ajusta tamanho/peso herda a família.
 - App bar: Poppins 18, peso 700, centralizado.
+
+### Fontes do Figma — `BrandFonts` (`lib/theme/brand_fonts.dart`)
+
+- **Inter** (`BrandFonts.sans`) para texto de interface e **IBM Plex Mono**
+  (`BrandFonts.mono`) para números, códigos e rótulos técnicos.
+- Pesos embutidos em `assets/fonts/`: 400 (`regular`), 500 (`medium`) e 600 (`semiBold`).
+  Funcionam offline e não fazem requisição ao Google; outro peso é baixado da internet.
+- Licenças (SIL OFL 1.1) em `assets/fonts/OFL-*.txt`, registradas na tela de licenças.
+- Nada de `fontFamily` solto em tela: use `BrandFonts` ou o `TextTheme`.
+- Estilos nomeados (variação por `copyWith`):
+
+| Estilo | Fonte | Uso |
+|---|---|---|
+| `BrandFonts.tagline` | Plex Mono 500, 10, espaçamento 2,4 | Frase curta em caixa alta ("NATUREZA CONECTADA") |
+| `BrandFonts.caption` | Plex Mono 400, 10, espaçamento 1,0 | Legendas (localização na splash) |
+| `BrandFonts.heading` | Inter 600, 30, altura 1,3 | Título de tela (onboarding) |
+| `BrandFonts.body` | Inter 400, 17, altura 1,5 | Texto corrido de apoio |
+| `BrandFonts.label` | Inter 600, 16 | Botões e links |
+
+  Os valores foram medidos na imagem do Figma, não lidos do arquivo; ajuste quando tiver os
+  números exatos.
+
+### Splash
+
+`lib/pages/splash_page.dart`, fundo `BrandColors.brandDeep`. A splash nativa (Android e iOS)
+é só essa cor, replicada em `android/app/src/main/res/values/colors.xml`
+(`splash_background`) e em `ios/Runner/Base.lproj/LaunchScreen.storyboard`: mude os três
+juntos.
 
 ## 4. Componentes
 
@@ -64,6 +117,64 @@ Nunca hex solto.
 | Card de denúncia (`widgets/occurrence_card.dart`) | Mídia, categoria, bairro, tempo relativo, selo de status, ações (curtir, comentar, compartilhar) |
 | Estados de lista (`widgets/feed_states.dart`) | Vazio, carregando e erro com ação de tentar de novo |
 | Aviso de recorte (`widgets/aviso_recorte.dart`) | Quando o limite de 500 registros foi atingido, mostra o total real |
+
+### Claro e escuro nas telas de marca — `MarcaCores` (`lib/theme/marca_cores.dart`)
+
+As telas de entrada (inicial, login, cadastro, confirmação, consentimento) e os componentes de
+marca leem as cores de `context.marca`, que troca com o tema do app (sistema, claro ou
+escuro). Os nomes são de papel; os valores vêm de `BrandColors`. A splash é verde-escura nos
+dois temas.
+
+| Papel | Claro | Escuro |
+|---|---|---|
+| `fundo` | `surfaceLight` #FFFFFF | `background` #1A2420 |
+| `superficie` (caixas, círculos) | `primarySoft` #E8F3EE | `surfaceDarkRaised` #22302A* |
+| `texto` | `textOnLight` #1A2420 | `textPrimary` #F6F8F7 |
+| `textoApoio` | `textOnLightMuted` #5F6B66 | `textSecondary` #C7D0CB |
+| `rotulo` | `textOnLight` | `textSecondary` |
+| `borda` | `neutralSoft` #D3D9D6 | `borderDark` #34413B* |
+| `destaque` | `primary` #087F5B | `accent` #52D5A0 |
+| `sobreDestaque` | `onPrimary` #FFFFFF | `onAccent` |
+| `linkSecundario` | `linkSecondary` #287894 | `linkSecondaryDark` #73B8D0 |
+| `curvasLogin` | cor do SVG | `contourOnDark` #2C3833* |
+| `logo` / `ilustracaoEmail` | `ecohubOnLight` / `emailBranchLight` | `ecohub` / `emailBranch` |
+
+\* estimados nos mockups escuros; conferir no Figma.
+
+**Regra:** tela de marca nunca usa `BrandColors` direto para fundo, texto, borda ou destaque —
+sempre `context.marca`, senão ela fica clara no modo escuro.
+
+### Componentes de marca (`lib/widgets/marca/`)
+
+Usados nas telas claras do fluxo de entrada (login, cadastro, confirmação de e-mail,
+consentimento). Tela nova desse estilo monta com eles em vez de repetir estilos.
+
+| Componente | Uso |
+|---|---|
+| `CorpoRolavel` | Corpo de formulário: altura mínima da tela, rola quando não cabe, margem responsiva (coluna de até 440 dp em tablet) |
+| `CampoMarca` + `decoracaoCampoMarca` / `estiloCampoMarca` | Rótulo mono em caixa alta + campo branco, raio 12, foco `primary`, erro `danger` |
+| `BotaoPrimario` / `BotaoSecundario` | Ação principal (`primary`) e secundária (contornado), altura 52, com ícone e "carregando" |
+| `BotaoVoltar` | Seta de voltar; sem tela anterior, vai para a rota informada |
+| `AceiteTermos` | Caixa + "Li e aceito a Política… e os Termos…", com links inline |
+| `RodapeLink` | "Pergunta? Ação" no pé da tela |
+| `TextoErro` | Erro de formulário, uma vez só (sem snackbar repetido) |
+| `IconeSvg` | Ícone de `assets/icons/` pintado com um token |
+
+### Ícones e ilustrações — `lib/theme/app_icons.dart`
+
+| Pasta | Conteúdo | Acesso |
+|---|---|---|
+| `assets/icons/ui/` | Ícones de interface | `AppIcons.<nome>` |
+| `assets/icons/illustrations/` | Ilustrações e padrões decorativos | `AppIllustrations.<nome>` |
+| `assets/icons/logos/` | Logo do app e marcas de terceiros | `AppLogos.<nome>` |
+
+Variantes por fundo: `AppLogos.ecohub` (fundo escuro) e `AppLogos.ecohubOnLight` (fundo
+claro); `AppIllustrations.contourLines` (tela cheia, fundo escuro) e `contourLinesLight`
+(recorte bege para fundo claro).
+
+Arquivos em `snake_case`, sem sufixo `_icon`. Nunca escreva o caminho do asset na tela;
+arquivo novo ganha constante em `app_icons.dart` (e entra na lista `todos`, que o teste
+`test/theme/app_icons_test.dart` confere).
 
 Raios: 10 (inputs, snackbar) e 12 (botões, cards). Elevação zero; separação por cor de
 superfície e borda.

@@ -14,7 +14,9 @@ import '../../pages/login_page.dart';
 import '../../pages/notificacoes_page.dart';
 import '../../pages/ocorrencia_deep_link_page.dart';
 import '../../pages/perfil/perfil_publico_page.dart';
+import '../../pages/splash_page.dart';
 import '../../pages/verificacao_email_page.dart';
+import '../inicializacao.dart';
 import 'routes.dart';
 
 /// Router central do app. Substitui o `AuthCheck`/`_ConsentGate` que ficavam
@@ -28,8 +30,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     redirect: notifier.redirect,
     routes: [
       GoRoute(
-          path: Routes.splash,
-          builder: (context, state) => const _SplashScreen()),
+        path: Routes.splash,
+        // Mesmo visual da splash da inicialização, já visível: a troca entre
+        // as duas não aparece.
+        builder: (context, state) => const SplashPage(animarEntrada: false),
+      ),
       GoRoute(
           path: Routes.inicial,
           builder: (context, state) => const InicialPage()),
@@ -109,26 +114,49 @@ class _RouterNotifier extends ChangeNotifier {
     _ref.listen(perfilGarantidoProvider, (previous, next) => notifyListeners());
     _ref.listen(
         cadastroEmAndamentoProvider, (previous, next) => notifyListeners());
+    _ref.listen(splashMinimoProvider, (previous, next) => notifyListeners());
   }
 
   final Ref _ref;
+
+  /// Enquanto um estado ainda carrega: sem valor nenhum (abertura do app)
+  /// segura na splash; recarregando (já tinha valor) fica na tela atual, sem
+  /// decidir com o valor velho. Antes as recargas também iam para a splash:
+  /// ao confirmar o e-mail ou depois do login a tela trocava de repente pela
+  /// splash verde-escura e só então ia ao destino. O _RouterNotifier reavalia
+  /// quando o valor novo chega.
+  String? _aguardar(AsyncValue<Object?> estado, String loc) {
+    if (!estado.hasValue) return loc == Routes.splash ? null : Routes.splash;
+    return null;
+  }
 
   String? redirect(BuildContext context, GoRouterState state) {
     final authState = _ref.read(authStateChangesProvider);
     final loc = state.matchedLocation;
 
-    // Enquanto o Firebase resolve a sessão inicial, segura na splash.
-    if (authState.isLoading || !authState.hasValue) {
+    // Segura na splash até os 3 s mínimos (contados desde a abertura do app)
+    // e enquanto o Firebase resolve a sessão inicial.
+    final splashMinimo = _ref.read(splashMinimoProvider);
+    if (!splashMinimo.hasValue) {
       return loc == Routes.splash ? null : Routes.splash;
+    }
+    if (authState.isLoading || !authState.hasValue) {
+      return _aguardar(authState, loc);
     }
 
     final user = authState.value;
 
-    // Cadastro criando conta/reserva/perfil: fica em /cadastro até terminar
+    // Cadastro criando conta/reserva/perfil: não sai do lugar até terminar
     // (sucesso leva à verificação; nome em uso apaga a conta e mostra o erro).
-    if (loc == Routes.cadastro && _ref.read(cadastroEmAndamentoProvider)) {
-      return null;
-    }
+    //
+    // Sem checar `loc == /cadastro`: o cadastro abre por push (inicial →
+    // login → cadastro), e no refresh o go_router avalia o redirect com a
+    // tela de BAIXO da pilha (/inicial), não com o /cadastro. A trava nunca
+    // valia: criar a conta levava na hora à confirmação, o cadastro seguia
+    // invisível e, com nome já em uso, apagava a conta — a pessoa via a
+    // confirmação e logo era jogada para a inicial, sem mensagem nenhuma.
+    // Só o cadastro liga este flag, e o desliga no finally.
+    if (_ref.read(cadastroEmAndamentoProvider)) return null;
 
     // Não autenticado: só telas públicas.
     if (user == null) {
@@ -147,13 +175,13 @@ class _RouterNotifier extends ChangeNotifier {
     // Perfil com nome reservado (primeiro login Google cria aqui).
     final perfilState = _ref.read(perfilGarantidoProvider);
     if (perfilState.isLoading || !perfilState.hasValue) {
-      return loc == Routes.splash ? null : Routes.splash;
+      return _aguardar(perfilState, loc);
     }
 
     // Trava de consentimento (LGPD).
     final consentState = _ref.read(consentStatusProvider);
     if (consentState.isLoading || !consentState.hasValue) {
-      return loc == Routes.splash ? null : Routes.splash;
+      return _aguardar(consentState, loc);
     }
     if (consentState.value ?? false) {
       return loc == Routes.consentimento ? null : Routes.consentimento;
@@ -170,15 +198,5 @@ class _RouterNotifier extends ChangeNotifier {
     };
     if (portoes.contains(loc)) return Routes.home;
     return null;
-  }
-}
-
-/// Tela mínima exibida enquanto o estado de auth/consentimento é resolvido.
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

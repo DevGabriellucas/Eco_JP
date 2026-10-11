@@ -50,7 +50,7 @@ Corrigidos em `Develop` em 02/10/2026 (lista original em `docs/Erro q precisa se
 - [x] "Endereço não encontrado" precisa ser apagado à mão (botão "x" no campo).
 - [x] Conquistas mal alinhadas na tela (grade de colunas iguais).
 - [x] Coleta de lixo por bairro não funciona: causa (asset fora do pubspec) já corrigida na Sprint 1; conferido de novo.
-- [ ] Link de verificação de e-mail chega expirado: o app agora confere ao voltar do e-mail e avisa que reenviar invalida o link anterior. **Falta conferir no Console** se a chave de API do Android tem restrição "Apps Android" — a página de confirmação do Firebase usa essa chave no navegador e, com essa restrição, mostra "link expirado". "Tela fecha sozinha" não foi reproduzido.
+- [ ] Link de verificação de e-mail chega expirado: o app agora confere ao voltar do e-mail e avisa que reenviar invalida o link anterior. **Falta conferir no Console** se a chave de API do Android tem restrição "Apps Android" — a página de confirmação do Firebase usa essa chave no navegador e, com essa restrição, mostra "link expirado". "Tela fecha sozinha": reproduzido e corrigido em 10/10/2026 (ver MEMORY, redirect com telas abertas por push).
 - [x] Regras publicadas em `ecojp-8b952` (02/10/2026), incluindo as da Sprint 1 e a da sessão única.
 - [x] Mapa bege, só com o logo do Google: resolvido com a volta do `applicationId` para `com.example.eco_jp` (8cccfa9); o APK de 05/10 abriu o mapa. Volta a valer quando o ID mudar.
 - [ ] Botão "minha localização" do mapa (canto inferior esquerdo) fica em cima do logo do Google.

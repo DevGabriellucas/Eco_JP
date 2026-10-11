@@ -60,6 +60,20 @@
   documento guarda só o id, sem data nem aparelho, para não virar log de acesso, que a
   política não prevê. Efeito colateral: conta de órgão compartilhada entre servidores se
   derruba sozinha.
+- **10/10/2026 — Splash: Firebase inicializa depois do `runApp`** (`lib/core/inicializacao.dart`),
+  com a splash Flutter já na tela; o `MyApp`/router só monta quando termina, porque os
+  serviços usam o Firebase na criação. O tempo mínimo de 3 s conta desde a abertura e quem
+  espera por ele é o redirect do router. A cor da splash nativa é cópia de
+  `BrandColors.brandDeep` em `colors.xml` e no `LaunchScreen.storyboard`: o nativo não lê o
+  Dart, então mudar um sem os outros faz a tela "piscar" na abertura. O `flutter_native_splash`
+  saiu do projeto; os PNGs que ele gerou foram apagados.
+- **10/10/2026 — go_router: o redirect de refresh enxerga a tela de BAIXO da pilha.** Com telas
+  abertas por `push` (inicial → login → cadastro), `state.matchedLocation` no redirect global
+  é `/inicial`, não `/cadastro`. Regra que dependa de `loc == <rota empilhada>` não vale. Era a
+  causa da "tela de confirmação que fecha sozinha": a trava do cadastro nunca segurava, o app ia
+  à confirmação no meio do cadastro e, com nome já em uso, o cadastro apagava a conta por trás.
+  A trava agora é só o flag `cadastroEmAndamentoProvider` (teste em
+  `test/core/fluxo_cadastro_router_test.dart`).
 - **Link de verificação "expirado":** suspeita (não confirmada) de restrição "Apps Android"
   na chave de API do Android; a página de confirmação do Firebase usa essa chave no
   navegador.
@@ -74,4 +88,6 @@
 
 - Produto: [PRD.md](PRD.md) · Arquitetura: [ARCHITECTURE.md](ARCHITECTURE.md) ·
   Regras: [RULES.md](RULES.md) · Design: [DESIGN.md](DESIGN.md) · Tarefas: [TASKS.md](TASKS.md)
+- Juntar `feature/entrada-ecohub` / `feature/novo-feed` (25 commits atrás, redesign paralelo
+  das mesmas telas): [INTEGRACAO_REDESIGN.md](INTEGRACAO_REDESIGN.md).
 - Decisões formais (ADR) e resumo da Sprint 1: histórico do git, commit `158559d`.

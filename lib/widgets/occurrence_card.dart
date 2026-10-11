@@ -8,6 +8,7 @@ import '../utils/cloudinary_image.dart';
 import '../utils/imagem_cacheada.dart';
 import '../utils/compartilhamento.dart';
 import '../utils/tempo_relativo.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 
 class OccurrenceCard extends StatelessWidget {
@@ -1341,7 +1342,7 @@ class _CommentButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Image.asset(
-                  'assets/icons/comment.png',
+                  AppIcons.comment,
                   width: 24,
                   height: 24,
                   color: pal.ink,

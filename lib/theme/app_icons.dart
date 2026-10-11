@@ -1,0 +1,86 @@
+/// Caminhos dos assets de assets/icons/. Use estas constantes em vez de
+/// escrever o caminho na tela: renomear um arquivo vira mudança em um lugar só.
+///
+/// Cada subpasta precisa estar declarada no pubspec.yaml (o Flutter não
+/// inclui subpastas sozinho).
+abstract final class AppIcons {
+  static const _dir = 'assets/icons/ui';
+
+  static const arrowBack = '$_dir/arrow_back.svg';
+  static const arrowLeft = '$_dir/arrow_left.svg';
+  static const bell = '$_dir/bell.svg';
+  static const camera = '$_dir/camera.svg';
+  static const check = '$_dir/check.svg';
+  static const clock = '$_dir/clock.svg';
+  static const comment = '$_dir/comment.png';
+  static const eyeClosed = '$_dir/eye_closed.svg';
+  static const lamp = '$_dir/lamp.svg';
+  static const message = '$_dir/message.svg';
+  static const people = '$_dir/people.svg';
+  static const safeShield = '$_dir/safe_shield.svg';
+  static const send = '$_dir/send.svg';
+  static const trash = '$_dir/trash.svg';
+
+  static const todos = [
+    arrowBack,
+    arrowLeft,
+    bell,
+    camera,
+    check,
+    clock,
+    comment,
+    eyeClosed,
+    lamp,
+    message,
+    people,
+    safeShield,
+    send,
+    trash,
+  ];
+}
+
+abstract final class AppIllustrations {
+  static const _dir = 'assets/icons/illustrations';
+
+  /// Curvas de nível em tela cheia (frame 360x800 do Figma). Preferir a
+  /// [stylePattern], que é um recorte pequeno e fica ampliado demais.
+  static const contourLines = '$_dir/contour_lines.svg';
+
+  /// Curvas de nível claras (bege) para telas de fundo branco, como o login.
+  /// Recorte 320x230, usado no canto superior direito.
+  static const contourLinesLight = '$_dir/contour_lines_light.svg';
+
+  /// Ilustração da confirmação de e-mail para fundo escuro (círculo escuro,
+  /// envelope verde-claro).
+  static const emailBranch = '$_dir/email_branch.svg';
+
+  /// A mesma para fundo claro: círculo branco com borda clara, envelope e
+  /// ponto no verde primário. Cópia de [emailBranch] trocando só essas cores.
+  static const emailBranchLight = '$_dir/email_branch_light.svg';
+  static const initialPageBranch = '$_dir/initial_page_branch.svg';
+  static const splashBottom = '$_dir/splash_bottom.svg';
+  static const stylePattern = '$_dir/style_pattern.svg';
+
+  static const todos = [
+    contourLines,
+    contourLinesLight,
+    emailBranch,
+    emailBranchLight,
+    initialPageBranch,
+    splashBottom,
+    stylePattern,
+  ];
+}
+
+abstract final class AppLogos {
+  static const _dir = 'assets/icons/logos';
+
+  /// Logo para fundo escuro ("hub" branco).
+  static const ecohub = '$_dir/ecohub.svg';
+
+  /// Logo para fundo claro ("hub" verde-escuro).
+  static const ecohubOnLight = '$_dir/ecohub_on_light.svg';
+  static const google = '$_dir/google.svg';
+
+  static const todos = [ecohub, ecohubOnLight, google];
+}

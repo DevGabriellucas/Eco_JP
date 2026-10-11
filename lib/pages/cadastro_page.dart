@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+
 import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../models/usuario_model.dart';
 import '../services/usuario_service.dart';
-import '../utils/texto.dart';
-import 'legal/documentos_legais.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import '../theme/brand_fonts.dart';
+import '../theme/marca_cores.dart';
+import '../utils/texto.dart';
+import '../widgets/marca/aceite_termos.dart';
+import '../widgets/marca/botao_primario.dart';
+import '../widgets/marca/botao_voltar.dart';
+import '../widgets/marca/campo_marca.dart';
+import '../widgets/marca/corpo_rolavel.dart';
+import '../widgets/marca/icone_svg.dart';
+import '../widgets/marca/rodape_link.dart';
+import '../widgets/marca/texto_erro.dart';
+import 'legal/documentos_legais.dart';
 
+/// Cadastro por e-mail/senha: cria a conta, reserva o nome público, grava
+/// perfil e consentimento e envia o e-mail de confirmação. Depois o redirect
+/// do router leva à verificação de e-mail.
+///
+/// Medidas do mockup do Figma (frame de ~360 de largura).
 class CadastroPage extends ConsumerStatefulWidget {
   const CadastroPage({super.key});
 
@@ -18,43 +34,36 @@ class CadastroPage extends ConsumerStatefulWidget {
   ConsumerState<CadastroPage> createState() => _CadastroPageState();
 }
 
+/// Pontuação simples de 0 a 4 para a força da senha. Cada critério atendido
+/// (tamanho, variação de caixa, números e símbolos) soma um ponto.
+int forcaSenha(String s) {
+  if (s.isEmpty) return 0;
+  var score = 0;
+  if (s.length >= 6) score++;
+  if (s.length >= 10) score++;
+  if (RegExp(r'[A-Z]').hasMatch(s) && RegExp(r'[a-z]').hasMatch(s)) score++;
+  if (RegExp(r'[0-9]').hasMatch(s)) score++;
+  if (RegExp(r'[^A-Za-z0-9]').hasMatch(s)) score++;
+  return score.clamp(0, 4);
+}
+
 class _CadastroPageState extends ConsumerState<CadastroPage> {
   final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _usuarioService = UsuarioService();
   bool _isLoading = false;
   bool _senhaVisivel = false;
-  bool _confirmarSenhaVisivel = false;
   bool _aceitouTermos = false;
   String? _errorMessage;
 
-  @override
-  void initState() {
-    super.initState();
-    // Atualiza o medidor de força conforme o usuário digita a senha.
-    _passwordController.addListener(_onSenhaChanged);
-  }
+  // Só na hora de gravar: criar o serviço já toca no Firestore.
+  UsuarioService get _usuarioService => UsuarioService.instance;
 
-  void _onSenhaChanged() => setState(() {});
-
-  // Pontuação simples de 0 a 4 para a força da senha. Cada critério atendido
-  // (tamanho, variação de caixa, números e símbolos) soma um ponto.
-  int _forcaSenha(String s) {
-    if (s.isEmpty) return 0;
-    var score = 0;
-    if (s.length >= 6) score++;
-    if (s.length >= 10) score++;
-    if (RegExp(r'[A-Z]').hasMatch(s) && RegExp(r'[a-z]').hasMatch(s)) score++;
-    if (RegExp(r'[0-9]').hasMatch(s)) score++;
-    if (RegExp(r'[^A-Za-z0-9]').hasMatch(s)) score++;
-    return score.clamp(0, 4);
-  }
+  static const _maxNome = 40;
 
   @override
   void dispose() {
-    _passwordController.removeListener(_onSenhaChanged);
     _nomeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -64,10 +73,7 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
 
   Future<void> _handleCadastro() async {
     if (_nomeController.text.trim().isEmpty) {
-      setState(() => _errorMessage = 'Informe seu nome');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Informe seu nome')));
+      _falhar('Informe seu nome');
       return;
     }
 
@@ -75,43 +81,27 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     // Um nome só de pontuação não gera slug e não teria como ser reservado —
     // recusa aqui, antes de criar a conta, em vez de falhar depois.
     if (UsuarioService.idDoNome(_nomeController.text) == null) {
-      const msg = 'Use ao menos uma letra ou número no nome';
-      setState(() => _errorMessage = msg);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text(msg)));
+      _falhar('Use ao menos uma letra ou número no nome');
       return;
     }
 
     if (!_aceitouTermos) {
-      setState(
-        () => _errorMessage = 'Você precisa aceitar os termos para continuar',
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Aceite a Política de Privacidade e os Termos de Uso'),
-        ),
-      );
+      _falhar('Aceite a Política de Privacidade e os Termos de Uso');
       return;
     }
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      setState(() => _errorMessage = 'As senhas não coincidem');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('As senhas não coincidem')));
+      _falhar('As senhas não coincidem');
       return;
     }
 
     // Exige pelo menos "razoável" no medidor (score 2 de 4) — o mínimo do
     // próprio Firebase é só 6 caracteres, insuficiente contra senhas comuns.
-    if (_forcaSenha(_passwordController.text) < 2) {
-      const msg = 'Escolha uma senha mais forte: use letras maiúsculas e '
-          'minúsculas, números ou símbolos.';
-      setState(() => _errorMessage = msg);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text(msg)));
+    if (forcaSenha(_passwordController.text) < 2) {
+      _falhar(
+        'Escolha uma senha mais forte: use letras maiúsculas e minúsculas, '
+        'números ou símbolos.',
+      );
       return;
     }
 
@@ -119,11 +109,7 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     // limite das regras (nome ≤ 40 em usuarios e nomes_reservados).
     final nome = sanitizarLinhaUnica(_nomeController.text);
     if (nome.length > _maxNome) {
-      const msg = 'Use um nome com até $_maxNome caracteres';
-      setState(() => _errorMessage = msg);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text(msg)));
+      _falhar('Use um nome com até $_maxNome caracteres');
       return;
     }
 
@@ -176,6 +162,15 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
       // perfil (perfilGarantidoProvider) completa o que faltar após a
       // verificação do e-mail, reaproveitando a reserva se ela foi feita.
       debugPrint('Erro pós-cadastro: $e');
+      // A conta existe e o redirect vai levar à confirmação, que diz
+      // "Enviamos um link…": tenta mandar o e-mail mesmo assim (antes não
+      // saía, e a pessoa esperava um link que nunca chegava). Se falhar de
+      // novo, o "Reenviar" da tela continua lá.
+      try {
+        await authService.enviarEmailVerificacao();
+      } catch (e2) {
+        debugPrint('Envio do e-mail após erro no cadastro falhou: $e2');
+      }
       if (mounted) setState(() => _isLoading = false);
     } finally {
       // Libera o redirect: com conta criada vai para a verificação; sem conta
@@ -184,17 +179,14 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     }
   }
 
-  static const _maxNome = 40;
-
+  /// Mostra o erro acima do botão, uma vez só (antes saía também num
+  /// snackbar, repetido).
   void _falhar(String mensagem) {
     if (!mounted) return;
     setState(() {
       _isLoading = false;
       _errorMessage = mensagem;
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(mensagem)));
   }
 
   void _abrirDocumento(String titulo, String conteudo) {
@@ -205,454 +197,293 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
     );
   }
 
-  Widget _buildAceiteTermos() {
-    final pal = context.pal;
-    final linkStyle = TextStyle(
-      fontFamily: 'Roboto',
-      fontSize: 13,
-      fontWeight: FontWeight.w600,
-      color: pal.ink,
-      decoration: TextDecoration.underline,
-    );
-    final textStyle = TextStyle(
-      fontFamily: 'Roboto',
-      fontSize: 13,
-      color: pal.muted,
-    );
-    // A linha inteira marca a caixa (antes só o quadrado de 24 dp, abaixo do
-    // mínimo de 48 dp); os links continuam abrindo os documentos.
-    return InkWell(
-      onTap: _isLoading
-          ? null
-          : () => setState(() => _aceitouTermos = !_aceitouTermos),
-      borderRadius: BorderRadius.circular(8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Checkbox(
-            value: _aceitouTermos,
-            onChanged: _isLoading
-                ? null
-                : (v) => setState(() => _aceitouTermos = v ?? false),
-            activeColor: pal.ink,
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
+  @override
+  Widget build(BuildContext context) {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        systemNavigationBarColor: context.marca.fundo,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 2.0,
+        child: Scaffold(
+          backgroundColor: context.marca.fundo,
+          body: CorpoRolavel(
+            // Formulário em cima, rodapé no pé (ou rolando junto).
+            builder: (context, margem) => Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Li e aceito a ', style: textStyle),
-                GestureDetector(
-                  onTap: () => _abrirDocumento(
-                    'Política de Privacidade',
-                    kPoliticaPrivacidade,
+                _formulario(margem),
+                Padding(
+                  padding: const EdgeInsets.only(top: 16, bottom: 8),
+                  child: RodapeLink(
+                    pergunta: 'Já tem conta?',
+                    acao: 'Faça login',
+                    onPressed:
+                        _isLoading ? null : () => context.go(Routes.login),
                   ),
-                  child: Text('Política de Privacidade', style: linkStyle),
-                ),
-                Text(' e os ', style: textStyle),
-                GestureDetector(
-                  onTap: () => _abrirDocumento('Termos de Uso', kTermosDeUso),
-                  child: Text('Termos de Uso', style: linkStyle),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final pal = context.pal;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double logoSize = (screenWidth * 0.32).clamp(110.0, 150.0);
-    const double baseWidth = 430.0;
-    final double paddingLateral = (38.0 / baseWidth) * screenWidth;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A1018),
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        toolbarHeight: 0,
-      ),
-      body: Stack(
-        children: [
-          // 1. Imagem de Fundo (20% opacidade)
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.2,
-              child: Image.asset(
-                'assets/images/joaopessoa.jpg',
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                errorBuilder: (context, error, stackTrace) =>
-                    Container(color: const Color(0xFF0A1018)),
-              ),
-            ),
+  Widget _formulario(double margem) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            // O IconButton tem 12 de folga interna: a seta fica na margem.
+            padding: EdgeInsets.only(left: margem - 12, top: 4),
+            child: const BotaoVoltar(rotaSemAnterior: Routes.inicial),
           ),
-
-          // 2. Gradiente Suavizado
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x33FFFFFF), Color(0x4D000000)],
-                  stops: [0.28, 0.80],
+        ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: margem),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 12),
+              Text(
+                'Criar conta',
+                style: BrandFonts.heading.copyWith(
+                  color: context.marca.texto,
                 ),
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Registre e acompanhe denúncias da sua cidade.',
+                style: BrandFonts.body.copyWith(
+                  fontSize: 16,
+                  color: context.marca.textoApoio,
+                ),
+              ),
+              const SizedBox(height: 24),
+              AutofillGroup(child: _campos()),
+              const SizedBox(height: 16),
+              AceiteTermos(
+                valor: _aceitouTermos,
+                onChanged: _isLoading
+                    ? null
+                    : (v) => setState(() => _aceitouTermos = v),
+                onAbrirPolitica: () => _abrirDocumento(
+                  'Política de Privacidade',
+                  kPoliticaPrivacidade,
+                ),
+                onAbrirTermos: () =>
+                    _abrirDocumento('Termos de Uso', kTermosDeUso),
+              ),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: TextoErro(_errorMessage!),
+                ),
+              const SizedBox(height: 16),
+              BotaoPrimario(
+                texto: 'Cadastrar',
+                carregando: _isLoading,
+                onPressed: _isLoading ? null : _handleCadastro,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _campos() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CampoMarca(
+          rotulo: 'NOME',
+          child: TextField(
+            controller: _nomeController,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.name],
+            // Teto das regras, sem o contador "0/40".
+            maxLength: _maxNome,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(caractereDeNome),
+            ],
+            buildCounter: (
+              _, {
+              required currentLength,
+              required isFocused,
+              maxLength,
+            }) =>
+                null,
+            style: estiloCampoMarca(context),
+            decoration: decoracaoCampoMarca(
+              context,
+              hint: 'Seu nome',
+              prefixo: AppIcons.people,
             ),
           ),
-
-          // 3. Conteúdo
-          Positioned.fill(
-            child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                        maxWidth: constraints.maxWidth,
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: paddingLateral,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // IconButton: alvo de 48 dp e rótulo "Voltar" para leitores
-                            // de tela (o GestureDetector com SVG não tinha nenhum).
-                            IconButton(
-                              tooltip: 'Voltar',
-                              padding: EdgeInsets.zero,
-                              iconSize: 44,
-                              onPressed: () => context.go(Routes.inicial),
-                              icon: SvgPicture.asset(
-                                'assets/icons/seta.svg',
-                                width: 44,
-                                height: 44,
-                              ),
-                            ),
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                child: SizedBox(
-                                  width: logoSize,
-                                  height: logoSize,
-                                  child: Image.asset(
-                                    'assets/images/logo_ecojp.png',
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: pal.surface,
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                              padding: const EdgeInsets.all(24.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _buildLabel('Nome'),
-                                  const SizedBox(height: 8),
-                                  _buildInput(
-                                    controller: _nomeController,
-                                    hint: 'Seu nome',
-                                    maxLength: _maxNome,
-                                    // Teto das regras, sem o contador "0/40".
-                                    mostrarContador: false,
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.allow(
-                                        caractereDeNome,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildLabel('Email'),
-                                  const SizedBox(height: 8),
-                                  _buildInput(
-                                    controller: _emailController,
-                                    hint: 'Email',
-                                    keyboardType: TextInputType.emailAddress,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildLabel('Senha'),
-                                  const SizedBox(height: 8),
-                                  _buildInput(
-                                    controller: _passwordController,
-                                    hint: 'Senha',
-                                    obscure: !_senhaVisivel,
-                                    suffix: IconButton(
-                                      tooltip: _senhaVisivel
-                                          ? 'Ocultar senha'
-                                          : 'Mostrar senha',
-                                      icon: Icon(
-                                        _senhaVisivel
-                                            ? Icons.visibility_off_outlined
-                                            : Icons.visibility_outlined,
-                                        size: 18,
-                                        color: pal.hint,
-                                      ),
-                                      onPressed: () => setState(
-                                        () => _senhaVisivel = !_senhaVisivel,
-                                      ),
-                                    ),
-                                  ),
-                                  if (_passwordController.text.isNotEmpty) ...[
-                                    const SizedBox(height: 10),
-                                    _MedidorForcaSenha(
-                                      forca: _forcaSenha(
-                                        _passwordController.text,
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 16),
-                                  _buildLabel('Repetir Senha'),
-                                  const SizedBox(height: 8),
-                                  _buildInput(
-                                    controller: _confirmPasswordController,
-                                    hint: 'Senha',
-                                    obscure: !_confirmarSenhaVisivel,
-                                    suffix: IconButton(
-                                      tooltip: _confirmarSenhaVisivel
-                                          ? 'Ocultar senha'
-                                          : 'Mostrar senha',
-                                      icon: Icon(
-                                        _confirmarSenhaVisivel
-                                            ? Icons.visibility_off_outlined
-                                            : Icons.visibility_outlined,
-                                        size: 18,
-                                        color: pal.hint,
-                                      ),
-                                      onPressed: () => setState(
-                                        () => _confirmarSenhaVisivel =
-                                            !_confirmarSenhaVisivel,
-                                      ),
-                                    ),
-                                  ),
-                                  if (_errorMessage != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(
-                                        _errorMessage!,
-                                        style: const TextStyle(
-                                          color: Colors.red,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  const SizedBox(height: 16),
-                                  _buildAceiteTermos(),
-                                  const SizedBox(height: 20),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 48,
-                                    child: ElevatedButton(
-                                      onPressed:
-                                          _isLoading ? null : _handleCadastro,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: pal.ink,
-                                        foregroundColor: pal.surface,
-                                        disabledBackgroundColor:
-                                            pal.ink.withValues(alpha: 0.6),
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        textStyle: const TextStyle(
-                                          fontFamily: 'Roboto',
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      child: _isLoading
-                                          ? SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                color: pal.surface,
-                                                strokeWidth: 2,
-                                              ),
-                                            )
-                                          : const Text('Cadastrar'),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  GestureDetector(
-                                    onTap: () {
-                                      context.go(Routes.login);
-                                    },
-                                    child: Text(
-                                      'Já tem conta? Faça login',
-                                      style: TextStyle(
-                                        fontFamily: 'Roboto',
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w400,
-                                        color: pal.ink,
-                                        decoration: TextDecoration.underline,
-                                        decorationColor: pal.ink,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
+        ),
+        const SizedBox(height: 22),
+        CampoMarca(
+          rotulo: 'EMAIL',
+          child: TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.email],
+            autocorrect: false,
+            style: estiloCampoMarca(context),
+            decoration: decoracaoCampoMarca(
+              context,
+              hint: 'seu@email.com',
+              prefixo: AppIcons.message,
+            ),
+          ),
+        ),
+        const SizedBox(height: 22),
+        CampoMarca(
+          rotulo: 'SENHA',
+          child: TextField(
+            controller: _passwordController,
+            obscureText: !_senhaVisivel,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.newPassword],
+            style: estiloCampoMarca(context),
+            decoration: decoracaoCampoMarca(
+              context,
+              hint: 'Crie uma senha',
+              sufixo: IconButton(
+                tooltip: _senhaVisivel ? 'Ocultar senha' : 'Mostrar senha',
+                onPressed: () => setState(() => _senhaVisivel = !_senhaVisivel),
+                // Só existe o ícone de olho fechado nos assets.
+                icon: const IconeSvg(AppIcons.eyeClosed),
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontFamily: 'Roboto',
-        fontSize: 15,
-        fontWeight: FontWeight.w500,
-        color: context.pal.ink,
-      ),
-    );
-  }
-
-  Widget _buildInput({
-    required TextEditingController controller,
-    required String hint,
-    TextInputType keyboardType = TextInputType.text,
-    bool obscure = false,
-    Widget? suffix,
-    int? maxLength,
-    bool mostrarContador = true,
-    List<TextInputFormatter>? inputFormatters,
-  }) {
-    final pal = context.pal;
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      obscureText: obscure,
-      maxLength: maxLength,
-      inputFormatters: inputFormatters,
-      style: TextStyle(fontFamily: 'Roboto', fontSize: 14, color: pal.ink),
-      decoration: InputDecoration(
-        hintText: hint,
-        counterText: mostrarContador ? null : '',
-        hintStyle: TextStyle(
-          fontFamily: 'Roboto',
-          fontSize: 14,
-          color: pal.hint,
-          fontWeight: FontWeight.w400,
         ),
-        suffixIcon: suffix,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
+        // Só o medidor reconstrói a cada tecla (antes a página inteira).
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _passwordController,
+          builder: (context, valor, _) => valor.text.isEmpty
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: MedidorForcaSenha(forca: forcaSenha(valor.text)),
+                ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: pal.border, width: 1),
+        const SizedBox(height: 22),
+        CampoMarca(
+          rotulo: 'REPETIR SENHA',
+          child: ListenableBuilder(
+            listenable: Listenable.merge([
+              _passwordController,
+              _confirmPasswordController,
+            ]),
+            builder: (context, _) {
+              final confere = _confirmPasswordController.text.isNotEmpty &&
+                  _confirmPasswordController.text == _passwordController.text;
+              return TextField(
+                controller: _confirmPasswordController,
+                // Segue o olho da senha: o mockup não tem olho próprio aqui.
+                obscureText: !_senhaVisivel,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.newPassword],
+                onSubmitted: (_) => _handleCadastro(),
+                style: estiloCampoMarca(context),
+                decoration: decoracaoCampoMarca(
+                  context,
+                  hint: 'Repita a senha',
+                  sufixo: confere
+                      ? Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: IconeSvg(
+                            AppIcons.check,
+                            cor: context.marca.destaque,
+                          ),
+                        )
+                      : null,
+                ),
+              );
+            },
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: pal.ink, width: 1.5),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Colors.red, width: 1),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Colors.red, width: 1.5),
-        ),
-        filled: true,
-        fillColor: pal.surface,
-        isDense: true,
-      ),
+      ],
     );
   }
 }
 
-// Barra de força da senha: 3 segmentos coloridos + rótulo. Recebe uma
-// pontuação de 0 a 4 calculada em _forcaSenha.
-class _MedidorForcaSenha extends StatelessWidget {
-  final int forca;
+/// Barra de força da senha: 3 segmentos + rótulo. Recebe a pontuação de 0 a
+/// 4 de [forcaSenha].
+@visibleForTesting
+class MedidorForcaSenha extends StatelessWidget {
+  const MedidorForcaSenha({super.key, required this.forca});
 
-  const _MedidorForcaSenha({required this.forca});
+  final int forca;
 
   @override
   Widget build(BuildContext context) {
     // Mesmo corte de _handleCadastro (aceita pontuação >= 2): 0-1 = fraca,
-    // recusada (1 segmento); 2 = média (2); 3-4 = forte (3). Antes o medidor
-    // mostrava "fraca" para uma senha 2, que o cadastro aceitava.
-    final int nivel = forca <= 1 ? 1 : (forca == 2 ? 2 : 3);
-    final Color cor = switch (nivel) {
+    // recusada (1 segmento); 2 = média (2); 3-4 = forte (3).
+    final nivel = forca <= 1 ? 1 : (forca == 2 ? 2 : 3);
+    final cor = switch (nivel) {
       1 => AppColors.danger,
-      2 => const Color(0xFFF59E0B),
-      _ => AppColors.success,
+      2 => AppColors.warning,
+      _ => context.marca.destaque,
     };
-    final String label = switch (nivel) {
+    final rotulo = switch (nivel) {
       1 => 'Senha fraca',
       2 => 'Senha média',
       _ => 'Senha forte',
     };
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: List.generate(3, (i) {
-            final aceso = i < nivel;
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: i < 2 ? 6 : 0),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: aceso ? cor : context.pal.border,
-                    borderRadius: BorderRadius.circular(3),
+    return Semantics(
+      label: rotulo,
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              for (var i = 0; i < 3; i++)
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: i < 2 ? 6 : 0),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: i < nivel ? cor : context.marca.borda,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          }),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: cor,
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (nivel == 3) ...[
+                IconeSvg(AppIcons.check, cor: cor, tamanho: 16),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                rotulo,
+                style: BrandFonts.label.copyWith(
+                  fontSize: 13,
+                  fontWeight: BrandFonts.medium,
+                  color: cor,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

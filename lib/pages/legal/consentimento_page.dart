@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../theme/app_icons.dart';
+import '../../theme/brand_fonts.dart';
+import '../../theme/marca_cores.dart';
+import '../../utils/margem_responsiva.dart';
+import '../../widgets/marca/aceite_termos.dart';
+import '../../widgets/marca/botao_primario.dart';
+import '../../widgets/marca/icone_svg.dart';
+import '../../widgets/marca/medidas_marca.dart';
 import 'documentos_legais.dart';
-import '../../theme/app_theme.dart';
 
 /// Tela de consentimento exibida quando o usuário ainda não aceitou os
 /// documentos legais (ou aceitou uma versão antiga). Bloqueia o acesso ao
@@ -27,9 +35,53 @@ class ConsentimentoPage extends StatefulWidget {
   State<ConsentimentoPage> createState() => _ConsentimentoPageState();
 }
 
+class _Topico {
+  const _Topico(this.icone, this.texto);
+
+  final String icone;
+  final String texto;
+}
+
+const _topicos = [
+  _Topico(
+    AppIcons.camera,
+    'Coletamos nome, e-mail e o conteúdo das suas denúncias (fotos, vídeo, '
+    'descrição e localização).',
+  ),
+  // Antes prometia "não aparecem para ninguém", mas a autoridade pode
+  // identificar o autor (dono/info).
+  _Topico(
+    AppIcons.eyeClosed,
+    'Você pode denunciar de forma anônima: seu nome e foto não aparecem para '
+    'outros usuários, mas o órgão público responsável pode identificar o '
+    'autor quando necessário.',
+  ),
+  _Topico(
+    AppIcons.safeShield,
+    'Denúncias podem ser triadas por órgãos públicos cadastrados '
+    '(verificação e acompanhamento).',
+  ),
+  _Topico(
+    AppIcons.trash,
+    'Você pode excluir suas denúncias e apagar a sua conta e dados a '
+    'qualquer momento.',
+  ),
+];
+
 class _ConsentimentoPageState extends State<ConsentimentoPage> {
   bool _aceito = false;
   bool _processando = false;
+  bool _saindo = false;
+
+  /// Um toque só: antes um segundo toque chamava o logout de novo.
+  Future<void> _recusar() async {
+    setState(() => _saindo = true);
+    try {
+      await widget.onRecusar();
+    } finally {
+      if (mounted) setState(() => _saindo = false);
+    }
+  }
 
   void _abrirDocumento(String titulo, String conteudo) {
     Navigator.of(context).push(
@@ -57,210 +109,210 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pal = context.pal;
-    final linkStyle = TextStyle(
-      fontSize: 14,
-      fontWeight: FontWeight.w600,
-      color: pal.ink,
-      decoration: TextDecoration.underline,
-    );
-    final textStyle = TextStyle(fontSize: 14, color: pal.muted);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        systemNavigationBarColor: context.marca.fundo,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 2.0,
+        child: Scaffold(
+          backgroundColor: context.marca.fundo,
+          body: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final margem = margemResponsiva(
+                  c.maxWidth,
+                  margemMinima: MedidasMarca.margemLateral,
+                  larguraMaxima: MedidasMarca.larguraMaxConteudo,
+                );
+                final explicacao = Padding(
+                  padding: EdgeInsets.fromLTRB(margem, 24, margem, 16),
+                  child: const _Explicacao(),
+                );
+                final divisoria = Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: context.marca.borda,
+                );
+                final acoes = Padding(
+                  padding: EdgeInsets.fromLTRB(margem, 12, margem, 8),
+                  child: _acoes(),
+                );
 
-    return Scaffold(
-      backgroundColor: pal.surface,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8),
-              const Icon(
-                Icons.privacy_tip_outlined,
-                size: 44,
-                color: AppColors.success,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Privacidade e Termos',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: pal.ink,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Antes de continuar, precisamos do seu consentimento sobre como '
-                'os seus dados são tratados no EcoJP.',
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.5,
-                  color: pal.muted,
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Topico(
-                        icone: Icons.location_on_outlined,
-                        texto: 'Coletamos nome, e-mail e o conteúdo das suas '
-                            'denúncias (fotos, vídeo, descrição e localização).',
-                      ),
-                      _Topico(
-                        icone: Icons.visibility_off_outlined,
-                        // Antes prometia "não aparecem para ninguém", mas a
-                        // autoridade pode identificar o autor (dono/info).
-                        texto:
-                            'Você pode denunciar de forma anônima: seu nome e '
-                            'foto não aparecem para outros usuários, mas o '
-                            'órgão público responsável pode identificar o '
-                            'autor quando necessário.',
-                      ),
-                      _Topico(
-                        icone: Icons.shield_outlined,
-                        texto:
-                            'Denúncias podem ser triadas por órgãos públicos '
-                            'cadastrados (verificação e acompanhamento).',
-                      ),
-                      _Topico(
-                        icone: Icons.delete_outline,
-                        texto:
-                            'Você pode excluir suas denúncias e apagar a sua '
-                            'conta e dados a qualquer momento.',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const Divider(height: 24),
-              // A linha inteira marca a caixa (antes só o quadrado de 24 dp);
-              // os links do texto continuam abrindo os documentos.
-              InkWell(
-                onTap: _processando
-                    ? null
-                    : () => setState(() => _aceito = !_aceito),
-                borderRadius: BorderRadius.circular(8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                // Tela baixa (paisagem, fonte grande): a área de aceite fixa
+                // não caberia (estourava em 640x320 com fonte 2x), então a
+                // página inteira rola.
+                if (c.maxHeight < 560) {
+                  return SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [explicacao, divisoria, acoes],
+                    ),
+                  );
+                }
+                // Normal: a explicação rola; aceite e botões ficam fixos.
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Checkbox(
-                      value: _aceito,
-                      onChanged: _processando
-                          ? null
-                          : (v) => setState(() => _aceito = v ?? false),
-                      activeColor: AppColors.success,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text('Li e aceito a ', style: textStyle),
-                          GestureDetector(
-                            onTap: () => _abrirDocumento(
-                              'Política de Privacidade',
-                              kPoliticaPrivacidade,
-                            ),
-                            child: Text(
-                              'Política de Privacidade',
-                              style: linkStyle,
-                            ),
-                          ),
-                          Text(' e os ', style: textStyle),
-                          GestureDetector(
-                            onTap: () =>
-                                _abrirDocumento('Termos de Uso', kTermosDeUso),
-                            child: Text('Termos de Uso', style: linkStyle),
-                          ),
-                        ],
-                      ),
-                    ),
+                    Expanded(child: SingleChildScrollView(child: explicacao)),
+                    divisoria,
+                    acoes,
                   ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: (_aceito && !_processando) ? _confirmar : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: pal.ink,
-                    foregroundColor: pal.surface,
-                    disabledBackgroundColor: const Color(0xFFBDBDBD),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _processando
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: pal.surface,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text(
-                          'Concordar e continuar',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: TextButton(
-                  onPressed: _processando ? null : widget.onRecusar,
-                  child: Text(
-                    'Não concordo / sair',
-                    style: TextStyle(color: pal.muted),
-                  ),
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
         ),
       ),
     );
   }
+
+  Widget _acoes() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AceiteTermos(
+          valor: _aceito,
+          onChanged: _processando ? null : (v) => setState(() => _aceito = v),
+          onAbrirPolitica: () => _abrirDocumento(
+            'Política de Privacidade',
+            kPoliticaPrivacidade,
+          ),
+          onAbrirTermos: () => _abrirDocumento('Termos de Uso', kTermosDeUso),
+        ),
+        const SizedBox(height: 12),
+        BotaoPrimario(
+          texto: 'Concordar e continuar',
+          carregando: _processando,
+          onPressed: (_aceito && !_processando) ? _confirmar : null,
+        ),
+        const SizedBox(height: 4),
+        TextButton(
+          onPressed: (_processando || _saindo) ? null : _recusar,
+          style: TextButton.styleFrom(
+            foregroundColor: context.marca.texto,
+            minimumSize: const Size(48, 48),
+            textStyle: BrandFonts.label.copyWith(fontSize: 15),
+          ),
+          child: const Text('Não concordo / sair'),
+        ),
+      ],
+    );
+  }
 }
 
-class _Topico extends StatelessWidget {
-  final IconData icone;
-  final String texto;
-
-  const _Topico({required this.icone, required this.texto});
+class _Explicacao extends StatelessWidget {
+  const _Explicacao();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _Circulo(
+          icone: AppIcons.safeShield,
+          lado: 48,
+          tamanhoIcone: 24,
+        ),
+        const SizedBox(height: 20),
+        Text(
+          'Privacidade e Termos',
+          style: BrandFonts.heading.copyWith(color: context.marca.texto),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Antes de continuar, precisamos do seu consentimento sobre como os '
+          'seus dados são tratados no EcoJP.',
+          style: BrandFonts.body.copyWith(
+            fontSize: 16,
+            color: context.marca.textoApoio,
+          ),
+        ),
+        const SizedBox(height: 24),
+        for (var i = 0; i < _topicos.length; i++)
+          _ItemLinhaDoTempo(
+            topico: _topicos[i],
+            ultimo: i == _topicos.length - 1,
+          ),
+      ],
+    );
+  }
+}
+
+/// Um item da linha do tempo: ícone num círculo, linha ligando ao próximo e
+/// o texto ao lado.
+class _ItemLinhaDoTempo extends StatelessWidget {
+  const _ItemLinhaDoTempo({required this.topico, required this.ultimo});
+
+  final _Topico topico;
+  final bool ultimo;
+
+  @override
+  Widget build(BuildContext context) {
+    // IntrinsicHeight só aqui (4 itens estáticos): a linha vertical acompanha
+    // a altura do texto, que muda com a largura e o tamanho da fonte.
+    return IntrinsicHeight(
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(icone, size: 20, color: AppColors.success),
-          const SizedBox(width: 12),
+          Column(
+            children: [
+              _Circulo(icone: topico.icone, lado: 32, tamanhoIcone: 16),
+              if (!ultimo)
+                Expanded(
+                  child: VerticalDivider(
+                    width: 2,
+                    thickness: 2,
+                    color: context.marca.borda,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(
-              texto,
-              style: TextStyle(
-                fontSize: 13.5,
-                height: 1.5,
-                color: context.pal.ink,
+            child: Padding(
+              padding: EdgeInsets.only(top: 4, bottom: ultimo ? 0 : 20),
+              child: Text(
+                topico.texto,
+                style: BrandFonts.body.copyWith(
+                  fontSize: 15,
+                  color: context.marca.texto,
+                ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _Circulo extends StatelessWidget {
+  const _Circulo({
+    required this.icone,
+    required this.lado,
+    required this.tamanhoIcone,
+  });
+
+  final String icone;
+  final double lado;
+  final double tamanhoIcone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: lado,
+      height: lado,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: context.marca.superficie,
+        shape: BoxShape.circle,
+      ),
+      child: IconeSvg(
+        icone,
+        cor: context.marca.destaque,
+        tamanho: tamanhoIcone,
       ),
     );
   }
