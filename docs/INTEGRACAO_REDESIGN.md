@@ -115,7 +115,7 @@ Mantenha o fluxo da `Develop`:
 ## 8. Checklist antes do PR para a Develop
 
 - [ ] Branch atualizada a partir da `Develop`, sem marcadores de conflito.
-- [ ] Nenhum caminho de `assets/icons/` escrito à mão: `git grep "assets/icons/" lib` só
+- [ ] Nenhum caminho de `assets/icons/` escrito à mão: `git grep "'assets/icons/" lib` só
       pode encontrar `lib/theme/app_icons.dart`.
 - [ ] Assets novos com constante, na lista `todos` e com a pasta declarada no `pubspec`.
 - [ ] Um único `AppIcons` (o de caminhos); o de `IconData` renomeado.
