@@ -1,0 +1,1040 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Só permite postar conteúdo (denúncias, comentários, reações, notificações)
+    // a quem confirmou o e-mail. Contas Google já chegam com email_verified=true.
+    function emailVerificado() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Autoridade credenciada (órgão público). O papel é concedido manualmente
+    // criando um doc em roles/{uid} com { role: 'autoridade' } pelo Console do
+    // Firebase — nunca pelo app. Dá poderes de moderação e status oficial.
+    function isAutoridade() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == 'autoridade';
+    }
+
+    // Rejeita conteúdo em branco: exige ao menos um caractere não-espaço. O
+    // `size() >= N` sozinho aceitaria "   " (só espaços), então um cliente
+    // forjado poderia criar denúncias/comentários vazios burlando o trim do
+    // app. [\s\S] casa qualquer caractere (inclusive quebras de linha, que o
+    // `.` do RE2 não pega) — o padrão exige um \S em meio a qualquer conteúdo.
+    function naoEmBranco(texto) {
+      return texto is string && texto.matches('[\\s\\S]*\\S[\\s\\S]*');
+    }
+
+    function isValidTitle(title) {
+      return title is string
+        && title.size() >= 3
+        && title.size() <= 80
+        && naoEmBranco(title);
+    }
+
+    function isValidDescription(description) {
+      return description is string
+        && description.size() >= 10
+        && description.size() <= 1000
+        && naoEmBranco(description);
+    }
+
+    function isValidLocationName(location) {
+      return location is string
+        && location.size() >= 3
+        && location.size() <= 180
+        && naoEmBranco(location);
+    }
+
+    function isValidCategory(category) {
+      return category in [
+        'Lixo',
+        'Queimada',
+        'Buraco',
+        'Árvores caídas',
+        'Enchentes',
+        'Esgoto',
+        'Falta iluminação',
+        'Outros',
+      ];
+    }
+
+    // Dentro de João Pessoa (com folga). Mesmos limites de AreaMunicipio em
+    // lib/services/geolocation/area_municipio.dart. Antes só recusava (0,0):
+    // denúncias de fora da cidade poluíam o mapa e as estatísticas.
+    function isValidCoordinate(lat, lon) {
+      return lat is number
+        && lon is number
+        && lat >= -7.30
+        && lat <= -6.95
+        && lon >= -35.00
+        && lon <= -34.75;
+    }
+
+    // Cloud name is public in delivered image URLs; secrets remain out of code.
+    function isCloudinaryImageUrl(url) {
+      return url is string
+        && url.size() <= 2048
+        && url.matches('^https://res\\.cloudinary\\.com/dmdghbgac/image/upload/.+');
+    }
+
+    function isCloudinaryVideoUrl(url) {
+      return url is string
+        && url.size() <= 2048
+        && url.matches('^https://res\\.cloudinary\\.com/dmdghbgac/video/upload/.+');
+    }
+
+    function isOptionalVideoUrl(url) {
+      return url == null || isCloudinaryVideoUrl(url);
+    }
+
+    // Nome público do autor = o `nome` do próprio perfil. Antes era texto
+    // livre: dava para comentar/denunciar como "Prefeitura" ou com o nome
+    // reservado de outra pessoa, contornando nomes_reservados.
+    function nomeDoPerfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.nome;
+    }
+
+    function isOptionalPublicName(name) {
+      return name == null || (name is string && name == nomeDoPerfil());
+    }
+
+    // Mesmo slug de UsuarioService.idDoNome (slugify em lib/utils/texto.dart).
+    // Antes de mapear, descarta caracteres invisíveis (\p{Cc}, \p{Cf}) e
+    // acentos combinantes: "Jo\u200Bão" ou "João" decomposto exibem o mesmo
+    // nome que "João" e precisam cair no mesmo slug, senão escapam da reserva.
+    function slugDoNome(nome) {
+      return nome
+        .replace('[\\p{Cc}\\p{Cf}\\x{0300}-\\x{036F}]', '')
+        .replace('[áàâãäÁÀÂÃÄ]', 'a')
+        .replace('[éèêëÉÈÊË]', 'e')
+        .replace('[íìîïÍÌÎÏ]', 'i')
+        .replace('[óòôõöÓÒÔÕÖ]', 'o')
+        .replace('[úùûüÚÙÛÜ]', 'u')
+        .replace('[çÇ]', 'c')
+        .lower()
+        .replace('[^a-z0-9]+', '-')
+        .replace('^-+|-+$', '');
+    }
+
+    // O nome do perfil só vale se a conta tem a reserva dele em
+    // nomes_reservados. Sem isto um cliente modificado gravava no próprio
+    // perfil o nome que outra conta reservou e comentava com ele.
+    function nomeReservadoPor(nome, uid) {
+      let slug = slugDoNome(nome);
+      let reserva = /databases/$(database)/documents/nomes_reservados/$(slug);
+      return slug.size() > 0
+        && exists(reserva)
+        && get(reserva).data.uid == uid;
+    }
+
+    // Foto pública só do Cloudinary do projeto ou do avatar do Google. Com
+    // URL livre, uma imagem num servidor próprio coletaria o IP de todo
+    // mundo que abrisse o feed.
+    function isOptionalPublicPhoto(url) {
+      return url == null || (url is string
+        && url.size() <= 2048
+        && (url.matches('^https://res\\.cloudinary\\.com/dmdghbgac/image/upload/.+')
+          || url.matches('^https://lh3\\.googleusercontent\\.com/.+')));
+    }
+
+    function isValidPublicUserFields(data) {
+      return (!('usuarioNome' in data) || isOptionalPublicName(data.usuarioNome))
+        && (!('usuarioFotoUrl' in data) || isOptionalPublicPhoto(data.usuarioFotoUrl));
+    }
+
+    function isValidOccurrenceImages(data) {
+      return data.imagensUrls is list
+        && data.imagensUrls.size() >= 1
+        && data.imagensUrls.size() <= 3
+        && isCloudinaryImageUrl(data.imagensUrls[0])
+        && (data.imagensUrls.size() < 2 || isCloudinaryImageUrl(data.imagensUrls[1]))
+        && (data.imagensUrls.size() < 3 || isCloudinaryImageUrl(data.imagensUrls[2]))
+        && data.imagemUrl == data.imagensUrls[0];
+    }
+
+    function isValidOcorrencia(data) {
+      return data.keys().hasAll([
+          'titulo',
+          'descricao',
+          'localizacao',
+          'latitude',
+          'longitude',
+          'tipoLixo',
+          'status',
+          'dataCriacao',
+          'usuarioId',
+          'imagemUrl',
+          'imagensUrls',
+          'anonima',
+          'likes',
+          'dislikes',
+          'comments',
+          'likedBy',
+          'dislikedBy',
+          'fixada',
+        ])
+        && data.keys().hasOnly([
+          'titulo',
+          'descricao',
+          'localizacao',
+          'latitude',
+          'longitude',
+          'tipoLixo',
+          'status',
+          'dataCriacao',
+          'usuarioId',
+          'imagemUrl',
+          'imagensUrls',
+          'usuarioNome',
+          'usuarioFotoUrl',
+          'videoUrl',
+          'anonima',
+          'likes',
+          'dislikes',
+          'comments',
+          'likedBy',
+          'dislikedBy',
+          'fixada',
+          // Opcional (não exigido em hasAll): contador de compartilhamentos.
+          // Versões antigas do app não enviam este campo na criação, e exigi-lo
+          // quebraria a publicação para quem ainda não atualizou.
+          'shares',
+          // Opcional (não exigido em hasAll): identifica o município da
+          // denúncia. Dados novos já enviam; dados antigos ficam sem, sem
+          // quebrar leitura — preparação para expansão multi-município.
+          'municipioId',
+          // Opcional para não quebrar versões antigas do app; o app atual
+          // sempre envia false (as consultas filtram oculto == false).
+          'oculto',
+          // Opcional: bairro estruturado vindo do provedor de endereço.
+          'bairro',
+        ])
+        && (!('bairro' in data)
+          || (data.bairro is string && data.bairro.size() >= 1 && data.bairro.size() <= 60))
+        && (!('oculto' in data) || data.oculto == false)
+        && isValidTitle(data.titulo)
+        && isValidDescription(data.descricao)
+        && isValidLocationName(data.localizacao)
+        && isValidCoordinate(data.latitude, data.longitude)
+        && isValidCategory(data.tipoLixo)
+        && data.status == 'Pendente'
+        && data.dataCriacao == request.time
+        // Proteção do denunciante anônimo: quando anonima==true, usuarioId no
+        // documento público fica null (o UID real vive só na subcoleção
+        // privada ocorrencias/{id}/dono/info, ver isValidDonoInfo). Quando
+        // não-anônima, usuarioId precisa ser o próprio uid (evita forjar autor).
+        && (data.anonima == true
+          ? data.usuarioId == null
+          : data.usuarioId == request.auth.uid)
+        && isValidOccurrenceImages(data)
+        && isValidPublicUserFields(data)
+        && (!('videoUrl' in data) || isOptionalVideoUrl(data.videoUrl))
+        && (!('fixada' in data) || data.fixada == false)
+        // Proteção do denunciante: se marcada como anônima, nome/foto não
+        // podem ser gravados — a identidade nunca chega ao documento.
+        && data.anonima is bool
+        && (!data.anonima
+          || ((!('usuarioNome' in data) || data.usuarioNome == null)
+            && (!('usuarioFotoUrl' in data) || data.usuarioFotoUrl == null)))
+        && data.likes is int && data.likes == 0
+        && data.dislikes is int && data.dislikes == 0
+        // `comments` não é mantido depois da criação (a UI conta pela
+        // agregação count()); fica 0 por compatibilidade com versões antigas.
+        && data.comments is int && data.comments == 0
+        // Hoje o app atende só João Pessoa.
+        && (!('municipioId' in data) || data.municipioId == 'joao-pessoa')
+        && (!('shares' in data) || (data.shares is int && data.shares == 0))
+        && data.likedBy is list && data.likedBy.size() == 0
+        && data.dislikedBy is list && data.dislikedBy.size() == 0;
+    }
+
+    // Dono de uma ocorrência: campo direto (não-anônima) ou, quando anônima,
+    // a subcoleção privada dono/info (só o próprio uid consegue ler/criar).
+    function isOwner() {
+      return signedIn()
+        && (resource.data.usuarioId == request.auth.uid
+          || (resource.data.anonima == true
+            && exists(/databases/$(database)/documents/ocorrencias/$(resource.id)/dono/info)
+            && get(/databases/$(database)/documents/ocorrencias/$(resource.id)/dono/info).data.usuarioId == request.auth.uid));
+    }
+
+    // Subcoleção privada que guarda o UID real do denunciante quando a
+    // ocorrência é anônima. Só o próprio dono ou a autoridade podem ler —
+    // protege contra correlacionar denúncias anônimas por usuarioId (S2).
+    function isValidDonoInfo(data) {
+      return data.keys().hasOnly(['usuarioId'])
+        && data.usuarioId == request.auth.uid;
+    }
+
+    // Denúncia anônima só nasce junto com o próprio dono/info, no mesmo
+    // WriteBatch. Sem isso, uma queda de rede entre as escritas deixava a
+    // denúncia sem dono, e qualquer conta podia gravar dono/info depois.
+    // getAfter() enxerga o estado do batch inteiro; num doc inexistente ele
+    // falha e a regra nega.
+    function donoCriadoNoMesmoBatch(ocorrenciaId) {
+      return getAfter(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/dono/info)
+        .data.usuarioId == request.auth.uid;
+    }
+
+    function addedCurrentUser(before, after) {
+      return !(request.auth.uid in before)
+        && request.auth.uid in after
+        && after.size() == before.size() + 1
+        && after.hasAll(before);
+    }
+
+    function removedCurrentUser(before, after) {
+      return request.auth.uid in before
+        && !(request.auth.uid in after)
+        && after.size() == before.size() - 1
+        && before.hasAll(after);
+    }
+
+    function validReactionFields(data) {
+      return data.likes is int
+        && data.dislikes is int
+        && data.likedBy is list
+        && data.dislikedBy is list
+        && data.likes == data.likedBy.size()
+        && data.dislikes == data.dislikedBy.size()
+        && !(request.auth.uid in data.likedBy && request.auth.uid in data.dislikedBy);
+    }
+
+    function isValidReactionUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likes', 'likedBy', 'dislikes', 'dislikedBy'])
+        && validReactionFields(request.resource.data)
+        && respeitaIntervaloDeReacao()
+        && (
+          // Add like.
+          (addedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && request.resource.data.dislikedBy == resource.data.dislikedBy
+            && request.resource.data.likes == resource.data.likes + 1
+            && request.resource.data.dislikes == resource.data.dislikes)
+          ||
+          // Remove like.
+          (removedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && request.resource.data.dislikedBy == resource.data.dislikedBy
+            && request.resource.data.likes == resource.data.likes - 1
+            && request.resource.data.dislikes == resource.data.dislikes)
+          ||
+          // Add dislike.
+          (request.resource.data.likedBy == resource.data.likedBy
+            && addedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes
+            && request.resource.data.dislikes == resource.data.dislikes + 1)
+          ||
+          // Remove dislike.
+          (request.resource.data.likedBy == resource.data.likedBy
+            && removedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes
+            && request.resource.data.dislikes == resource.data.dislikes - 1)
+          ||
+          // Switch dislike to like.
+          (addedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && removedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes + 1
+            && request.resource.data.dislikes == resource.data.dislikes - 1)
+          ||
+          // Switch like to dislike.
+          (removedCurrentUser(resource.data.likedBy, request.resource.data.likedBy)
+            && addedCurrentUser(resource.data.dislikedBy, request.resource.data.dislikedBy)
+            && request.resource.data.likes == resource.data.likes - 1
+            && request.resource.data.dislikes == resource.data.dislikes + 1)
+        );
+    }
+
+    // Compartilhar: qualquer usuário autenticado soma 1 ao contador. Não há
+    // lista de quem compartilhou (o destino do envio é externo e invisível ao
+    // app), então a regra só garante que o passo seja exatamente +1 — impede
+    // zerar, decrementar ou inflar o número de uma vez. `get('shares', 0)`
+    // cobre documentos criados antes deste campo existir.
+    //
+    // Cada usuário conta uma vez: o +1 só passa junto com a criação de
+    // compartilhamentos/{uid} no mesmo batch (create-only). Antes dava para
+    // somar +1 em loop e inflar o contador, com cada escrita cobrando
+    // leituras de todos os feeds abertos.
+    function isValidShareUpdate(ocorrenciaId) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['shares'])
+        && request.resource.data.shares is int
+        && request.resource.data.shares == resource.data.get('shares', 0) + 1
+        && !exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/compartilhamentos/$(request.auth.uid))
+        && existsAfter(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/compartilhamentos/$(request.auth.uid));
+    }
+
+    // Intervalo mínimo entre reações do mesmo usuário (curtir/descurtir em
+    // loop gerava milhões de leituras nos listeners do feed). A reação grava
+    // usuarios/{uid}/meta/reacao.ultima = request.time no mesmo commit.
+    function respeitaIntervaloDeReacao() {
+      return getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/reacao).data.ultima == request.time
+        && (!exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/reacao)
+          || request.time > get(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/reacao).data.ultima + duration.value(1, 's'));
+    }
+
+    // Mesmo esquema para denúncias de abuso: sem limite, uma conta enchia a
+    // fila da autoridade (lida com teto de 200) e escondia denúncias reais.
+    function respeitaIntervaloDeDenuncia() {
+      return getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/denuncia).data.ultima == request.time
+        && (!exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/denuncia)
+          || request.time > get(/databases/$(database)/documents/usuarios/$(request.auth.uid)/meta/denuncia).data.ultima + duration.value(30, 's'));
+    }
+
+    // Toda ação oficial grava, no mesmo batch, um evento em historico/ e o ID
+    // dele em `ultimoEventoId`. Exigir o evento (getAfter) garante a trilha
+    // de auditoria — antes ela era opcional e podia ser pulada.
+    function eventoRegistrado(ocorrenciaId, status) {
+      return request.resource.data.ultimoEventoId is string
+        && request.resource.data.ultimoEventoId != resource.data.get('ultimoEventoId', '')
+        && !exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/historico/$(request.resource.data.ultimoEventoId))
+        && getAfter(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/historico/$(request.resource.data.ultimoEventoId)).data.status == status;
+    }
+
+    // Autoridade só pode mexer nos campos de verificação. Ao confirmar, grava
+    // quem verificou (UID + nome do próprio perfil) e quando. Desmarcar zera o
+    // ciclo e registra "revertida".
+    function isValidVerificacaoUpdate(ocorrenciaId) {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['verificada', 'verificadaPor', 'verificadaPorNome', 'verificadaEm', 'statusOficial', 'ultimoEventoId'])
+        && request.resource.data.verificada is bool
+        && (
+          (request.resource.data.verificada == true
+            && request.resource.data.verificadaPor == request.auth.uid
+            && request.resource.data.verificadaPorNome == nomeDoPerfil()
+            && request.resource.data.verificadaEm == request.time
+            && eventoRegistrado(ocorrenciaId, 'verificada'))
+          ||
+          (request.resource.data.verificada == false
+            && request.resource.data.get('statusOficial', null) == null
+            && eventoRegistrado(ocorrenciaId, 'revertida'))
+        );
+    }
+
+    // Autoridade move a denúncia pelo ciclo oficial. Estados pré-confirmação
+    // (em_analise / nao_confirmada) exigem verificada==false; estados pós-
+    // confirmação (encaminhada / resolvida) exigem verificada==true e gravam
+    // carimbo de tempo de auditoria. Reverter é uma ação própria ("revertida").
+    function isValidStatusOficialUpdate(ocorrenciaId) {
+      return (
+        // Reverter para o estágio base (pendente ou confirmada).
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial', 'ultimoEventoId'])
+          && request.resource.data.statusOficial == null
+          && eventoRegistrado(ocorrenciaId, 'revertida'))
+        ||
+        // Reverter resolvida → encaminhada, limpando resolvidaEm (senão a
+        // denúncia seguia contando como resolvida nas métricas).
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial', 'resolvidaEm', 'ultimoEventoId'])
+          && resource.data.get('statusOficial', null) == 'resolvida'
+          && request.resource.data.statusOficial == 'encaminhada'
+          && request.resource.data.resolvidaEm == null
+          && eventoRegistrado(ocorrenciaId, 'revertida'))
+        ||
+        // Triagem pré-confirmação.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial', 'ultimoEventoId'])
+          && request.resource.data.statusOficial in ['em_analise', 'nao_confirmada']
+          && resource.data.get('verificada', false) == false
+          && eventoRegistrado(ocorrenciaId, request.resource.data.statusOficial))
+        ||
+        // Encaminhar ao órgão responsável (só após confirmada).
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial', 'encaminhadaEm', 'ultimoEventoId'])
+          && request.resource.data.statusOficial == 'encaminhada'
+          && resource.data.get('verificada', false) == true
+          && request.resource.data.encaminhadaEm == request.time
+          && eventoRegistrado(ocorrenciaId, 'encaminhada'))
+        ||
+        // Marcar como resolvida (só após confirmada).
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statusOficial', 'resolvidaEm', 'ultimoEventoId'])
+          && request.resource.data.statusOficial == 'resolvida'
+          && resource.data.get('verificada', false) == true
+          && request.resource.data.resolvidaEm == request.time
+          && eventoRegistrado(ocorrenciaId, 'resolvida'))
+      );
+    }
+
+    function isValidFixadaUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fixada'])
+        && request.resource.data.fixada is bool;
+    }
+
+    // Autoridade oculta/reexibe conteúdo denunciado por abuso (moderação).
+    function isValidOcultarUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['oculto'])
+        && request.resource.data.oculto is bool;
+    }
+
+    // Evento da linha do tempo de auditoria (subcoleção historico). Append-only:
+    // registra qual ação oficial ocorreu, opcionalmente quem, e quando.
+    function isValidHistoricoEvento(data) {
+      return data.keys().hasOnly(['status', 'por', 'data'])
+        && data.status in ['verificada', 'em_analise', 'nao_confirmada', 'encaminhada', 'resolvida', 'revertida']
+        // Quem agiu = nome do perfil da autoridade (antes texto livre).
+        && data.por == nomeDoPerfil()
+        && data.data == request.time;
+    }
+
+    // Visível ao público: oculto == false, ou documento antigo sem o campo.
+    // Documento inexistente também passa: um get de denúncia apagada deve
+    // devolver "não existe", não permission-denied.
+    function naoOculto(data) {
+      return resource == null || !('oculto' in data) || data.oculto == false;
+    }
+
+    // A ocorrência existe e quem lê pode vê-la (mesmo critério do get dela).
+    // Usada nas subcoleções que não podem sobreviver à denúncia pai.
+    function paiLegivel(ocorrenciaId) {
+      let pai = /databases/$(database)/documents/ocorrencias/$(ocorrenciaId);
+      let dono = /databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/dono/info;
+      return exists(pai)
+        && (!('oculto' in get(pai).data)
+          || get(pai).data.oculto == false
+          || get(pai).data.get('usuarioId', null) == request.auth.uid
+          || isAutoridade()
+          || (get(pai).data.get('anonima', false) == true
+            && exists(dono)
+            && get(dono).data.usuarioId == request.auth.uid));
+    }
+
+    function isValidComment(data, ocorrenciaId) {
+      return exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId))
+        && data.keys().hasOnly([
+          'texto', 'userId', 'userName', 'userPhotoUrl', 'dataCriacao',
+          'parentId', 'likedBy', 'likes', 'autorAutoridade', 'oculto',
+        ])
+        // Nasce visível; só a autoridade oculta (isValidOcultarUpdate).
+        && (!('oculto' in data) || data.oculto == false)
+        && data.texto is string
+        && data.texto.size() >= 1
+        && data.texto.size() <= 500
+        && naoEmBranco(data.texto)
+        && data.userId == request.auth.uid
+        && data.userName is string
+        && data.userName == nomeDoPerfil()
+        && isOptionalPublicPhoto(data.userPhotoUrl)
+        && data.dataCriacao == request.time
+        && (!('parentId' in data) || data.parentId == null
+          || (data.parentId is string && data.parentId.size() > 0 && data.parentId.size() <= 200))
+        && data.likedBy is list && data.likedBy.size() == 0
+        && data.likes is int && data.likes == 0
+        // O selo azul "autoridade" só pode ser gravado por quem tem o papel.
+        && (!('autorAutoridade' in data)
+          || data.autorAutoridade == false
+          || (data.autorAutoridade == true && isAutoridade()));
+    }
+
+    // Curtir/descurtir comentário: o usuário só adiciona/remove o próprio UID.
+    function isValidCommentLikeUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy', 'likes', 'curtidoPorAutoridade'])
+        // Selo "curtido pela autoridade": só a autoridade grava, e o valor
+        // acompanha a própria curtida dela.
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['curtidoPorAutoridade'])
+          || (isAutoridade()
+            && request.resource.data.curtidoPorAutoridade == (request.auth.uid in request.resource.data.likedBy)))
+        && request.resource.data.likedBy is list
+        && request.resource.data.likes is int
+        && request.resource.data.likes == request.resource.data.likedBy.size()
+        && (
+          (addedCurrentUser(resource.data.get('likedBy', []), request.resource.data.likedBy)
+            && request.resource.data.likes == resource.data.get('likes', 0) + 1)
+          ||
+          (removedCurrentUser(resource.data.get('likedBy', []), request.resource.data.likedBy)
+            && request.resource.data.likes == resource.data.get('likes', 0) - 1)
+        );
+    }
+
+    // Exclusão de conta: o autor troca nome e foto por um marcador neutro nos
+    // comentários que ficam em denúncias alheias (Política de Privacidade,
+    // item 6). Não exige e-mail verificado: quem comentou já tinha verificado.
+    function isAnonimizacaoDoAutor() {
+      return resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userName', 'userPhotoUrl'])
+        && request.resource.data.userName == 'Usuário removido'
+        && request.resource.data.userPhotoUrl == null;
+    }
+
+    function isValidCommentTextUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['texto'])
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.texto is string
+        && request.resource.data.texto.size() >= 1
+        && request.resource.data.texto.size() <= 500
+        && naoEmBranco(request.resource.data.texto);
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasOnly(['nome', 'bio', 'bairro', 'fotoUrl'])
+        && data.nome is string
+        && data.nome.size() >= 1
+        && data.nome.size() <= 40
+        && naoEmBranco(data.nome)
+        && data.bio is string
+        && data.bio.size() <= 150
+        && data.bairro is string
+        && data.bairro.size() <= 40
+        && (!('fotoUrl' in data) || isOptionalPublicPhoto(data.fotoUrl));
+    }
+
+    function isValidSocialLink(data, uid) {
+      return data.keys().hasOnly(['uid', 'criadoEm'])
+        && data.uid == uid
+        && data.criadoEm == request.time;
+    }
+
+    // Notificação de interação (comentário / curtida / mudança de status): quem
+    // gera é OUTRO usuário, e a denúncia referida precisa existir e pertencer ao
+    // dono que recebe. Protege contra spam de notificação forjada.
+    function isValidInteractionNotification(data, donoId) {
+      return data.keys().hasOnly([
+          'tipo',
+          'deUsuarioNome',
+          'ocorrenciaId',
+          'ocorrenciaTitulo',
+          'dataCriacao',
+          'lida',
+        ])
+        && data.tipo in [
+          'comentario',
+          'curtida',
+          'status_em_analise',
+          'status_confirmada',
+          'status_nao_confirmada',
+          'status_encaminhada',
+          'status_resolvida',
+        ]
+        && data.deUsuarioNome is string
+        && data.deUsuarioNome.size() >= 1
+        && data.deUsuarioNome.size() <= 80
+        && data.ocorrenciaId is string
+        && data.ocorrenciaId.size() > 0
+        && data.ocorrenciaTitulo is string
+        && data.dataCriacao == request.time
+        && data.lida == false
+        && exists(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId))
+        && get(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId)).data.usuarioId == donoId
+        // Título igual ao da denúncia: antes era texto livre e servia de
+        // isca de phishing no inbox do dono.
+        && data.ocorrenciaTitulo == get(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId)).data.titulo;
+    }
+
+    // Cada tipo de interação só pode ser gerado por quem de fato fez a ação,
+    // com ID determinístico (create-only → um segundo envio vira update e é
+    // negado, deduplicando). Mudança de status só pela autoridade — antes
+    // qualquer usuário mandava uma "resolução oficial" falsa.
+    function isInteracaoAutentica(data, notifId) {
+      return (data.tipo == 'curtida'
+          && notifId == 'curtida_' + data.ocorrenciaId + '_' + request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId)).data.likedBy
+          && data.deUsuarioNome == nomeDoPerfil())
+        || (data.tipo == 'comentario'
+          && notifId.matches('comentario_[A-Za-z0-9]+')
+          && get(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId)/comentarios/$(notifId.split('_')[1])).data.userId == request.auth.uid
+          && data.deUsuarioNome == nomeDoPerfil())
+        || (data.tipo.matches('status_.*') && isAutoridade());
+    }
+
+    // Notificação de conquista (gamificação): o próprio usuário grava para si
+    // mesmo ao desbloquear um badge. Sem denúncia associada (ocorrenciaId vazio).
+    function isValidConquistaNotification(data) {
+      return data.keys().hasOnly([
+          'tipo',
+          'deUsuarioNome',
+          'ocorrenciaId',
+          'ocorrenciaTitulo',
+          'conquistaTitulo',
+          'dataCriacao',
+          'lida',
+        ])
+        && data.tipo == 'conquista'
+        && data.deUsuarioNome is string
+        && data.deUsuarioNome.size() <= 80
+        && data.conquistaTitulo is string
+        && data.conquistaTitulo.size() >= 1
+        && data.conquistaTitulo.size() <= 120
+        && data.dataCriacao == request.time
+        && data.lida == false;
+    }
+
+    function isValidModerationReport(data) {
+      return data.keys().hasOnly([
+          'alvoTipo',
+          'ocorrenciaId',
+          'comentarioId',
+          'denuncianteId',
+          'motivo',
+          'detalhe',
+          'status',
+          'criadoEm',
+        ])
+        && data.alvoTipo in ['ocorrencia', 'comentario']
+        && data.ocorrenciaId is string
+        && data.ocorrenciaId.size() > 0
+        && exists(/databases/$(database)/documents/ocorrencias/$(data.ocorrenciaId))
+        && (data.alvoTipo == 'ocorrencia'
+          ? data.comentarioId == null
+          : (data.comentarioId is string && data.comentarioId.size() > 0))
+        && data.denuncianteId == request.auth.uid
+        && data.motivo is string
+        && data.motivo.size() >= 3
+        && data.motivo.size() <= 80
+        && naoEmBranco(data.motivo)
+        && (data.detalhe == null || (data.detalhe is string && data.detalhe.size() <= 240))
+        && data.status == 'pendente'
+        && data.criadoEm == request.time;
+    }
+
+    match /ocorrencias/{ocorrenciaId} {
+      // Conteúdo ocultado pela moderação só é legível pelo dono e pela
+      // autoridade. Antes `oculto` era filtrado só no feed e no mapa: o
+      // conteúdo seguia no perfil público, em deep links e notificações.
+      //
+      // get (por ID): documentos antigos, sem o campo, contam como visíveis.
+      allow get: if signedIn()
+        && (naoOculto(resource.data) || isOwner() || isAutoridade());
+      // list (consultas): o app filtra where('oculto', isEqualTo: false) — a
+      // regra precisa ser provável só pelos filtros da consulta, então aqui
+      // não dá para usar isOwner() (que lê dono/info por documento). O dono
+      // não-anônimo enxerga as próprias pelo filtro usuarioId.
+      allow list: if signedIn()
+        && (resource.data.oculto == false
+          || resource.data.usuarioId == request.auth.uid
+          || isAutoridade());
+      allow create: if emailVerificado()
+        && isValidOcorrencia(request.resource.data)
+        && (request.resource.data.anonima != true
+          || donoCriadoNoMesmoBatch(ocorrenciaId));
+
+      allow update: if emailVerificado() && (
+        // Dono edita título e descrição só enquanto a autoridade não agiu:
+        // depois de verificada (ou com status oficial), o selo "Verificada
+        // por <órgão>" passaria a atestar um texto que o órgão nunca viu.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['titulo', 'descricao'])
+          && resource.data.get('verificada', false) == false
+          && resource.data.get('statusOficial', null) == null
+          && isOwner()
+          && isValidTitle(request.resource.data.titulo)
+          && isValidDescription(request.resource.data.descricao))
+        ||
+        // Owner can propagate public display data after editing profile —
+        // nunca em denúncia anônima (manteria a identidade fora do registro).
+        // affectedKeys antes de isOwner(): isOwner lê dono/info (cobrado) e
+        // era avaliado em toda reação/compartilhamento sem necessidade.
+        (request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['usuarioNome', 'usuarioFotoUrl'])
+          && resource.data.anonima != true
+          && isOwner()
+          && isValidPublicUserFields(request.resource.data))
+        ||
+        // Reactions: authenticated user can only add/remove their own UID.
+        isValidReactionUpdate()
+        ||
+        // Compartilhamento: soma exatamente 1 ao contador, uma vez por usuário.
+        isValidShareUpdate(ocorrenciaId)
+        ||
+        // Autoridade pode verificar / desverificar qualquer denúncia.
+        (isAutoridade() && isValidVerificacaoUpdate(ocorrenciaId))
+        ||
+        // Autoridade pode definir status de triagem (em análise / não confirmada).
+        (isAutoridade() && isValidStatusOficialUpdate(ocorrenciaId))
+        ||
+        (isAutoridade() && isValidFixadaUpdate())
+        ||
+        // Autoridade oculta conteúdo denunciado por abuso (moderação).
+        (isAutoridade() && isValidOcultarUpdate())
+      );
+
+      allow delete: if isOwner();
+
+      // Quem já compartilhou (um doc por usuário). Create-only e só junto do
+      // +1 em `shares` no mesmo batch; ver isValidShareUpdate.
+      match /compartilhamentos/{uid} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create: if emailVerificado()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'criadoEm'])
+          && request.resource.data.uid == uid
+          && request.resource.data.criadoEm == request.time
+          && getAfter(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.get('shares', 0)
+            == get(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.get('shares', 0) + 1;
+        allow update: if false;
+      }
+
+      match /comentarios/{comentarioId} {
+        // Mesma lógica das ocorrências: comentário ocultado só para o autor e
+        // a autoridade. E a denúncia pai precisa ser legível por quem lê:
+        // antes, com o ID, um terceiro lia os comentários de uma denúncia
+        // ocultada ou apagada. (O autor segue lendo os próprios pela regra
+        // de grupo abaixo.)
+        allow get: if signedIn()
+          && paiLegivel(ocorrenciaId)
+          && (naoOculto(resource.data)
+            || resource.data.userId == request.auth.uid
+            || isAutoridade());
+        allow list: if signedIn()
+          && paiLegivel(ocorrenciaId)
+          && (resource.data.oculto == false
+            || resource.data.userId == request.auth.uid
+            || isAutoridade());
+        // Só em denúncia que existe (antes aceitava comentário órfão).
+        allow create: if emailVerificado()
+          && isValidComment(request.resource.data, ocorrenciaId);
+        allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+        // Curtidas/texto pelo autor; ocultação por abuso pela autoridade.
+        allow update: if (signedIn() && isAnonimizacaoDoAutor())
+          || (emailVerificado()
+            && (isValidCommentLikeUpdate() || isValidCommentTextUpdate()
+              || (isAutoridade() && isValidOcultarUpdate())));
+      }
+
+      // Linha do tempo de auditoria: só a autoridade registra eventos das ações
+      // oficiais (verificação / status), e o registro é imutável — nunca pode
+      // ser editado ou apagado (append-only). Escrito no mesmo batch da
+      // mudança de status pelo app.
+      match /historico/{eventoId} {
+        allow read: if signedIn();
+        allow create: if isAutoridade()
+          && isValidHistoricoEvento(request.resource.data);
+        allow update, delete: if false;
+      }
+
+      // UID real do denunciante quando a ocorrência é anônima (S2). Só o
+      // próprio dono ou autoridade leem; ninguém mais consegue correlacionar
+      // denúncias anônimas pelo autor. Criado no MESMO WriteBatch da
+      // ocorrência pai (ver OcorrenciaRepository.cadastrarOcorrencia).
+      match /dono/{docId} {
+        allow read: if signedIn()
+          && (resource.data.usuarioId == request.auth.uid || isAutoridade());
+        // `!exists(pai)` + `getAfter(pai)`: a ocorrência não existia antes
+        // desta escrita e passa a existir depois dela, ou seja, está sendo
+        // criada no mesmo batch. Assim só quem cria a denúncia vira dono —
+        // antes, qualquer conta verificada podia gravar dono/info numa
+        // denúncia anônima alheia que tivesse ficado sem dono.
+        allow create: if emailVerificado()
+          && docId == 'info'
+          && !exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId))
+          && !exists(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/dono/$(docId))
+          && getAfter(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.anonima == true
+          && getAfter(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)).data.usuarioId == null
+          && isValidDonoInfo(request.resource.data);
+        // Só o próprio dono apaga (ao excluir a denúncia anônima).
+        allow delete: if signedIn() && resource.data.usuarioId == request.auth.uid;
+        allow update: if false;
+      }
+    }
+
+    // Consulta de grupo usada só na exclusão de conta (LGPD): acha os
+    // registros de compartilhamento do próprio usuário em todas as denúncias.
+    match /{caminho=**}/compartilhamentos/{uid} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Idem para os comentários do próprio usuário, que a exclusão de conta
+    // anonimiza (isAnonimizacaoDoAutor).
+    match /{caminho=**}/comentarios/{comentarioId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /usuarios/{userId} {
+      allow read: if signedIn();
+      // Nome novo (create, ou update que troca o slug) exige a reserva. Update
+      // que mantém o slug passa sem ela: contas anteriores a nomes_reservados
+      // continuam editando bio, bairro e foto.
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && isValidUserProfile(request.resource.data)
+        && ((resource != null
+            && slugDoNome(request.resource.data.nome) == slugDoNome(resource.data.nome))
+          || nomeReservadoPor(request.resource.data.nome, userId));
+      // LGPD art. 18 — direito à exclusão: o próprio usuário pode apagar seu perfil.
+      allow delete: if signedIn() && request.auth.uid == userId;
+
+      // Ponteiros (só o ID) das próprias denúncias anônimas do usuário (S2).
+      // Necessário porque o documento público da ocorrência não guarda mais
+      // usuarioId quando anonima==true — sem isso, "Minhas denúncias" não
+      // conseguiria listar as próprias denúncias anônimas.
+      match /minhas_denuncias_anonimas/{ocorrenciaId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        // O ponteiro só pode apontar para uma denúncia da qual o usuário é
+        // dono (dono/info com o próprio uid, gravado antes ou no mesmo
+        // batch). Antes bastava a denúncia ser anônima — dava para pôr a
+        // denúncia de outra pessoa em "Minhas denúncias".
+        allow create: if emailVerificado()
+          && request.auth.uid == userId
+          && request.resource.data.keys().size() == 0
+          && getAfter(/databases/$(database)/documents/ocorrencias/$(ocorrenciaId)/dono/info)
+            .data.usuarioId == userId;
+        allow update: if false;
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
+
+      // Estado privado do app por usuário (hoje: conquistasNotificadas, a
+      // lista de conquistas já notificadas). Sem esta regra o catch-all
+      // negava a escrita e nenhuma notificação de conquista saía.
+      match /meta/{docId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        // Os carimbos de limite (reacao, denuncia) só saem junto com o perfil,
+        // na exclusão de conta. Apagá-los à parte zerava o intervalo mínimo.
+        allow delete: if signedIn() && request.auth.uid == userId
+          && (!(docId in ['reacao', 'denuncia'])
+            || !existsAfter(/databases/$(database)/documents/usuarios/$(userId)));
+        allow create, update: if signedIn()
+          && request.auth.uid == userId
+          && ((docId == 'conquistasNotificadas'
+              && request.resource.data.keys().hasOnly(['items'])
+              && request.resource.data.items is list
+              && request.resource.data.items.size() <= 50)
+            // Carimbo da última reação (ver respeitaIntervaloDeReacao).
+            || (docId in ['reacao', 'denuncia']
+              && request.resource.data.keys().hasOnly(['ultima'])
+              && request.resource.data.ultima == request.time)
+            // Id da sessão ativa (uma por conta; ver SessaoService). Só o
+            // id aleatório: sem data nem aparelho, não vira log de acesso.
+            || (docId == 'sessao'
+              && request.resource.data.keys().hasOnly(['id'])
+              && request.resource.data.id is string
+              && request.resource.data.id.size() >= 16
+              && request.resource.data.id.size() <= 64));
+      }
+
+      match /seguindo/{alvoUid} {
+        allow read: if signedIn();
+        allow create, update: if emailVerificado()
+          && request.auth.uid == userId
+          && request.auth.uid != alvoUid
+          && isValidSocialLink(request.resource.data, alvoUid);
+        // Qualquer um dos dois lados desfaz o vínculo: quem segue (deixar de
+        // seguir) ou quem é seguido (ao excluir a conta, para não deixar um
+        // ponteiro órfão apontando para um perfil que não existe mais).
+        allow delete: if signedIn()
+          && (request.auth.uid == userId || request.auth.uid == alvoUid);
+      }
+
+      match /seguidores/{seguidorUid} {
+        allow read: if signedIn();
+        allow create, update: if emailVerificado()
+          && request.auth.uid == seguidorUid
+          && request.auth.uid != userId
+          && isValidSocialLink(request.resource.data, seguidorUid);
+        // Simétrico ao /seguindo acima: o seguidor desfaz, e o dono do perfil
+        // também pode remover (exclusão de conta / remover seguidor).
+        allow delete: if signedIn()
+          && (request.auth.uid == seguidorUid || request.auth.uid == userId);
+      }
+    }
+
+    // Índice de unicidade de nome de exibição. O ID do documento é o slug do
+    // nome (minúsculas, sem acentos — ver slugify em lib/utils/texto.dart).
+    //
+    // Existe por dois motivos. Custo: a checagem anterior lia a coleção
+    // `usuarios` inteira a cada cadastro, O(n) em leituras. Correção: aquela
+    // checagem também não era atômica — dois cadastros simultâneos com o mesmo
+    // nome passavam os dois.
+    //
+    // A atomicidade está em `allow update: if false`. Um set() sobre um slug já
+    // reservado é avaliado como update e negado, então só quem chega primeiro
+    // escreve. Não há transação no cliente.
+    //
+    // O vínculo com o perfil fica em usuarios/{uid}: nome novo só com a
+    // reserva do slug dele (nomeReservadoPor). Limitação conhecida: uma conta
+    // ainda pode reservar nomes que não usa. Limitar a uma reserva por conta
+    // exige uma Cloud Function (ADR 0001, commit 4f14498; ver
+    // docs/ARCHITECTURE.md).
+    match /nomes_reservados/{slug} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'nome', 'criadoEm'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() >= 1
+        && request.resource.data.nome.size() <= 40
+        && request.resource.data.criadoEm == request.time
+        // Formato do slugify() (minúsculas, dígitos e hífens). Sem isto dava
+        // para reservar IDs arbitrários. Não exige e-mail verificado porque
+        // o cadastro reserva o nome antes da confirmação; o limite de uma
+        // reserva por conta continua dependendo de uma Cloud Function.
+        && slug.matches('^[a-z0-9]+(-[a-z0-9]+)*$')
+        && slug.size() <= 60;
+      allow update: if false;
+      // Só libera a reserva quem não está mais usando o nome (troca de nome
+      // já salva, ou perfil apagado na exclusão de conta). Antes dava para
+      // soltar a reserva e seguir com o nome, deixando outra conta pegá-lo.
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid
+        && (!existsAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+          || slugDoNome(getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.nome) != slug);
+    }
+
+    match /notificacoes/{donoId}/items/{notifId} {
+      allow read, delete: if signedIn() && request.auth.uid == donoId;
+      // O dono só marca como lida. Antes podia reescrever remetente, título e
+      // tipo da notificação recebida.
+      allow update: if signedIn() && request.auth.uid == donoId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lida'])
+        && request.resource.data.lida is bool;
+      allow create: if emailVerificado() && (
+        // Interação: outro usuário notifica o dono da denúncia.
+        (request.auth.uid != donoId
+          && isValidInteractionNotification(request.resource.data, donoId)
+          && isInteracaoAutentica(request.resource.data, notifId))
+        ||
+        // Conquista: o usuário grava a própria notificação de badge, com ID
+        // por conquista (não duplica).
+        (request.auth.uid == donoId
+          && notifId.matches('conquista_[a-z0-9-]+')
+          && isValidConquistaNotification(request.resource.data))
+      );
+    }
+
+    // Papéis de autoridade. Cada usuário só lê o próprio papel (para o app
+    // decidir o que mostrar). A escrita é feita apenas pelo Console do Firebase
+    // (Admin), nunca pelo app — por isso nenhuma escrita é permitida aqui.
+    match /denuncias_moderacao/{denunciaId} {
+      allow create: if emailVerificado()
+        && isValidModerationReport(request.resource.data)
+        && respeitaIntervaloDeDenuncia();
+      allow read, delete: if isAutoridade();
+      // Resolver: só sai de 'pendente' para uma decisão válida, com quem e
+      // quando (antes a autoridade podia reescrever qualquer campo).
+      allow update: if isAutoridade()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'resolvidoPor', 'resolvidoEm'])
+        && resource.data.status == 'pendente'
+        && request.resource.data.status in ['revisada', 'rejeitada']
+        && request.resource.data.resolvidoPor == request.auth.uid
+        && request.resource.data.resolvidoEm == request.time;
+    }
+
+    match /roles/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Registro comprovável de consentimento (LGPD art. 8 §1): versão dos
+    // documentos aceitos + carimbo de tempo. O usuário só lê/grava o próprio,
+    // e o aceite precisa ser explícito (termos e privacidade == true).
+    function isValidConsentimento(data) {
+      return data.keys().hasOnly(['versao', 'aceiteTermos', 'aceitePrivacidade', 'aceitoEm'])
+        && data.versao is string
+        && data.versao.size() >= 1
+        && data.versao.size() <= 20
+        && data.aceiteTermos == true
+        && data.aceitePrivacidade == true
+        && data.aceitoEm == request.time;
+    }
+
+    match /consentimentos/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && isValidConsentimento(request.resource.data);
+      // LGPD art. 18 — exclusão de conta apaga também o registro de consentimento.
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

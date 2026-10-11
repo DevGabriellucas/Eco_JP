@@ -1,0 +1,39 @@
+name: Configurar Flutter (EcoJP)
+description: >
+  Setup reutilizável para os jobs Flutter: instala o Flutter (com cache),
+  baixa dependências e injeta a MAPS_API_KEY. O lib/firebase_options.dart é
+  versionado (a config do Firebase de app cliente não é segredo), e o plugin
+  gms não é aplicado no Gradle, então nenhum dos dois precisa ser gerado aqui.
+
+inputs:
+  maps-api-key:
+    description: Valor de secrets.MAPS_API_KEY (pode ficar vazio em PRs de fork).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # Versão fixa: com `channel: stable` cada run pegava o Flutter mais novo e
+    # um build podia quebrar sem nenhuma mudança no repositório. Atualize
+    # junto com a versão usada no desenvolvimento.
+    - name: Configurar Flutter
+      uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      with:
+        channel: stable
+        flutter-version: 3.47.2
+        cache: true
+
+    - name: Versões instaladas
+      shell: bash
+      run: flutter --version
+
+    - name: Instalar dependências
+      shell: bash
+      run: flutter pub get
+
+    - name: Injetar MAPS_API_KEY
+      shell: bash
+      env:
+        MAPS_API_KEY: ${{ inputs.maps-api-key }}
+      run: echo "MAPS_API_KEY=$MAPS_API_KEY" >> android/local.properties

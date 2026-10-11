@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+	<dict>
+		<key>CADisableMinimumFrameDurationOnPhone</key>
+		<true/>
+		<key>CFBundleDevelopmentRegion</key>
+		<string>$(DEVELOPMENT_LANGUAGE)</string>
+		<key>CFBundleDisplayName</key>
+		<string>EcoJP</string>
+		<key>CFBundleExecutable</key>
+		<string>$(EXECUTABLE_NAME)</string>
+		<key>CFBundleIdentifier</key>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+		<key>CFBundleInfoDictionaryVersion</key>
+		<string>6.0</string>
+		<key>CFBundleName</key>
+		<string>EcoJP</string>
+		<key>CFBundlePackageType</key>
+		<string>APPL</string>
+		<key>CFBundleShortVersionString</key>
+		<string>$(FLUTTER_BUILD_NAME)</string>
+		<key>CFBundleSignature</key>
+		<string>????</string>
+		<key>CFBundleVersion</key>
+		<string>$(FLUTTER_BUILD_NUMBER)</string>
+		<key>LSRequiresIPhoneOS</key>
+		<true/>
+		<key>UIApplicationSceneManifest</key>
+		<dict>
+			<key>UIApplicationSupportsMultipleScenes</key>
+			<false/>
+			<key>UISceneConfigurations</key>
+			<dict>
+				<key>UIWindowSceneSessionRoleApplication</key>
+				<array>
+					<dict>
+						<key>UISceneClassName</key>
+						<string>UIWindowScene</string>
+						<key>UISceneConfigurationName</key>
+						<string>flutter</string>
+						<key>UISceneDelegateClassName</key>
+						<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+						<key>UISceneStoryboardFile</key>
+						<string>Main</string>
+					</dict>
+				</array>
+			</dict>
+		</dict>
+		<key>UIApplicationSupportsIndirectInputEvents</key>
+		<true/>
+		<key>NSCameraUsageDescription</key>
+		<string>O EcoJP usa a câmera para registrar fotos e vídeos das ocorrências.</string>
+		<!-- Gravar vídeo pela câmera (form_ocorrencia_page) também captura áudio.
+		     Sem esta chave o iOS encerra o app ao abrir a gravação e a Apple
+		     rejeita o envio para a App Store. -->
+		<key>NSMicrophoneUsageDescription</key>
+		<string>O EcoJP usa o microfone para gravar o áudio dos vídeos das ocorrências.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>O EcoJP usa sua localização para preencher o endereço da ocorrência.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>O EcoJP usa sua galeria para anexar fotos e vídeos das ocorrências.</string>
+		<key>UILaunchStoryboardName</key>
+		<string>LaunchScreen</string>
+		<key>UIMainStoryboardFile</key>
+		<string>Main</string>
+		<key>UISupportedInterfaceOrientations</key>
+		<array>
+			<string>UIInterfaceOrientationPortrait</string>
+			<string>UIInterfaceOrientationLandscapeLeft</string>
+			<string>UIInterfaceOrientationLandscapeRight</string>
+		</array>
+		<key>UISupportedInterfaceOrientations~ipad</key>
+		<array>
+			<string>UIInterfaceOrientationPortrait</string>
+			<string>UIInterfaceOrientationPortraitUpsideDown</string>
+			<string>UIInterfaceOrientationLandscapeLeft</string>
+			<string>UIInterfaceOrientationLandscapeRight</string>
+		</array>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>com.ecojp.deeplink</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>ecojp</string>
+				</array>
+			</dict>
+		</array>
+		<!-- O deep link é tratado pelo app_links (lib/core/deep_link.dart). -->
+		<key>FlutterDeepLinkingEnabled</key>
+		<false/>
+		<key>UIStatusBarHidden</key>
+		<false/>
+		<!-- Preenchido em tempo de build por MAPS_API_KEY (ios/Flutter/Maps.xcconfig,
+		     gitignored). O SDK não lê esta chave sozinho: quem a registra é a
+		     chamada GMSServices.provideAPIKey no AppDelegate.swift, que lê daqui. -->
+		<key>GMSApiKey</key>
+		<string>$(MAPS_API_KEY)</string>
+	</dict>
+</plist>

@@ -1,0 +1,27 @@
+{
+  "name": "eco-jp-firestore-tests",
+  "version": "1.0.0",
+  "description": "Testes para regras de Firestore do EcoJP",
+  "scripts": {
+    "test": "npm --prefix test/firestore_rules test",
+    "emulator": "firebase emulators:start",
+    "emulator:clean": "firebase emulators:start --import ./firestore_export",
+    "loadtest:seed": "node loadtest/seed.mjs",
+    "loadtest:curtidas": "k6 run loadtest/k6/curtidas.js",
+    "loadtest:denuncias": "k6 run loadtest/k6/denuncias.js",
+    "loadtest:feed": "k6 run loadtest/k6/feed.js",
+    "loadtest:pico": "k6 run loadtest/k6/pico.js",
+    "loadtest:corpus": "node loadtest/corpus.mjs",
+    "backfill:nomes": "node scripts/backfill_nomes_reservados.mjs",
+    "backfill:oculto": "node scripts/backfill_oculto.mjs",
+    "limpar:denuncias": "node scripts/limpar_denuncias.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "firebase-admin": "^11.11.0",
+    "firebase-functions-test": "^3.0.0",
+    "jest": "^29.7.0"
+  }
+}

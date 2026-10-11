@@ -1,0 +1,8 @@
+// Modelo versionado. Copie para Maps.xcconfig (gitignored) e preencha com a
+// chave do Google Maps do seu projeto no Google Cloud Console:
+//
+//     cp ios/Flutter/Maps.xcconfig.example ios/Flutter/Maps.xcconfig
+//
+// A chave precisa da API "Maps SDK for iOS" habilitada — é uma API distinta
+// da "Maps SDK for Android" usada em android/local.properties.
+MAPS_API_KEY=
