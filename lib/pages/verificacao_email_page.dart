@@ -7,8 +7,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../features/auth/providers/auth_providers.dart';
 import '../theme/app_icons.dart';
-import '../theme/brand_colors.dart';
 import '../theme/brand_fonts.dart';
+import '../theme/marca_cores.dart';
 import '../widgets/marca/botao_primario.dart';
 import '../widgets/marca/botao_secundario.dart';
 import '../widgets/marca/corpo_rolavel.dart';
@@ -168,13 +168,13 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
-        systemNavigationBarColor: BrandColors.surfaceLight,
+        systemNavigationBarColor: context.marca.fundo,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
         maxScaleFactor: 2.0,
         child: Scaffold(
-          backgroundColor: BrandColors.surfaceLight,
+          backgroundColor: context.marca.fundo,
           body: CorpoRolavel(
             // Três itens com spaceBetween: o bloco de conteúdo fica
             // centralizado no espaço acima dos botões, que ficam no pé.
@@ -208,9 +208,9 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
           texto: 'Já confirmei',
           carregando: _verificando,
           onPressed: _verificando ? null : () => _checarVerificacao(),
-          icone: const IconeSvg(
+          icone: IconeSvg(
             AppIcons.check,
-            cor: BrandColors.onPrimary,
+            cor: context.marca.sobreDestaque,
           ),
         ),
         const SizedBox(height: 12),
@@ -222,16 +222,14 @@ class _VerificacaoEmailPageState extends ConsumerState<VerificacaoEmailPage>
           onPressed: (esperando || _enviando) ? null : _reenviar,
           icone: IconeSvg(
             AppIcons.send,
-            cor: esperando
-                ? BrandColors.textOnLightMuted
-                : BrandColors.textOnLight,
+            cor: esperando ? context.marca.textoApoio : context.marca.texto,
           ),
         ),
         const SizedBox(height: 8),
         TextButton(
           onPressed: _saindo ? null : _sair,
           style: TextButton.styleFrom(
-            foregroundColor: BrandColors.primary,
+            foregroundColor: context.marca.destaque,
             minimumSize: const Size(48, 48),
             textStyle: BrandFonts.label.copyWith(fontSize: 15),
           ),
@@ -258,7 +256,7 @@ class _Conteudo extends StatelessWidget {
         Center(
           child: RepaintBoundary(
             child: SvgPicture.asset(
-              AppIllustrations.emailBranchLight,
+              context.marca.ilustracaoEmail,
               width: (largura * 0.67).clamp(200.0, 300.0),
               excludeFromSemantics: true,
             ),
@@ -268,21 +266,21 @@ class _Conteudo extends StatelessWidget {
         Text(
           'Confirme seu e-mail',
           textAlign: TextAlign.center,
-          style: BrandFonts.heading.copyWith(color: BrandColors.textOnLight),
+          style: BrandFonts.heading.copyWith(color: context.marca.texto),
         ),
         const SizedBox(height: 12),
         Text.rich(
           TextSpan(
             style: BrandFonts.body.copyWith(
               fontSize: 16,
-              color: BrandColors.textOnLightMuted,
+              color: context.marca.textoApoio,
             ),
             children: [
               const TextSpan(text: 'Enviamos um link de confirmação para\n'),
               TextSpan(
                 text: email,
                 style: BrandFonts.label.copyWith(
-                  color: BrandColors.textOnLight,
+                  color: context.marca.texto,
                 ),
               ),
             ],
@@ -293,17 +291,17 @@ class _Conteudo extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: BrandColors.primarySoft,
+            color: context.marca.superficie,
             borderRadius: BorderRadius.circular(MedidasMarca.raio),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 2),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
                 child: IconeSvg(
                   AppIcons.clock,
-                  cor: BrandColors.linkSecondary,
+                  cor: context.marca.linkSecundario,
                   tamanho: 18,
                 ),
               ),
@@ -314,7 +312,7 @@ class _Conteudo extends StatelessWidget {
                   'Confira o spam ou peça outro abaixo.',
                   style: BrandFonts.body.copyWith(
                     fontSize: 14,
-                    color: BrandColors.textOnLightMuted,
+                    color: context.marca.textoApoio,
                   ),
                 ),
               ),

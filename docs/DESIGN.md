@@ -118,6 +118,32 @@ juntos.
 | Estados de lista (`widgets/feed_states.dart`) | Vazio, carregando e erro com ação de tentar de novo |
 | Aviso de recorte (`widgets/aviso_recorte.dart`) | Quando o limite de 500 registros foi atingido, mostra o total real |
 
+### Claro e escuro nas telas de marca — `MarcaCores` (`lib/theme/marca_cores.dart`)
+
+As telas de entrada (inicial, login, cadastro, confirmação, consentimento) e os componentes de
+marca leem as cores de `context.marca`, que troca com o tema do app (sistema, claro ou
+escuro). Os nomes são de papel; os valores vêm de `BrandColors`. A splash é verde-escura nos
+dois temas.
+
+| Papel | Claro | Escuro |
+|---|---|---|
+| `fundo` | `surfaceLight` #FFFFFF | `background` #1A2420 |
+| `superficie` (caixas, círculos) | `primarySoft` #E8F3EE | `surfaceDarkRaised` #22302A* |
+| `texto` | `textOnLight` #1A2420 | `textPrimary` #F6F8F7 |
+| `textoApoio` | `textOnLightMuted` #5F6B66 | `textSecondary` #C7D0CB |
+| `rotulo` | `textOnLight` | `textSecondary` |
+| `borda` | `neutralSoft` #D3D9D6 | `borderDark` #34413B* |
+| `destaque` | `primary` #087F5B | `accent` #52D5A0 |
+| `sobreDestaque` | `onPrimary` #FFFFFF | `onAccent` |
+| `linkSecundario` | `linkSecondary` #287894 | `linkSecondaryDark` #73B8D0 |
+| `curvasLogin` | cor do SVG | `contourOnDark` #2C3833* |
+| `logo` / `ilustracaoEmail` | `ecohubOnLight` / `emailBranchLight` | `ecohub` / `emailBranch` |
+
+\* estimados nos mockups escuros; conferir no Figma.
+
+**Regra:** tela de marca nunca usa `BrandColors` direto para fundo, texto, borda ou destaque —
+sempre `context.marca`, senão ela fica clara no modo escuro.
+
 ### Componentes de marca (`lib/widgets/marca/`)
 
 Usados nas telas claras do fluxo de entrada (login, cadastro, confirmação de e-mail,

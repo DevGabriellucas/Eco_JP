@@ -33,4 +33,12 @@ abstract final class BrandColors {
   static const neutralSoft = Color(0xFFD3D9D6); // indicador inativo, divisórias
   // Valor do Figma (não estimado). Contraste ~5:1 sobre branco.
   static const linkSecondary = Color(0xFF287894); // links secundários no claro
+
+  // Superfícies escuras (modo escuro das telas de entrada). Os três primeiros
+  // foram estimados nos mockups escuros, não lidos do arquivo: confira e
+  // ajuste aqui. `linkSecondaryDark` é a cor do clock.svg do Figma.
+  static const surfaceDarkRaised = Color(0xFF22302A); // caixas e círculos
+  static const borderDark = Color(0xFF34413B); // bordas e divisórias
+  static const contourOnDark = Color(0xFF2C3833); // curvas do login no escuro
+  static const linkSecondaryDark = Color(0xFF73B8D0); // links secundários
 }

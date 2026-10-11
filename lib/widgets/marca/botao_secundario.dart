@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/brand_colors.dart';
+import '../../theme/marca_cores.dart';
 import '../../theme/brand_fonts.dart';
 import 'indicador_carregando.dart';
 import 'medidas_marca.dart';
@@ -23,13 +23,14 @@ class BotaoSecundario extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final marca = context.marca;
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        backgroundColor: BrandColors.surfaceLight,
-        foregroundColor: BrandColors.textOnLight,
-        disabledForegroundColor: BrandColors.textOnLightMuted,
-        side: const BorderSide(color: BrandColors.neutralSoft),
+        backgroundColor: marca.fundo,
+        foregroundColor: marca.texto,
+        disabledForegroundColor: marca.textoApoio,
+        side: BorderSide(color: marca.borda),
         minimumSize: const Size.fromHeight(MedidasMarca.alturaBotao),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(MedidasMarca.raio),
@@ -37,7 +38,7 @@ class BotaoSecundario extends StatelessWidget {
         textStyle: BrandFonts.label.copyWith(fontSize: 15),
       ),
       child: carregando
-          ? const IndicadorCarregando(cor: BrandColors.textOnLight)
+          ? IndicadorCarregando(cor: marca.texto)
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [

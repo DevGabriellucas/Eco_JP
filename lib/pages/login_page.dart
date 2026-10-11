@@ -7,8 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../core/router/routes.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../theme/app_icons.dart';
-import '../theme/brand_colors.dart';
 import '../theme/brand_fonts.dart';
+import '../theme/marca_cores.dart';
 import '../widgets/marca/botao_primario.dart';
 import '../widgets/marca/botao_secundario.dart';
 import '../widgets/marca/botao_voltar.dart';
@@ -110,7 +110,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               // Diálogo abre fora da árvore da tela (sem o limite de fonte):
               // com fonte grande e teclado aberto o conteúdo não cabia.
               scrollable: true,
-              backgroundColor: BrandColors.surfaceLight,
+              backgroundColor: context.marca.fundo,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -118,7 +118,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 'Recuperar senha',
                 style: BrandFonts.label.copyWith(
                   fontSize: 18,
-                  color: BrandColors.textOnLight,
+                  color: context.marca.texto,
                 ),
               ),
               content: Column(
@@ -130,7 +130,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     'redefinir sua senha.',
                     style: BrandFonts.body.copyWith(
                       fontSize: 14,
-                      color: BrandColors.textOnLightMuted,
+                      color: context.marca.textoApoio,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -138,8 +138,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     autofocus: true,
-                    style: estiloCampoMarca,
-                    decoration: decoracaoCampoMarca(hint: 'seu@email.com'),
+                    style: estiloCampoMarca(context),
+                    decoration:
+                        decoracaoCampoMarca(context, hint: 'seu@email.com'),
                   ),
                 ],
               ),
@@ -147,7 +148,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 TextButton(
                   onPressed: enviando ? null : () => Navigator.of(ctx).pop(),
                   style: TextButton.styleFrom(
-                    foregroundColor: BrandColors.textOnLightMuted,
+                    foregroundColor: context.marca.textoApoio,
                     textStyle: BrandFonts.label.copyWith(fontSize: 14),
                   ),
                   child: const Text('Cancelar'),
@@ -185,8 +186,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: BrandColors.primary,
-                    foregroundColor: BrandColors.onPrimary,
+                    backgroundColor: context.marca.destaque,
+                    foregroundColor: context.marca.sobreDestaque,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(MedidasMarca.raio),
@@ -194,7 +195,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     textStyle: BrandFonts.label.copyWith(fontSize: 14),
                   ),
                   child: enviando
-                      ? const IndicadorCarregando(cor: BrandColors.onPrimary)
+                      ? IndicadorCarregando(cor: context.marca.sobreDestaque)
                       : const Text('Enviar'),
                 ),
               ],
@@ -215,13 +216,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
-        systemNavigationBarColor: BrandColors.surfaceLight,
+        systemNavigationBarColor: context.marca.fundo,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
         maxScaleFactor: 2.0,
         child: Scaffold(
-          backgroundColor: BrandColors.surfaceLight,
+          backgroundColor: context.marca.fundo,
           body: Stack(
             fit: StackFit.expand,
             children: [
@@ -236,6 +237,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     // maior, com traço grosso.
                     width: (largura < 480 ? largura : 480) * 320 / 360,
                     excludeFromSemantics: true,
+                    // No escuro o bege do SVG brilharia demais: tinge com o
+                    // tom discreto da paleta. No claro, cor original.
+                    colorFilter: context.marca.curvasLogin == null
+                        ? null
+                        : ColorFilter.mode(
+                            context.marca.curvasLogin!,
+                            BlendMode.srcIn,
+                          ),
                   ),
                 ),
               ),
@@ -290,7 +299,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: SvgPicture.asset(
-                  AppLogos.ecohubOnLight,
+                  // Variante do fundo atual ("hub" escuro no claro, branco no
+                  // escuro).
+                  context.marca.logo,
                   width: (largura * 137 / 360).clamp(120.0, 180.0),
                   semanticsLabel: 'ecohub',
                 ),
@@ -299,7 +310,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               Text(
                 'Entrar',
                 style: BrandFonts.heading.copyWith(
-                  color: BrandColors.textOnLight,
+                  color: context.marca.texto,
                 ),
               ),
               const SizedBox(height: 8),
@@ -307,7 +318,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 'Acompanhe e registre denúncias na sua cidade.',
                 style: BrandFonts.body.copyWith(
                   fontSize: 16,
-                  color: BrandColors.textOnLightMuted,
+                  color: context.marca.textoApoio,
                 ),
               ),
               const SizedBox(height: 24),
@@ -323,8 +334,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         textInputAction: TextInputAction.next,
                         autofillHints: const [AutofillHints.email],
                         autocorrect: false,
-                        style: estiloCampoMarca,
+                        style: estiloCampoMarca(context),
                         decoration: decoracaoCampoMarca(
+                          context,
                           hint: 'seu@email.com',
                           prefixo: AppIcons.message,
                         ),
@@ -339,8 +351,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         textInputAction: TextInputAction.done,
                         autofillHints: const [AutofillHints.password],
                         onSubmitted: (_) => _handleLogin(),
-                        style: estiloCampoMarca,
+                        style: estiloCampoMarca(context),
                         decoration: decoracaoCampoMarca(
+                          context,
                           hint: 'Sua senha',
                           erro: _erroCredenciais,
                           sufixo: IconButton(
@@ -369,7 +382,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 child: TextButton(
                   onPressed: _ocupado ? null : _handleEsqueceuSenha,
                   style: TextButton.styleFrom(
-                    foregroundColor: BrandColors.linkSecondary,
+                    foregroundColor: context.marca.linkSecundario,
                     minimumSize: const Size(48, 48),
                     padding: EdgeInsets.zero,
                     textStyle: BrandFonts.label.copyWith(fontSize: 14),
@@ -414,17 +427,17 @@ class _Divisor extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Expanded(child: Divider(color: BrandColors.neutralSoft)),
+        Expanded(child: Divider(color: context.marca.borda)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
             'ou',
             style: BrandFonts.caption.copyWith(
-              color: BrandColors.textOnLightMuted,
+              color: context.marca.textoApoio,
             ),
           ),
         ),
-        const Expanded(child: Divider(color: BrandColors.neutralSoft)),
+        Expanded(child: Divider(color: context.marca.borda)),
       ],
     );
   }

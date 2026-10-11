@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/brand_colors.dart';
+import '../../theme/marca_cores.dart';
 import '../../theme/brand_fonts.dart';
 import 'indicador_carregando.dart';
 import 'medidas_marca.dart';
@@ -20,18 +20,19 @@ class BotaoPrimario extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool carregando;
 
-  /// Ícone antes do texto (já pintado em [BrandColors.onPrimary]).
+  /// Ícone antes do texto (já pintado em `context.marca.sobreDestaque`).
   final Widget? icone;
 
   @override
   Widget build(BuildContext context) {
+    final marca = context.marca;
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: BrandColors.primary,
-        foregroundColor: BrandColors.onPrimary,
-        disabledBackgroundColor: BrandColors.primary.withValues(alpha: 0.5),
-        disabledForegroundColor: BrandColors.onPrimary,
+        backgroundColor: marca.destaque,
+        foregroundColor: marca.sobreDestaque,
+        disabledBackgroundColor: marca.destaque.withValues(alpha: 0.5),
+        disabledForegroundColor: marca.sobreDestaque,
         minimumSize: const Size.fromHeight(MedidasMarca.alturaBotao),
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -40,7 +41,7 @@ class BotaoPrimario extends StatelessWidget {
         textStyle: BrandFonts.label,
       ),
       child: carregando
-          ? const IndicadorCarregando(cor: BrandColors.onPrimary)
+          ? IndicadorCarregando(cor: marca.sobreDestaque)
           : _ConteudoBotao(texto: texto, icone: icone),
     );
   }

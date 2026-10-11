@@ -14,13 +14,16 @@ void main() {
       app(
         CampoMarca(
           rotulo: 'REPETIR SENHA',
-          child: TextField(
-            decoration: decoracaoCampoMarca(
-              hint: 'Repita a senha',
-              sufixo: IconButton(
-                tooltip: 'Mostrar senha',
-                onPressed: () {},
-                icon: const Icon(Icons.visibility),
+          child: Builder(
+            builder: (context) => TextField(
+              decoration: decoracaoCampoMarca(
+                context,
+                hint: 'Repita a senha',
+                sufixo: IconButton(
+                  tooltip: 'Mostrar senha',
+                  onPressed: () {},
+                  icon: const Icon(Icons.visibility),
+                ),
               ),
             ),
           ),

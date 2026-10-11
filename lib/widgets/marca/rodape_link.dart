@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/brand_colors.dart';
+import '../../theme/marca_cores.dart';
 import '../../theme/brand_fonts.dart';
 
 /// Rodapé "Pergunta? Ação", como "Não tem conta? Cadastre-se". A ação é um
@@ -19,6 +19,7 @@ class RodapeLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final marca = context.marca;
     return Wrap(
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -27,13 +28,13 @@ class RodapeLink extends StatelessWidget {
           pergunta,
           style: BrandFonts.body.copyWith(
             fontSize: 15,
-            color: BrandColors.textOnLightMuted,
+            color: marca.textoApoio,
           ),
         ),
         TextButton(
           onPressed: onPressed,
           style: TextButton.styleFrom(
-            foregroundColor: BrandColors.primary,
+            foregroundColor: marca.destaque,
             minimumSize: const Size(48, 48),
             padding: const EdgeInsets.symmetric(horizontal: 6),
             textStyle: BrandFonts.label.copyWith(fontSize: 15),

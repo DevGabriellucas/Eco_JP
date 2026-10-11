@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
-import '../../theme/brand_colors.dart';
+import '../../theme/marca_cores.dart';
 import '../../theme/brand_fonts.dart';
 import 'icone_svg.dart';
 import 'medidas_marca.dart';
@@ -29,7 +29,7 @@ class CampoMarca extends StatelessWidget {
             rotulo,
             style: BrandFonts.caption.copyWith(
               letterSpacing: 1.5,
-              color: BrandColors.textOnLight,
+              color: context.marca.rotulo,
             ),
           ),
         ),
@@ -49,22 +49,24 @@ class CampoMarca extends StatelessWidget {
   }
 }
 
-/// Texto digitado nos campos de marca.
-final estiloCampoMarca = BrandFonts.body.copyWith(
-  fontSize: 16,
-  height: 1.25,
-  color: BrandColors.textOnLight,
-);
+/// Texto digitado nos campos de marca (cor da paleta do tema).
+TextStyle estiloCampoMarca(BuildContext context) => BrandFonts.body.copyWith(
+      fontSize: 16,
+      height: 1.25,
+      color: context.marca.texto,
+    );
 
-/// Decoração dos campos de marca: fundo branco, borda clara, foco no verde
-/// primário e borda vermelha com [erro]. [prefixo] é o caminho de um ícone
-/// de `assets/icons/`.
-InputDecoration decoracaoCampoMarca({
+/// Decoração dos campos de marca: fundo da tela, borda discreta, foco na
+/// cor de destaque e borda vermelha com [erro]. [prefixo] é o caminho de um
+/// ícone de `assets/icons/`. As cores vêm de `context.marca` (claro/escuro).
+InputDecoration decoracaoCampoMarca(
+  BuildContext context, {
   required String hint,
   String? prefixo,
   Widget? sufixo,
   bool erro = false,
 }) {
+  final marca = context.marca;
   OutlineInputBorder borda(Color cor, double largura) => OutlineInputBorder(
         borderRadius: BorderRadius.circular(MedidasMarca.raio),
         borderSide: BorderSide(color: cor, width: largura),
@@ -72,9 +74,9 @@ InputDecoration decoracaoCampoMarca({
 
   return InputDecoration(
     hintText: hint,
-    hintStyle: estiloCampoMarca.copyWith(color: BrandColors.textOnLightMuted),
+    hintStyle: estiloCampoMarca(context).copyWith(color: marca.textoApoio),
     filled: true,
-    fillColor: BrandColors.surfaceLight,
+    fillColor: marca.fundo,
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     prefixIcon: prefixo == null
         ? null
@@ -84,13 +86,7 @@ InputDecoration decoracaoCampoMarca({
           ),
     prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
     suffixIcon: sufixo,
-    enabledBorder: borda(
-      erro ? AppColors.danger : BrandColors.neutralSoft,
-      1,
-    ),
-    focusedBorder: borda(
-      erro ? AppColors.danger : BrandColors.primary,
-      1.5,
-    ),
+    enabledBorder: borda(erro ? AppColors.danger : marca.borda, 1),
+    focusedBorder: borda(erro ? AppColors.danger : marca.destaque, 1.5),
   );
 }

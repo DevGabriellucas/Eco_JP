@@ -7,6 +7,7 @@ import '../core/router/routes.dart';
 import '../theme/app_icons.dart';
 import '../theme/brand_colors.dart';
 import '../theme/brand_fonts.dart';
+import '../theme/marca_cores.dart';
 import '../utils/margem_responsiva.dart';
 
 /// Onboarding de primeiro uso (pré-login): topo com a ilustração da trilha e
@@ -78,7 +79,7 @@ class _InicialPageState extends State<InicialPage> {
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
-        systemNavigationBarColor: BrandColors.surfaceLight,
+        systemNavigationBarColor: context.marca.fundo,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
@@ -205,9 +206,11 @@ class _Sheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final margem = _margemConteudo(MediaQuery.sizeOf(context).width);
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: BrandColors.surfaceLight,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(_raioSheet)),
+      decoration: BoxDecoration(
+        color: context.marca.fundo,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(_raioSheet),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -301,7 +304,7 @@ class _Slide extends StatelessWidget {
             height: _ladoIcone,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: BrandColors.primarySoft,
+              color: context.marca.superficie,
               borderRadius: BorderRadius.circular(12),
             ),
             // Os SVGs vêm do Figma em cores diferentes; no mockup o ícone é
@@ -310,8 +313,8 @@ class _Slide extends StatelessWidget {
               slide.icone,
               width: 22,
               height: 22,
-              colorFilter: const ColorFilter.mode(
-                BrandColors.primary,
+              colorFilter: ColorFilter.mode(
+                context.marca.destaque,
                 BlendMode.srcIn,
               ),
             ),
@@ -320,12 +323,12 @@ class _Slide extends StatelessWidget {
         const SizedBox(height: _espacoIconeTitulo),
         Text(
           slide.titulo,
-          style: BrandFonts.heading.copyWith(color: BrandColors.textOnLight),
+          style: BrandFonts.heading.copyWith(color: context.marca.texto),
         ),
         const SizedBox(height: _espacoTituloDescricao),
         Text(
           slide.descricao,
-          style: BrandFonts.body.copyWith(color: BrandColors.textOnLightMuted),
+          style: BrandFonts.body.copyWith(color: context.marca.textoApoio),
         ),
       ],
     );
@@ -355,9 +358,8 @@ class _Indicador extends StatelessWidget {
                 width: i == atual ? 24 : 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: i == atual
-                      ? BrandColors.primary
-                      : BrandColors.neutralSoft,
+                  color:
+                      i == atual ? context.marca.destaque : context.marca.borda,
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -376,8 +378,8 @@ class _BotaoComecar extends StatelessWidget {
     return ElevatedButton(
       onPressed: () => context.push(Routes.cadastro),
       style: ElevatedButton.styleFrom(
-        backgroundColor: BrandColors.primary,
-        foregroundColor: BrandColors.onPrimary,
+        backgroundColor: context.marca.destaque,
+        foregroundColor: context.marca.sobreDestaque,
         minimumSize: const Size.fromHeight(54),
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -396,7 +398,7 @@ class _LinkJaTenhoConta extends StatelessWidget {
     return TextButton(
       onPressed: () => context.push(Routes.login),
       style: TextButton.styleFrom(
-        foregroundColor: BrandColors.primary,
+        foregroundColor: context.marca.destaque,
         minimumSize: const Size(48, 48),
         textStyle: BrandFonts.label.copyWith(fontSize: 15),
       ),

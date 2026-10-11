@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'marca_cores.dart';
+
 /// Cores de marca / acento — iguais nos temas claro e escuro.
 ///
 /// Os tokens neutros (ink/surface/background/border/hint/muted) continuam aqui
@@ -189,7 +191,11 @@ abstract final class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: palette.background,
       visualDensity: VisualDensity.standard,
-      extensions: [palette],
+      // MarcaCores: telas de entrada de marca (inicial, login, cadastro…).
+      extensions: [
+        palette,
+        brightness == Brightness.dark ? MarcaCores.dark : MarcaCores.light,
+      ],
       // Transições de tela mais suaves (o Zoom padrão do Android era abrupto).
       // FadeForwards é a transição moderna do Material 3 — aplicada de forma
       // consistente em todas as plataformas. Vale para navegações do go_router

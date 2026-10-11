@@ -115,6 +115,7 @@ class _SplashPageState extends State<SplashPage>
       AppIcons.send,
       AppIcons.trash,
       AppIllustrations.emailBranchLight,
+      AppIllustrations.emailBranch,
     ]) {
       unawaited(precacheSvg(svg).catchError((_) {}));
     }

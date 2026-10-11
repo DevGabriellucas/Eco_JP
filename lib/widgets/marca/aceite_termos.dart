@@ -1,7 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import '../../theme/brand_colors.dart';
+import '../../theme/marca_cores.dart';
 import '../../theme/brand_fonts.dart';
 
 /// "Li e aceito a Política de Privacidade e os Termos de Uso", com caixa de
@@ -43,10 +43,11 @@ class _AceiteTermosState extends State<AceiteTermos> {
 
   @override
   Widget build(BuildContext context) {
+    final marca = context.marca;
     final onChanged = widget.onChanged;
     final link = BrandFonts.label.copyWith(
       fontSize: 15,
-      color: BrandColors.primary,
+      color: marca.destaque,
     );
 
     return InkWell(
@@ -69,10 +70,10 @@ class _AceiteTermosState extends State<AceiteTermos> {
                     'Aceito a Política de Privacidade e os Termos de Uso',
                 onChanged:
                     onChanged == null ? null : (v) => onChanged(v ?? false),
-                activeColor: BrandColors.primary,
-                checkColor: BrandColors.onPrimary,
-                side: const BorderSide(
-                  color: BrandColors.textOnLightMuted,
+                activeColor: marca.destaque,
+                checkColor: marca.sobreDestaque,
+                side: BorderSide(
+                  color: marca.textoApoio,
                   width: 1.5,
                 ),
                 shape: RoundedRectangleBorder(
@@ -87,7 +88,7 @@ class _AceiteTermosState extends State<AceiteTermos> {
                 TextSpan(
                   style: BrandFonts.body.copyWith(
                     fontSize: 15,
-                    color: BrandColors.textOnLightMuted,
+                    color: marca.textoApoio,
                   ),
                   children: [
                     const TextSpan(text: 'Li e aceito a '),

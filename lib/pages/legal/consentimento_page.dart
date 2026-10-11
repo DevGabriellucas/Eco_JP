@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_icons.dart';
-import '../../theme/brand_colors.dart';
 import '../../theme/brand_fonts.dart';
+import '../../theme/marca_cores.dart';
 import '../../utils/margem_responsiva.dart';
 import '../../widgets/marca/aceite_termos.dart';
 import '../../widgets/marca/botao_primario.dart';
@@ -111,13 +111,13 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
-        systemNavigationBarColor: BrandColors.surfaceLight,
+        systemNavigationBarColor: context.marca.fundo,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
         maxScaleFactor: 2.0,
         child: Scaffold(
-          backgroundColor: BrandColors.surfaceLight,
+          backgroundColor: context.marca.fundo,
           body: SafeArea(
             child: LayoutBuilder(
               builder: (context, c) {
@@ -130,10 +130,10 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
                   padding: EdgeInsets.fromLTRB(margem, 24, margem, 16),
                   child: const _Explicacao(),
                 );
-                const divisoria = Divider(
+                final divisoria = Divider(
                   height: 1,
                   thickness: 1,
-                  color: BrandColors.neutralSoft,
+                  color: context.marca.borda,
                 );
                 final acoes = Padding(
                   padding: EdgeInsets.fromLTRB(margem, 12, margem, 8),
@@ -191,7 +191,7 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
         TextButton(
           onPressed: (_processando || _saindo) ? null : _recusar,
           style: TextButton.styleFrom(
-            foregroundColor: BrandColors.textOnLight,
+            foregroundColor: context.marca.texto,
             minimumSize: const Size(48, 48),
             textStyle: BrandFonts.label.copyWith(fontSize: 15),
           ),
@@ -218,7 +218,7 @@ class _Explicacao extends StatelessWidget {
         const SizedBox(height: 20),
         Text(
           'Privacidade e Termos',
-          style: BrandFonts.heading.copyWith(color: BrandColors.textOnLight),
+          style: BrandFonts.heading.copyWith(color: context.marca.texto),
         ),
         const SizedBox(height: 8),
         Text(
@@ -226,7 +226,7 @@ class _Explicacao extends StatelessWidget {
           'seus dados são tratados no EcoJP.',
           style: BrandFonts.body.copyWith(
             fontSize: 16,
-            color: BrandColors.textOnLightMuted,
+            color: context.marca.textoApoio,
           ),
         ),
         const SizedBox(height: 24),
@@ -260,11 +260,11 @@ class _ItemLinhaDoTempo extends StatelessWidget {
             children: [
               _Circulo(icone: topico.icone, lado: 32, tamanhoIcone: 16),
               if (!ultimo)
-                const Expanded(
+                Expanded(
                   child: VerticalDivider(
                     width: 2,
                     thickness: 2,
-                    color: BrandColors.neutralSoft,
+                    color: context.marca.borda,
                   ),
                 ),
             ],
@@ -277,7 +277,7 @@ class _ItemLinhaDoTempo extends StatelessWidget {
                 topico.texto,
                 style: BrandFonts.body.copyWith(
                   fontSize: 15,
-                  color: BrandColors.textOnLight,
+                  color: context.marca.texto,
                 ),
               ),
             ),
@@ -305,13 +305,13 @@ class _Circulo extends StatelessWidget {
       width: lado,
       height: lado,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        color: BrandColors.primarySoft,
+      decoration: BoxDecoration(
+        color: context.marca.superficie,
         shape: BoxShape.circle,
       ),
       child: IconeSvg(
         icone,
-        cor: BrandColors.primary,
+        cor: context.marca.destaque,
         tamanho: tamanhoIcone,
       ),
     );

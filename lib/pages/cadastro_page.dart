@@ -9,8 +9,8 @@ import '../models/usuario_model.dart';
 import '../services/usuario_service.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
-import '../theme/brand_colors.dart';
 import '../theme/brand_fonts.dart';
+import '../theme/marca_cores.dart';
 import '../utils/texto.dart';
 import '../widgets/marca/aceite_termos.dart';
 import '../widgets/marca/botao_primario.dart';
@@ -201,13 +201,13 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
-        systemNavigationBarColor: BrandColors.surfaceLight,
+        systemNavigationBarColor: context.marca.fundo,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MediaQuery.withClampedTextScaling(
         maxScaleFactor: 2.0,
         child: Scaffold(
-          backgroundColor: BrandColors.surfaceLight,
+          backgroundColor: context.marca.fundo,
           body: CorpoRolavel(
             // Formulário em cima, rodapé no pé (ou rolando junto).
             builder: (context, margem) => Column(
@@ -253,7 +253,7 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
               Text(
                 'Criar conta',
                 style: BrandFonts.heading.copyWith(
-                  color: BrandColors.textOnLight,
+                  color: context.marca.texto,
                 ),
               ),
               const SizedBox(height: 8),
@@ -261,7 +261,7 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
                 'Registre e acompanhe denúncias da sua cidade.',
                 style: BrandFonts.body.copyWith(
                   fontSize: 16,
-                  color: BrandColors.textOnLightMuted,
+                  color: context.marca.textoApoio,
                 ),
               ),
               const SizedBox(height: 24),
@@ -320,8 +320,9 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
               maxLength,
             }) =>
                 null,
-            style: estiloCampoMarca,
+            style: estiloCampoMarca(context),
             decoration: decoracaoCampoMarca(
+              context,
               hint: 'Seu nome',
               prefixo: AppIcons.people,
             ),
@@ -336,8 +337,9 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.email],
             autocorrect: false,
-            style: estiloCampoMarca,
+            style: estiloCampoMarca(context),
             decoration: decoracaoCampoMarca(
+              context,
               hint: 'seu@email.com',
               prefixo: AppIcons.message,
             ),
@@ -351,8 +353,9 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
             obscureText: !_senhaVisivel,
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.newPassword],
-            style: estiloCampoMarca,
+            style: estiloCampoMarca(context),
             decoration: decoracaoCampoMarca(
+              context,
               hint: 'Crie uma senha',
               sufixo: IconButton(
                 tooltip: _senhaVisivel ? 'Ocultar senha' : 'Mostrar senha',
@@ -391,15 +394,16 @@ class _CadastroPageState extends ConsumerState<CadastroPage> {
                 textInputAction: TextInputAction.done,
                 autofillHints: const [AutofillHints.newPassword],
                 onSubmitted: (_) => _handleCadastro(),
-                style: estiloCampoMarca,
+                style: estiloCampoMarca(context),
                 decoration: decoracaoCampoMarca(
+                  context,
                   hint: 'Repita a senha',
                   sufixo: confere
-                      ? const Padding(
-                          padding: EdgeInsets.only(right: 12),
+                      ? Padding(
+                          padding: const EdgeInsets.only(right: 12),
                           child: IconeSvg(
                             AppIcons.check,
-                            cor: BrandColors.primary,
+                            cor: context.marca.destaque,
                           ),
                         )
                       : null,
@@ -429,7 +433,7 @@ class MedidorForcaSenha extends StatelessWidget {
     final cor = switch (nivel) {
       1 => AppColors.danger,
       2 => AppColors.warning,
-      _ => BrandColors.primary,
+      _ => context.marca.destaque,
     };
     final rotulo = switch (nivel) {
       1 => 'Senha fraca',
@@ -453,7 +457,7 @@ class MedidorForcaSenha extends StatelessWidget {
                       duration: const Duration(milliseconds: 200),
                       height: 4,
                       decoration: BoxDecoration(
-                        color: i < nivel ? cor : BrandColors.neutralSoft,
+                        color: i < nivel ? cor : context.marca.borda,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),

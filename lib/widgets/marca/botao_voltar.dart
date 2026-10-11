@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../theme/app_icons.dart';
-import '../../theme/brand_colors.dart';
+import '../../theme/marca_cores.dart';
 import 'icone_svg.dart';
 
 /// Seta de voltar das telas claras. Volta para a tela anterior (preserva o
@@ -24,9 +24,9 @@ class BotaoVoltar extends StatelessWidget {
           context.go(rotaSemAnterior);
         }
       },
-      icon: const IconeSvg(
+      icon: IconeSvg(
         AppIcons.arrowBack,
-        cor: BrandColors.textOnLight,
+        cor: context.marca.texto,
         tamanho: 24,
       ),
     );
