@@ -1,0 +1,29 @@
+Quando tentei criar a conta, entrou na tela de verificação, logo em seguida saiu, entrei no email mas o link de confirmação estava expirado.
+
+Quando dá like, o texto do comentário muda de forma
+
+Emoji está comentando diretamente
+
+Animação do coraçãozinho de like está atrás do card
+
+mudar para português tudo (comentários esta inglês) 
+clicar em "ver todos os 4 comentarios" não acontece nada 
+mudar o numero de curtidas dos comentário para texto em baixo do comentário. ex: 1 curtida 
+quando abre os comentários dos comentários a pagina toda atualiza 
+conferir e ajustar o compartilhamento
+
+Não da pra focar no Post clicando no card
+
+Coleta de lixo por bairro não está funcionando
+
+Duas pessoas podem acessar a mesma conta no mesmo momento
+
+Tentei usar a função "Usar localização atual" do registro de denúncia, ele retorna como localização confirmada, mas no campo de localização resulta em "Endereço não encontrado"
+
+"Endereço não encontrado" quando aparece no campo de localização tem que ser apagado manualmente
+
+Conquistas não estão bem alocadas no campo de conquistas
+
+Mapa não carrega (fica bege, só com o logo do Google): a chave do Maps no Cloud Console só aceita o pacote antigo com.example.eco_jp. Adicionar br.com.ecojp.app com o SHA-1 CA:43:E2:E4:7B:C6:78:B4:37:D5:CE:9C:61:8F:61:B8:E7:31:59:5F nas restrições da chave (não é código)
+
+No mapa, o botão de "minha localização" (canto inferior esquerdo) fica em cima do logo do Google
