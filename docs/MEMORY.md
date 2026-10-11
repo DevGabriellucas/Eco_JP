@@ -67,6 +67,14 @@
   `BrandColors.brandDeep` em `colors.xml` e no `LaunchScreen.storyboard`: o nativo não lê o
   Dart, então mudar um sem os outros faz a tela "piscar" na abertura. O `flutter_native_splash`
   saiu do projeto; os PNGs que ele gerou foram apagados.
+- **11/10/2026 — Consentimento antes do perfil no login Google (LGPD).** O perfil é público
+  (nome e foto do Google) e reserva o nome; antes era criado assim que a conta entrava, e
+  "Não concordo" só deslogava, deixando os dados gravados. Agora `perfilGarantidoProvider`
+  espera `consentStatusProvider` e o redirect checa consentimento antes do perfil. Não
+  inverter: o `_RouterNotifier` escuta o provider de perfil desde a criação, então só trocar
+  a ordem no redirect não impede a gravação. `ConsentService.registrar` não regrava aceite
+  da mesma versão (preserva o `aceitoEm` original) e, sem internet, deixa a escrita na fila
+  offline e devolve `false` (a tela avisa).
 - **10/10/2026 — go_router: o redirect de refresh enxerga a tela de BAIXO da pilha.** Com telas
   abertas por `push` (inicial → login → cadastro), `state.matchedLocation` no redirect global
   é `/inicial`, não `/cadastro`. Regra que dependa de `loc == <rota empilhada>` não vale. Era a

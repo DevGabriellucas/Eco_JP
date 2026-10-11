@@ -51,19 +51,31 @@ final isAutoridadeProvider = StreamProvider<bool>((ref) {
 /// silêncio, sem mensagem nenhuma.
 final cadastroEmAndamentoProvider = StateProvider<bool>((ref) => false);
 
+/// Acesso ao [UsuarioService] por injeção (testes trocam por um fake).
+final usuarioServiceProvider =
+    Provider<UsuarioService>((ref) => UsuarioService.instance);
+
 /// Garante que o usuário logado (e verificado) tenha perfil com nome
 /// reservado — ver [UsuarioService.garantirPerfil]. Cobre o primeiro login
-/// Google, que não passa pelo cadastro. O router segura na splash enquanto
-/// resolve. Falha de rede não trava o acesso (tenta de novo no próximo login).
+/// Google, que não passa pelo cadastro. Falha de rede não trava o acesso
+/// (tenta de novo no próximo login).
+///
+/// Só depois do consentimento (LGPD): o perfil é público (nome e foto do
+/// Google) e reserva o nome. Antes ele era criado assim que a conta entrava,
+/// e quem tocava em "Não concordo" saía deixando os dados gravados. Agora,
+/// sem aceite, nada é gravado; quando o aceite é registrado,
+/// [consentStatusProvider] recalcula e este provider cria o perfil.
 final perfilGarantidoProvider = FutureProvider<bool>((ref) async {
   final user = ref.watch(authStateChangesProvider).value;
   if (user == null) return true;
   final apenasSenha =
       user.providerData.every((p) => p.providerId == 'password');
   if (apenasSenha && !user.emailVerified) return true;
+  if (await ref.watch(consentStatusProvider.future)) return true;
   try {
     // Com limite: sem ele, rede ruim deixava o app parado na splash.
-    await UsuarioService.instance
+    await ref
+        .read(usuarioServiceProvider)
         .garantirPerfil(
           user.uid,
           nomeSugerido: user.displayName,
@@ -90,10 +102,11 @@ final consentStatusProvider = FutureProvider<bool>((ref) async {
       user.providerData.every((p) => p.providerId == 'password');
   if (apenasSenha && !user.emailVerified) return false;
 
-  // Passou do limite: trata como "precisa consentir", a mesma falha fechada
-  // do ConsentService em caso de erro. Sem o limite o app ficava na splash.
+  // Rede de segurança: o ConsentService já limita a ida ao servidor e cai no
+  // cache local. Passou disto, trata como "precisa consentir" (falha
+  // fechada). Sem limite nenhum o app ficava na splash.
   return ref
       .watch(consentServiceProvider)
       .precisaConsentir(user.uid)
-      .timeout(const Duration(seconds: 10), onTimeout: () => true);
+      .timeout(const Duration(seconds: 15), onTimeout: () => true);
 });

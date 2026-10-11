@@ -19,7 +19,9 @@ import 'documentos_legais.dart';
 class ConsentimentoPage extends StatefulWidget {
   /// Chamado quando o usuário aceita. O responsável deve registrar o
   /// consentimento e liberar o acesso.
-  final Future<void> Function() onAceitar;
+  /// Devolve `false` quando o aceite ficou na fila offline (sem internet):
+  /// a tela avisa que ele será enviado quando a conexão voltar.
+  final Future<bool> Function() onAceitar;
 
   /// Chamado em "Não concordo": encerra a sessão. Sem esta saída a tela não
   /// tinha alternativa ao aceite (consentimento não era livre).
@@ -94,8 +96,22 @@ class _ConsentimentoPageState extends State<ConsentimentoPage> {
   Future<void> _confirmar() async {
     if (!_aceito || _processando) return;
     setState(() => _processando = true);
+    // Pego antes do await: a tela sai logo depois do aceite, e o messenger do
+    // app (que sobrevive à troca de tela) mostra o aviso na tela seguinte.
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await widget.onAceitar();
+      final confirmado = await widget.onAceitar();
+      if (!confirmado) {
+        messenger.showSnackBar(
+          const SnackBar(
+            duration: Duration(seconds: 6),
+            content: Text(
+              'Sem conexão: seu aceite será registrado quando a internet '
+              'voltar.',
+            ),
+          ),
+        );
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _processando = false);

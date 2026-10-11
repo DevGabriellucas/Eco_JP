@@ -5,10 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   late int aceites;
   late int recusas;
+  // false simula aceite feito sem internet (ficou na fila offline).
+  late bool aceiteConfirmado;
 
   setUp(() {
     aceites = 0;
     recusas = 0;
+    aceiteConfirmado = true;
   });
 
   Future<void> montar(
@@ -28,7 +31,10 @@ void main() {
             textScaler: TextScaler.linear(escalaTexto),
           ),
           child: ConsentimentoPage(
-            onAceitar: () async => aceites++,
+            onAceitar: () async {
+              aceites++;
+              return aceiteConfirmado;
+            },
             // Logout leva um tempo: um segundo toque nesse intervalo não
             // pode chamar de novo.
             onRecusar: () async {
@@ -69,6 +75,30 @@ void main() {
     await tester.tap(find.text('Concordar e continuar'));
     await tester.pump();
     expect(aceites, 1);
+  });
+
+  testWidgets('aceite sem internet avisa que será enviado depois',
+      (tester) async {
+    aceiteConfirmado = false;
+    await montar(tester);
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    await tester.tap(find.text('Concordar e continuar'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(aceites, 1);
+    expect(find.textContaining('Sem conexão'), findsOneWidget);
+  });
+
+  testWidgets('aceite confirmado não mostra aviso de conexão', (tester) async {
+    await montar(tester);
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    await tester.tap(find.text('Concordar e continuar'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('Sem conexão'), findsNothing);
   });
 
   testWidgets('"Não concordo" chama onRecusar uma vez só', (tester) async {

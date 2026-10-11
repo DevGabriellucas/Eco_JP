@@ -105,9 +105,13 @@ Telas não falam com o Firestore direto; passam por repositório ou serviço.
 
 ## 5. Fluxos principais
 
-**Autenticação** — `app_router.dart` redireciona: sem login → `/inicial`; e-mail não
-verificado → `/verificacao-email`; sem consentimento da versão atual → `/consentimento`;
-caso contrário → `/home` (shell com abas Feed, Mapa, Dados, Perfil).
+**Autenticação** — `app_router.dart` redireciona, nesta ordem: splash (mínimo de 3 s) →
+sem login → `/inicial`; cadastro em andamento → fica; e-mail não verificado →
+`/verificacao-email`; sem consentimento da versão atual → `/consentimento`; perfil
+(criado só depois do aceite, no 1º login Google) → `/home` (shell com abas Feed, Mapa,
+Dados, Perfil). No cadastro por e-mail o aceite é a caixa do formulário, então a tela de
+consentimento só aparece no 1º login Google, quando a versão da política muda ou quando a
+leitura do registro falha sem cache.
 
 **Sessão única** — cada login grava um id aleatório no aparelho e em
 `usuarios/{uid}/meta/sessao` (`SessaoService`). O aparelho cujo id deixa de bater com o do

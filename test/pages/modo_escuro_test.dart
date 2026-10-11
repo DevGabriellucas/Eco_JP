@@ -142,7 +142,10 @@ void main() {
     testWidgets('consentimento: fundo escuro e título claro', (tester) async {
       await _montar(
         tester,
-        ConsentimentoPage(onAceitar: () async {}, onRecusar: () async {}),
+        ConsentimentoPage(
+          onAceitar: () async => true,
+          onRecusar: () async {},
+        ),
       );
       expect(_fundoDoScaffold(tester), BrandColors.background);
       expect(

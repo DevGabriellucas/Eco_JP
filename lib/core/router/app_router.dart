@@ -52,10 +52,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ConsentimentoPage(
           onAceitar: () async {
             final user = ref.read(authServiceProvider).currentUser;
-            if (user == null) return;
-            await ref.read(consentServiceProvider).registrar(user.uid);
-            // Recalcula o gate de consentimento → o redirect leva para /home.
+            if (user == null) return true;
+            // false = sem internet: o aceite ficou na fila offline do
+            // Firestore e a tela avisa que será enviado quando voltar.
+            final confirmado =
+                await ref.read(consentServiceProvider).registrar(user.uid);
+            // Recalcula o gate de consentimento (e, com ele, a criação do
+            // perfil) → o redirect leva para /home.
             ref.invalidate(consentStatusProvider);
+            return confirmado;
           },
           // Sai da conta; o redirect leva de volta à tela inicial.
           onRecusar: () => ref.read(authServiceProvider).sair(),
@@ -172,19 +177,23 @@ class _RouterNotifier extends ChangeNotifier {
       return loc == Routes.verificacaoEmail ? null : Routes.verificacaoEmail;
     }
 
-    // Perfil com nome reservado (primeiro login Google cria aqui).
-    final perfilState = _ref.read(perfilGarantidoProvider);
-    if (perfilState.isLoading || !perfilState.hasValue) {
-      return _aguardar(perfilState, loc);
-    }
-
-    // Trava de consentimento (LGPD).
+    // Trava de consentimento (LGPD) ANTES do perfil: o perfil é público e
+    // reserva o nome, então só pode ser criado depois do aceite (o próprio
+    // perfilGarantidoProvider também espera o consentimento).
     final consentState = _ref.read(consentStatusProvider);
     if (consentState.isLoading || !consentState.hasValue) {
       return _aguardar(consentState, loc);
     }
     if (consentState.value ?? false) {
       return loc == Routes.consentimento ? null : Routes.consentimento;
+    }
+
+    // Perfil com nome reservado (primeiro login Google cria aqui, depois do
+    // aceite). Enquanto cria, a tela de consentimento fica parada com o
+    // botão carregando (_aguardar) e depois vai direto à home.
+    final perfilState = _ref.read(perfilGarantidoProvider);
+    if (perfilState.isLoading || !perfilState.hasValue) {
+      return _aguardar(perfilState, loc);
     }
 
     // Totalmente autenticado: sai de qualquer tela de "portão".
