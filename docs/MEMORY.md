@@ -88,4 +88,6 @@
 
 - Produto: [PRD.md](PRD.md) · Arquitetura: [ARCHITECTURE.md](ARCHITECTURE.md) ·
   Regras: [RULES.md](RULES.md) · Design: [DESIGN.md](DESIGN.md) · Tarefas: [TASKS.md](TASKS.md)
+- Juntar `feature/entrada-ecohub` / `feature/novo-feed` (25 commits atrás, redesign paralelo
+  das mesmas telas): [INTEGRACAO_REDESIGN.md](INTEGRACAO_REDESIGN.md).
 - Decisões formais (ADR) e resumo da Sprint 1: histórico do git, commit `158559d`.

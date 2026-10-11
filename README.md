@@ -173,6 +173,7 @@ Quando as regras mudam de forma incompatível, a ordem é: publicar o app → `f
 - **[docs/RULES.md](docs/RULES.md)** — regras para quem mexe no código (inclusive agentes de IA)
 - **[docs/TASKS.md](docs/TASKS.md)** — tarefas e pendências atuais
 - **[docs/MEMORY.md](docs/MEMORY.md)** — decisões e armadilhas não óbvias
+- **[docs/INTEGRACAO_REDESIGN.md](docs/INTEGRACAO_REDESIGN.md)** — como juntar os redesigns paralelos (`feature/entrada-ecohub`, `feature/novo-feed`) sem quebrar o app
 - **[ROADMAP.md](ROADMAP.md)** — plano de evolução por fases (defasado em alguns itens; na dúvida, vale o TASKS)
 
 ---
