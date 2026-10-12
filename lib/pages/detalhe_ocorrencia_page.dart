@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 
@@ -9,18 +10,23 @@ import '../features/auth/providers/auth_providers.dart';
 import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/comentario_model.dart';
 import '../models/ocorrencia_model.dart';
+import '../models/occurrence_types.dart';
+import '../pages/mapPage/map_page.dart';
 import '../services/auth_service.dart';
+import '../services/moderacao_service.dart';
 import '../services/notificacao_service.dart';
 import '../services/usuario_service.dart';
-import '../models/occurrence_types.dart';
+import '../theme/app_theme.dart';
 import '../utils/autor_ocorrencia.dart';
 import '../utils/cloudinary_image.dart';
-import '../utils/imagem_cacheada.dart';
 import '../utils/compartilhamento.dart';
+import '../utils/imagem_cacheada.dart';
+import '../utils/mensagem_erro.dart';
 import '../utils/navegacao_externa.dart';
-import '../theme/app_theme.dart';
 import '../utils/reacao_ocorrencia.dart';
+import '../utils/tempo_relativo.dart';
 import '../widgets/occurrence_comments_sheet.dart';
+import '../widgets/report_content_sheet.dart';
 
 // ─────────────────────────────────────────
 //  PALETA
@@ -301,382 +307,319 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
     final o = widget.occurrence;
-    final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
-    final statusEnum = o.statusAtual;
-    final isAutoridade = ref.watch(isAutoridadeProvider).value == true;
+    final type = OccurrenceTypeParser.fromString(o.tipoLixo);
+    final autoridade = ref.watch(isAutoridadeProvider).value == true;
+    final estagio = EstagioOficialInfo.calcular(_verificada, _statusOficial);
+    final etapa = switch (estagio) {
+      EstagioOficial.pendente => 1,
+      EstagioOficial.emAnalise || EstagioOficial.naoConfirmada => 2,
+      EstagioOficial.confirmada => 3,
+      EstagioOficial.encaminhada => 4,
+      EstagioOficial.resolvida => 5,
+    };
 
     return Scaffold(
       backgroundColor: pal.background,
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header
-            _buildHeader(o, statusEnum),
-
-            // ── Scrollable content
+            _buildHeader(),
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Área da imagem com badge de tipo
-                    Stack(
-                      children: [
-                        _ImageArea(occurrence: o, type: typeEnum),
-                        Positioned(
-                          top: 12,
-                          left: 12,
-                          child: _TypeBadge(type: typeEnum),
-                        ),
-                      ],
-                    ),
-
+                    _ImageArea(occurrence: o, type: type),
                     if (o.videoUrl != null) _VideoPlayerCard(url: o.videoUrl!),
-
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_verificada &&
-                              _statusOficial == StatusOficial.resolvida) ...[
-                            const _StatusOficialBanner(
-                              label:
-                                  'Resolvida — tratada pelo órgão responsável',
-                              icon: Icons.check_circle,
-                              color: _Cores.green,
-                            ),
-                            const SizedBox(height: 10),
-                          ] else if (_verificada &&
-                              _statusOficial == StatusOficial.encaminhada) ...[
-                            const _StatusOficialBanner(
-                              label: 'Encaminhada ao órgão responsável',
-                              icon: Icons.send,
-                              color: _Cores.blue,
-                            ),
-                            const SizedBox(height: 10),
-                          ] else if (_verificada) ...[
-                            _VerificadaBanner(
-                              nome: _verificadaPorNome,
-                              data: _verificadaEm,
-                            ),
-                            const SizedBox(height: 10),
-                          ] else if (_statusOficial ==
-                              StatusOficial.emAnalise) ...[
-                            const _StatusOficialBanner(
-                              label: 'Em análise pela autoridade',
-                              icon: Icons.search,
-                              color: _Cores.orange,
-                            ),
-                            const SizedBox(height: 10),
-                          ] else if (_statusOficial ==
-                              StatusOficial.naoConfirmada) ...[
-                            const _StatusOficialBanner(
-                              label:
-                                  'Não confirmada — problema não encontrado no local',
-                              icon: Icons.cancel_outlined,
-                              color: _Cores.red,
-                            ),
-                            const SizedBox(height: 10),
-                          ],
-                          // Título
-                          _FieldCard(
-                            child: Text(
-                              o.titulo.isEmpty ? 'Sem título' : o.titulo,
-                              style: TextStyle(fontSize: 14, color: pal.ink),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                      child: StreamBuilder<List<ComentarioModel>>(
+                        stream: _comentariosStream,
+                        builder: (context, snapshot) {
+                          final comentarios = (snapshot.data ?? const [])
+                              .where((comentario) => !comentario.oculto)
+                              .toList();
+                          final total = snapshot.hasData
+                              ? comentarios.length
+                              : o.comments;
 
-                          // Descrição
-                          _FieldCard(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Descrição',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: pal.hint,
-                                    fontWeight: FontWeight.w600,
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _DetailTag(icon: estagio.icon, label: estagio.label, color: estagio.color),
+                                  _DetailTag(icon: type.icon, label: type.label, color: type.color),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                o.titulo.trim().isEmpty ? 'Sem título' : o.titulo.trim(),
+                                style: TextStyle(color: pal.ink, fontSize: 20, height: 1.25, fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 10),
+                              _AuthorDetails(
+                                name: _authorName ?? (o.anonima ? 'Denunciante anônimo' : 'Usuário'),
+                                photoUrl: _authorPhoto,
+                                publishedAt: o.dataCriacao,
+                                location: o.bairro?.trim().isNotEmpty == true ? o.bairro!.trim() : 'João Pessoa, PB',
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                o.descricao.trim().isEmpty ? 'Sem descrição.' : o.descricao.trim(),
+                                style: TextStyle(color: pal.muted, fontSize: 14, height: 1.5),
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _DetailAction(
+                                      icon: _userLiked ? Icons.favorite : Icons.favorite_border,
+                                      label: 'Curtir · $_likes',
+                                      active: _userLiked,
+                                      onTap: _handleLike,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  o.descricao.isEmpty
-                                      ? 'Sem descrição'
-                                      : o.descricao,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: pal.ink,
-                                    height: 1.4,
+                                  const SizedBox(width: 4),
+                                  _DetailIconAction(
+                                    icon: _userDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+                                    count: _dislikes,
+                                    active: _userDisliked,
+                                    color: AppColors.danger,
+                                    onTap: _handleDislike,
                                   ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: _DetailAction(
+                                      icon: Icons.chat_bubble_outline,
+                                      label: 'Comentar · $total',
+                                      onTap: _abrirComentarios,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Builder(
+                                    builder: (anchor) => _DetailIconAction(
+                                      icon: Icons.share_outlined,
+                                      tooltip: 'Compartilhar denúncia',
+                                      onTap: () => compartilharOcorrencia(o, origem: origemDoWidget(anchor)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (autoridade) ...[
+                                const SizedBox(height: 16),
+                                _PainelAutoridade(
+                                  verificada: _verificada,
+                                  statusOficial: _statusOficial,
+                                  processando: _processandoVerif,
+                                  onConfirmar: _toggleVerificacao,
+                                  onEmAnalise: () => _handleStatusOficial(StatusOficial.emAnalise),
+                                  onNaoConfirmada: () => _handleStatusOficial(StatusOficial.naoConfirmada),
+                                  onEncaminhar: () => _handleStatusOficial(StatusOficial.encaminhada),
+                                  onResolver: () => _handleStatusOficial(StatusOficial.resolvida),
+                                  onReverter: _reverterStatusOficial,
                                 ),
                               ],
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Botões de ação
-                          Row(
-                            children: [
-                              _ReactionChip(
-                                icon: _userLiked
-                                    ? Icons.thumb_up_alt
-                                    : Icons.thumb_up_alt_outlined,
-                                count: _likes,
-                                active: _userLiked,
-                                activeColor: _Cores.green,
-                                onTap: _handleLike,
+                              const SizedBox(height: 24),
+                              _DetailSectionTitle(title: 'Andamento', trailing: 'ETAPA $etapa DE 5'),
+                              const SizedBox(height: 10),
+                              _StatusTimeline(
+                                occurrence: o,
+                                verificada: _verificada,
+                                verificadaPorNome: _verificadaPorNome,
+                                verificadaEm: _verificadaEm,
+                                statusOficial: _statusOficial,
+                                historico: _historicoStream,
                               ),
-                              const SizedBox(width: 8),
-                              _ReactionChip(
-                                icon: _userDisliked
-                                    ? Icons.thumb_down_alt
-                                    : Icons.thumb_down_alt_outlined,
-                                count: _dislikes,
-                                active: _userDisliked,
-                                activeColor: _Cores.red,
-                                onTap: _handleDislike,
+                              const SizedBox(height: 24),
+                              _DetailSectionTitle(title: 'Localização'),
+                              const SizedBox(height: 10),
+                              _LocationSection(occurrence: o, onOpenDirections: _comoChegar),
+                              const SizedBox(height: 24),
+                              _DetailSectionTitle(title: 'Comentários', trailing: '$total', onTap: _abrirComentarios),
+                              const SizedBox(height: 10),
+                              _CommentPreviews(comments: comentarios, onOpen: _abrirComentarios),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton(
+                                  onPressed: _abrirComentarios,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text('Ver todos os $total comentários'),
+                                      const Icon(Icons.chevron_right, size: 18),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _AddCommentButton(
-                                  onTap: _abrirComentarios,
+                              const SizedBox(height: 12),
+                              _DetailSectionTitle(title: 'Ações relacionadas'),
+                              const SizedBox(height: 10),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: pal.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: pal.border),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Builder(
+                                      builder: (anchor) => _RelatedActionTile(
+                                        icon: Icons.share_outlined,
+                                        title: 'Compartilhar denúncia',
+                                        subtitle: 'Enviar link para vizinhos e grupos',
+                                        onTap: () => compartilharOcorrencia(
+                                          o,
+                                          origem: origemDoWidget(anchor),
+                                        ),
+                                      ),
+                                    ),
+                                    _RelatedActionTile(
+                                      icon: Icons.map_outlined,
+                                      title: 'Ver denúncias próximas',
+                                      subtitle: 'Explore os registros desta região',
+                                      onTap: _abrirMapaDaRegiao,
+                                    ),
+                                    _RelatedActionTile(
+                                      icon: Icons.visibility_off_outlined,
+                                      title: 'Denunciar conteúdo',
+                                      subtitle: 'Informar uso indevido',
+                                      showBottomBorder: false,
+                                      onTap: _denunciarOcorrencia,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          ),
-                          if (isAutoridade) ...[
-                            const SizedBox(height: 16),
-                            _PainelAutoridade(
-                              verificada: _verificada,
-                              statusOficial: _statusOficial,
-                              processando: _processandoVerif,
-                              onConfirmar: _toggleVerificacao,
-                              onEmAnalise: () =>
-                                  _handleStatusOficial(StatusOficial.emAnalise),
-                              onNaoConfirmada: () => _handleStatusOficial(
-                                StatusOficial.naoConfirmada,
-                              ),
-                              onEncaminhar: () => _handleStatusOficial(
-                                StatusOficial.encaminhada,
-                              ),
-                              onResolver: () =>
-                                  _handleStatusOficial(StatusOficial.resolvida),
-                              onReverter: _reverterStatusOficial,
-                            ),
-                          ],
-                          const SizedBox(height: 28),
-
-                          // Seção de acompanhamento (linha do tempo de status)
-                          Text(
-                            'Acompanhamento',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: pal.ink,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          _StatusTimeline(
-                            occurrence: o,
-                            historico: _historicoStream,
-                          ),
-                          const SizedBox(height: 28),
-
-                          // Seção de comentários: abre o mesmo sheet do feed
-                          // (OccurrenceCommentsSheet), evitando reimplementar
-                          // a lógica de adicionar/curtir/excluir aqui também.
-                          StreamBuilder<List<ComentarioModel>>(
-                            stream: _comentariosStream,
-                            builder: (context, snap) {
-                              final total = (snap.data ?? const [])
-                                  .where((c) => !c.oculto)
-                                  .length;
-                              return InkWell(
-                                onTap: () => _abrirComentarios(),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Comentários',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                        color: pal.ink,
-                                      ),
-                                    ),
-                                    if (total > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(
-                                            0xFF3B82F6,
-                                          ).withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '$total',
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                            color: Color(0xFF3B82F6),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                    const Spacer(),
-                                    Icon(Icons.chevron_right, color: pal.hint),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 4),
-                          OutlinedButton.icon(
-                            onPressed: _abrirComentarios,
-                            icon: const Icon(Icons.mode_comment_outlined),
-                            label: const Text('Ver e comentar'),
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+            _buildCommentComposer(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader(OcorrenciaModel o, OccurrenceStatus statusEnum) {
+  Widget _buildHeader() {
     final pal = context.pal;
-    final authorLabel = _authorName ?? 'Usuário';
-
     return Container(
       color: pal.surface,
-      child: Column(
+      child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 16, 4),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: 'Voltar',
-                  icon: Icon(Icons.arrow_back, color: pal.ink),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      authorLabel,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: pal.ink,
-                      ),
-                    ),
-                  ),
-                ),
-                Builder(
-                  builder: (botao) => IconButton(
-                    icon: Icon(Icons.share_outlined, color: pal.ink),
-                    tooltip: 'Compartilhar',
-                    onPressed: () => compartilharOcorrencia(
-                      widget.occurrence,
-                      origem: origemDoWidget(botao),
-                    ),
-                  ),
-                ),
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.14),
-                  backgroundImage: _authorPhoto != null
-                      ? imagemCacheada(_authorPhoto!)
-                      : null,
-                  child: _authorPhoto == null
-                      ? Text(
-                          (_authorName ?? 'U')[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFF4CAF50),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        )
-                      : null,
-                ),
-              ],
+          IconButton(tooltip: 'Voltar', icon: Icon(Icons.arrow_back, color: pal.ink), onPressed: () => Navigator.pop(context)),
+          Expanded(
+            child: Text(
+              'Denúncia',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: pal.ink),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-            child: Row(
-              children: [
-                const Icon(Icons.location_on, size: 14, color: _Cores.orange),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    o.localizacao.isEmpty
-                        ? 'Localização não informada'
-                        : o.localizacao,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: _Cores.orange,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _StatusBadge(status: statusEnum),
-              ],
+          Builder(
+            builder: (anchor) => IconButton(
+              tooltip: 'Compartilhar',
+              icon: Icon(Icons.share_outlined, color: pal.ink),
+              onPressed: () => compartilharOcorrencia(widget.occurrence, origem: origemDoWidget(anchor)),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-            child: SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _comoChegar,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _Cores.green,
-                  side: const BorderSide(color: _Cores.green),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                icon: const Icon(Icons.directions_outlined, size: 18),
-                label: const Text(
-                  'Como chegar',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
+          PopupMenuButton<String>(
+            tooltip: 'Mais opções',
+            icon: Icon(Icons.more_horiz, color: pal.ink),
+            onSelected: (value) {
+              if (value == 'report') _denunciarOcorrencia();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'report', child: Text('Denunciar conteúdo')),
+            ],
           ),
-          Divider(height: 1, color: pal.border),
         ],
       ),
     );
   }
-}
 
-// ─────────────────────────────────────────
-//  ÁREA DE IMAGEM
+  Widget _buildCommentComposer() {
+    final pal = context.pal;
+    return Container(
+      decoration: BoxDecoration(color: pal.surface, border: Border(top: BorderSide(color: pal.border))),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: _abrirComentarios,
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                height: 42,
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(color: pal.surfaceAlt, borderRadius: BorderRadius.circular(24)),
+                child: Text('Escreva um comentário…', style: TextStyle(color: pal.hint, fontSize: 13)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: AppColors.successStrong,
+            shape: const CircleBorder(),
+            child: IconButton(
+              tooltip: 'Comentar',
+              onPressed: _abrirComentarios,
+              icon: const Icon(Icons.send_rounded, size: 18),
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _denunciarOcorrencia() async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    final result = await showReportContentSheet(context, title: 'Denunciar publicação');
+    if (result == null || !mounted) return;
+    try {
+      await ModeracaoService.instance.denunciarOcorrencia(
+        ocorrenciaId: widget.occurrence.id,
+        denuncianteId: uid,
+        motivo: result.motivo,
+        detalhe: result.detalhe,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Denúncia enviada para moderação.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensagemErro(error, acao: 'enviar a denúncia'))),
+      );
+    }
+  }
+
+  void _abrirMapaDaRegiao() {
+    final o = widget.occurrence;
+    if (!_coordenadasValidas(o.latitude, o.longitude)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Esta denúncia não tem coordenadas válidas.')));
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MapPage(focoInicial: LatLng(o.latitude, o.longitude)),
+      ),
+    );
+  }
+}
 // ─────────────────────────────────────────
 
 class _ImageArea extends StatefulWidget {
@@ -718,104 +661,178 @@ class _ImageAreaState extends State<_ImageArea> {
     final pal = context.pal;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final larguraImg = MediaQuery.sizeOf(context).width;
-    return SizedBox(
-      height: 240,
-      child: Stack(
-        children: [
-          PageView.builder(
-            controller: _pageCtrl,
-            itemCount: images.length,
-            onPageChanged: (i) => setState(() => _current = i),
-            itemBuilder: (_, i) => Container(
-              width: double.infinity,
-              color: pal.surfaceAlt,
-              alignment: Alignment.center,
-              child: Image(
-                image: imagemCacheada(
-                  cloudinaryOtimizada(
-                    images[i],
-                    larguraLogica: larguraImg,
-                    devicePixelRatio: dpr,
-                  ),
-                  cacheWidth: cacheLarguraPx(larguraImg, dpr),
-                ),
-                fit: BoxFit.contain,
-                // Descrição para leitores de tela (sem isto vira só "imagem").
-                semanticLabel: images.length > 1
-                    ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
-                    : 'Foto da denúncia: ${widget.type.label}',
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 240,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              PageView.builder(
+                controller: _pageCtrl,
+                itemCount: images.length,
+                onPageChanged: (i) => setState(() => _current = i),
+                itemBuilder: (_, i) => Container(
+                  width: double.infinity,
+                  color: pal.surfaceAlt,
+                  alignment: Alignment.center,
+                  child: Image(
+                    image: imagemCacheada(
+                      cloudinaryOtimizada(
+                        images[i],
+                        larguraLogica: larguraImg,
+                        devicePixelRatio: dpr,
+                      ),
+                      cacheWidth: cacheLarguraPx(larguraImg, dpr),
                     ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) =>
-                    _Placeholder(type: widget.type),
+                    fit: BoxFit.contain,
+                    semanticLabel: images.length > 1
+                        ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
+                        : 'Foto da denúncia: ${widget.type.label}',
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) =>
+                        _Placeholder(type: widget.type),
+                  ),
+                ),
               ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _ViewfinderCorners(
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    '${_current + 1}/${images.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11),
+                  ),
+                ),
+              ),
+              if (_coordenadasValidas(
+                widget.occurrence.latitude,
+                widget.occurrence.longitude,
+              ))
+                Positioned(
+                  left: 28,
+                  bottom: 12,
+                  child: Text(
+                    _coordenadasFormatadas(
+                      widget.occurrence.latitude,
+                      widget.occurrence.longitude,
+                    ),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      shadows: [Shadow(color: Colors.black87, blurRadius: 4)],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (images.length > 1)
+          SizedBox(
+            height: 56,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              scrollDirection: Axis.horizontal,
+              itemCount: images.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final selecionada = index == _current;
+                return GestureDetector(
+                  onTap: () => _pageCtrl.animateToPage(
+                    index,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOut,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    width: 60,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: selecionada ? pal.primary : pal.border,
+                        width: selecionada ? 2 : 1,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image(
+                      image: imagemCacheada(
+                        cloudinaryOtimizada(
+                          images[index],
+                          larguraLogica: 60,
+                          devicePixelRatio: dpr,
+                        ),
+                        cacheWidth: cacheLarguraPx(60, dpr),
+                      ),
+                      fit: BoxFit.cover,
+                      semanticLabel: 'Abrir foto ${index + 1}',
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-          if (images.length > 1) ...[
-            Positioned(
-              bottom: 10,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(images.length, (i) {
-                        final active = i == _current;
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          width: active ? 16 : 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: active ? Colors.white : Colors.white54,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black45,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${_current + 1}/${images.length}',
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+      ],
     );
   }
+}
+
+class _ViewfinderCorners extends CustomPainter {
+  final Color color;
+
+  const _ViewfinderCorners({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    const inset = 12.0;
+    const length = 14.0;
+    final path = Path()
+      ..moveTo(inset, inset + length)
+      ..lineTo(inset, inset)
+      ..lineTo(inset + length, inset)
+      ..moveTo(size.width - inset - length, inset)
+      ..lineTo(size.width - inset, inset)
+      ..lineTo(size.width - inset, inset + length)
+      ..moveTo(inset, size.height - inset - length)
+      ..lineTo(inset, size.height - inset)
+      ..lineTo(inset + length, size.height - inset)
+      ..moveTo(size.width - inset - length, size.height - inset)
+      ..lineTo(size.width - inset, size.height - inset)
+      ..lineTo(size.width - inset, size.height - inset - length);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ViewfinderCorners oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _Placeholder extends StatelessWidget {
@@ -990,226 +1007,410 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
   }
 }
 
-// ─────────────────────────────────────────
-//  TYPE BADGE  (sobre a imagem)
-// ─────────────────────────────────────────
-
-class _TypeBadge extends StatelessWidget {
-  final OccurrenceType type;
-  const _TypeBadge({required this.type});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: type.color,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        type.label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-//  STATUS BADGE
-// ─────────────────────────────────────────
-
-class _StatusBadge extends StatelessWidget {
-  final OccurrenceStatus status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: status.color,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Icon(status.icon, color: Colors.white, size: 14),
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-//  FIELD CARD (título / descrição)
-// ─────────────────────────────────────────
-
-class _FieldCard extends StatelessWidget {
-  final Widget child;
-  const _FieldCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = context.pal;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: pal.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: pal.border),
-      ),
-      child: child,
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-//  REACTION CHIP  (like / dislike)
-// ─────────────────────────────────────────
-
-class _ReactionChip extends StatelessWidget {
+class _DetailTag extends StatelessWidget {
   final IconData icon;
-  final int count;
-  final bool active;
-  final Color activeColor;
-  final VoidCallback onTap;
+  final String label;
+  final Color color;
 
-  const _ReactionChip({
-    required this.icon,
-    required this.count,
-    required this.active,
-    required this.activeColor,
-    required this.onTap,
-  });
+  const _DetailTag({required this.icon, required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final pal = context.pal;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: active ? activeColor.withValues(alpha: 0.08) : pal.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: active ? activeColor : pal.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: active ? activeColor : pal.hint),
-            const SizedBox(width: 6),
-            Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: active ? activeColor : pal.hint,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-//  ADD COMMENT BUTTON
-// ─────────────────────────────────────────
-
-class _AddCommentButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _AddCommentButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = context.pal;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: pal.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: pal.border),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.chat_bubble_outline, size: 16, color: pal.hint),
-            const SizedBox(width: 6),
-            Text(
-              'Adicionar comentário',
-              style: TextStyle(
-                fontSize: 13,
-                color: pal.hint,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-//  VERIFICAÇÃO OFICIAL
-// ─────────────────────────────────────────
-
-class _VerificadaBanner extends StatelessWidget {
-  final String? nome;
-  final DateTime? data;
-
-  const _VerificadaBanner({required this.nome, required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    final quando = data != null ? DateFormat('dd/MM/yyyy').format(data!) : null;
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
-        color: _Cores.green.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _Cores.green.withValues(alpha: 0.5)),
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.verified, color: _Cores.green, size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  nome != null && nome!.isNotEmpty
-                      ? 'Verificada por $nome'
-                      : 'Denúncia verificada',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF15803D),
-                  ),
-                ),
-                if (quando != null)
-                  Text(
-                    'Confirmada em $quando',
-                    style: TextStyle(fontSize: 11, color: context.pal.hint),
-                  ),
-              ],
-            ),
-          ),
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 }
 
+class _AuthorDetails extends StatelessWidget {
+  final String name;
+  final String? photoUrl;
+  final DateTime? publishedAt;
+  final String location;
+
+  const _AuthorDetails({
+    required this.name,
+    required this.photoUrl,
+    required this.publishedAt,
+    required this.location,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final published = publishedAt == null
+        ? 'Publicado agora'
+        : 'Publicado em ${DateFormat('dd/MM').format(publishedAt!)} às ${DateFormat('HH:mm').format(publishedAt!)}';
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+          backgroundImage: photoUrl == null ? null : imagemCacheada(photoUrl!),
+          child: photoUrl == null
+              ? Text(name.isEmpty ? 'U' : name.characters.first.toUpperCase(),
+                  style: TextStyle(color: pal.primary, fontWeight: FontWeight.w700, fontSize: 12))
+              : null,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: pal.ink, fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text('$published · $location', maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: pal.hint, fontSize: 11)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailSectionTitle extends StatelessWidget {
+  final String title;
+  final String? trailing;
+  final VoidCallback? onTap;
+
+  const _DetailSectionTitle({required this.title, this.trailing, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final row = Row(
+      children: [
+        Expanded(child: Text(title, style: TextStyle(color: pal.ink, fontSize: 16, fontWeight: FontWeight.w700))),
+        if (trailing != null)
+          Text(trailing!, style: TextStyle(color: pal.muted, fontSize: 10, fontWeight: FontWeight.w700)),
+        if (onTap != null) ...[
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right, color: pal.hint, size: 19),
+        ],
+      ],
+    );
+    return onTap == null ? row : InkWell(onTap: onTap, child: row);
+  }
+}
+
+class _DetailAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _DetailAction({required this.icon, required this.label, required this.onTap, this.active = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final color = active ? AppColors.successStrong : pal.muted;
+    return Material(
+      color: active ? AppColors.successStrong.withValues(alpha: 0.1) : pal.surfaceAlt,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: SizedBox(
+          height: 40,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 5),
+              Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: active ? color : pal.ink, fontSize: 11, fontWeight: FontWeight.w600))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailIconAction extends StatelessWidget {
+  final IconData icon;
+  final int? count;
+  final bool active;
+  final Color? color;
+  final String? tooltip;
+  final VoidCallback onTap;
+
+  const _DetailIconAction({
+    required this.icon,
+    required this.onTap,
+    this.count,
+    this.active = false,
+    this.color,
+    this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final content = SizedBox(
+      width: 36,
+      height: 40,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 17, color: active ? (color ?? AppColors.danger) : (color ?? pal.muted)),
+            if (count != null)
+              Text('$count', style: TextStyle(color: pal.hint, fontSize: 8, height: 1)),
+          ],
+        ),
+      ),
+    );
+    return tooltip == null ? content : Tooltip(message: tooltip!, child: content);
+  }
+}
+
+class _LocationSection extends StatelessWidget {
+  final OcorrenciaModel occurrence;
+  final VoidCallback onOpenDirections;
+
+  const _LocationSection({required this.occurrence, required this.onOpenDirections});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final o = occurrence;
+    final valid = _coordenadasValidas(o.latitude, o.longitude);
+    final bairro = o.bairro?.trim() ?? '';
+    final cidade = bairro.isEmpty ? 'João Pessoa, PB' : '$bairro · João Pessoa, PB';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            height: 138,
+            child: valid
+                ? GoogleMap(
+                    initialCameraPosition: CameraPosition(target: LatLng(o.latitude, o.longitude), zoom: 15),
+                    markers: {
+                      Marker(
+                        markerId: MarkerId('detalhe-${o.id}'),
+                        position: LatLng(o.latitude, o.longitude),
+                        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+                      ),
+                    },
+                    zoomControlsEnabled: false,
+                    mapToolbarEnabled: false,
+                    compassEnabled: false,
+                    myLocationButtonEnabled: false,
+                    myLocationEnabled: false,
+                    scrollGesturesEnabled: false,
+                    zoomGesturesEnabled: false,
+                    rotateGesturesEnabled: false,
+                    tiltGesturesEnabled: false,
+                  )
+                : Container(
+                    color: pal.surfaceAlt,
+                    alignment: Alignment.center,
+                    child: Icon(Icons.map_outlined, color: pal.hint, size: 32),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(padding: EdgeInsets.only(top: 2), child: Icon(Icons.location_on_outlined, color: AppColors.primary, size: 18)),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(o.localizacao.trim().isEmpty ? 'Endereço não informado' : o.localizacao.trim(),
+                      style: TextStyle(color: pal.ink, fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 3),
+                  Text(cidade, style: TextStyle(color: pal.muted, fontSize: 11)),
+                  if (valid) ...[
+                    const SizedBox(height: 3),
+                    Text(_coordenadasFormatadas(o.latitude, o.longitude),
+                        style: TextStyle(color: pal.hint, fontSize: 10, fontFamily: 'monospace')),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: valid ? onOpenDirections : null,
+          icon: const Icon(Icons.map_outlined, size: 17),
+          label: const Text('Abrir no mapa'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: pal.primary,
+            side: BorderSide(color: pal.primary),
+            minimumSize: const Size.fromHeight(40),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CommentPreviews extends StatelessWidget {
+  final List<ComentarioModel> comments;
+  final VoidCallback onOpen;
+
+  const _CommentPreviews({required this.comments, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final raiz = comments.where((comment) => comment.parentId == null).toList();
+    final recentes = raiz.reversed.take(2).toList();
+    if (recentes.isEmpty) {
+      return Text('Ainda não há comentários. Seja a primeira pessoa a comentar.',
+          style: TextStyle(color: pal.muted, fontSize: 13));
+    }
+    return Column(
+      children: [
+        for (final comment in recentes)
+          InkWell(
+            onTap: onOpen,
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                    backgroundImage: comment.userPhotoUrl == null ? null : imagemCacheada(comment.userPhotoUrl!),
+                    child: comment.userPhotoUrl == null
+                        ? Text(comment.userName.isEmpty ? 'U' : comment.userName.characters.first.toUpperCase(),
+                            style: TextStyle(color: pal.primary, fontSize: 10, fontWeight: FontWeight.w700))
+                        : null,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(child: Text(comment.userName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: pal.ink, fontSize: 12, fontWeight: FontWeight.w600))),
+                            const SizedBox(width: 6),
+                            Text(tempoRelativo(comment.dataCriacao), style: TextStyle(color: pal.hint, fontSize: 10)),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(comment.texto, maxLines: 2, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: pal.muted, fontSize: 12, height: 1.35)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.favorite_border, size: 12, color: pal.hint),
+                            const SizedBox(width: 4),
+                            Text('${comment.likes}', style: TextStyle(color: pal.hint, fontSize: 10)),
+                            const SizedBox(width: 12),
+                            Text('Responder', style: TextStyle(color: pal.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _RelatedActionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool showBottomBorder;
+
+  const _RelatedActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.showBottomBorder = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(border: showBottomBorder ? Border(bottom: BorderSide(color: pal.border)) : null),
+        child: Row(
+          children: [
+            Icon(icon, color: pal.muted, size: 19),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(color: pal.ink, fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: TextStyle(color: pal.hint, fontSize: 10)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: pal.hint, size: 19),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+bool _coordenadasValidas(double latitude, double longitude) =>
+    latitude.isFinite && longitude.isFinite &&
+    latitude >= -90 && latitude <= 90 &&
+    longitude >= -180 && longitude <= 180 &&
+    latitude != 0 && longitude != 0;
+
+String _coordenadasFormatadas(double latitude, double longitude) =>
+    '${_coordenadaDms(latitude, latitude: true)}  ·  ${_coordenadaDms(longitude, latitude: false)}';
+
+String _coordenadaDms(double value, {required bool latitude}) {
+  final absolute = value.abs();
+  final degrees = absolute.floor();
+  final minutesCompletos = (absolute - degrees) * 60;
+  final minutes = minutesCompletos.floor();
+  final seconds = ((minutesCompletos - minutes) * 60).round();
+  final hemisphere = latitude
+      ? (value >= 0 ? 'N' : 'S')
+      : (value >= 0 ? 'L' : 'O');
+  return '$degrees°${minutes.toString().padLeft(2, '0')}′${seconds.toString().padLeft(2, '0')}″$hemisphere';
+}
+
 // ─────────────────────────────────────────
-//  BANNER STATUS OFICIAL (em análise / não confirmada)
+//  TYPE BADGE  (sobre a imagem)
 // ─────────────────────────────────────────
 
 class _StatusOficialBanner extends StatelessWidget {
@@ -1462,38 +1663,19 @@ class _PainelAutoridade extends StatelessWidget {
 
 class _StatusTimeline extends StatelessWidget {
   final OcorrenciaModel occurrence;
+  final bool verificada;
+  final String? verificadaPorNome;
+  final DateTime? verificadaEm;
+  final StatusOficial? statusOficial;
   final Stream<List<({String status, String? por, DateTime? data})>> historico;
-  const _StatusTimeline({required this.occurrence, required this.historico});
-
-  String _fmt(DateTime? d) =>
-      d == null ? '' : DateFormat('dd/MM/yyyy HH:mm').format(d);
-
-  // Estilo (ícone/cor/rótulo) de um evento de auditoria. 'verificada' não é um
-  // StatusOficial, então tem tratamento próprio; os demais reusam o enum.
-  ({IconData icone, Color cor, String label}) _estiloEvento(
-    BuildContext context,
-    String chave,
-  ) {
-    if (chave == 'revertida') {
-      return (
-        icone: Icons.undo,
-        cor: context.pal.muted,
-        label: 'Status revertido pela autoridade',
-      );
-    }
-    if (chave == 'verificada') {
-      return (
-        icone: Icons.verified,
-        cor: context.pal.primary,
-        label: 'Confirmada pela autoridade',
-      );
-    }
-    final s = StatusOficialInfo.fromString(chave);
-    if (s != null) {
-      return (icone: s.icon, cor: s.color, label: s.label);
-    }
-    return (icone: Icons.circle_outlined, cor: context.pal.muted, label: chave);
-  }
+  const _StatusTimeline({
+    required this.occurrence,
+    required this.verificada,
+    required this.verificadaPorNome,
+    required this.verificadaEm,
+    required this.statusOficial,
+    required this.historico,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1501,98 +1683,175 @@ class _StatusTimeline extends StatelessWidget {
     return StreamBuilder<List<({String status, String? por, DateTime? data})>>(
       stream: historico,
       builder: (context, snap) {
-        final eventos = snap.data ?? [];
-        final linhas = <({
-          IconData icone,
-          Color cor,
-          String label,
-          String? por,
-          DateTime? data,
-        })>[
-          (
-            icone: Icons.add_location_alt_outlined,
-            cor: context.pal.muted,
-            label: 'Registrada',
-            por: null,
-            data: occurrence.dataCriacao,
-          ),
-        ];
-        for (final e in eventos) {
-          final est = _estiloEvento(context, e.status);
-          linhas.add((
-            icone: est.icone,
-            cor: est.cor,
-            label: est.label,
-            por: e.por,
-            data: e.data,
-          ));
+        final eventos = snap.data ?? const <({String status, String? por, DateTime? data})>[];
+        DateTime? dataEvento(String status) {
+          for (final evento in eventos.reversed) {
+            if (evento.status == status) return evento.data;
+          }
+          return null;
         }
 
+        final stage = EstagioOficialInfo.calcular(verificada, statusOficial);
+        final etapaAtual = switch (stage) {
+          EstagioOficial.pendente => 0,
+          EstagioOficial.emAnalise || EstagioOficial.naoConfirmada => 1,
+          EstagioOficial.confirmada => 2,
+          EstagioOficial.encaminhada => 3,
+          EstagioOficial.resolvida => 4,
+        };
+        final steps = <_TimelineStep>[
+          _TimelineStep(
+            title: 'Pendente',
+            description: 'Denúncia publicada',
+            icon: Icons.circle,
+            date: occurrence.dataCriacao,
+          ),
+          _TimelineStep(
+            title: 'Em análise',
+            description: 'O órgão responsável está avaliando esta denúncia.',
+            icon: Icons.search,
+            date: dataEvento('em_analise'),
+          ),
+          _TimelineStep(
+            title: 'Verificada',
+            description: 'Confirmação do problema no local.',
+            icon: Icons.verified_outlined,
+            date: verificadaEm ?? occurrence.verificadaEm ?? dataEvento('verificada'),
+          ),
+          _TimelineStep(
+            title: 'Encaminhada',
+            description: 'Enviada ao órgão responsável.',
+            icon: Icons.send_outlined,
+            date: occurrence.encaminhadaEm ?? dataEvento('encaminhada'),
+          ),
+          _TimelineStep(
+            title: 'Resolvida',
+            description: 'Problema tratado e encerrado.',
+            icon: Icons.check_circle_outline,
+            date: occurrence.resolvidaEm ?? dataEvento('resolvida'),
+          ),
+        ];
+
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (int i = 0; i < linhas.length; i++)
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: linhas[i].cor.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            linhas[i].icone,
-                            size: 15,
-                            color: linhas[i].cor,
-                          ),
-                        ),
-                        if (i != linhas.length - 1)
-                          Expanded(
-                            child: Container(width: 2, color: pal.border),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                    Padding(
-                      padding: EdgeInsets.only(
-                        top: 4,
-                        bottom: i == linhas.length - 1 ? 0 : 16,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+              decoration: BoxDecoration(
+                color: pal.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: pal.border),
+              ),
+              child: Column(
+                children: [
+                  for (var i = 0; i < steps.length; i++)
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            linhas[i].label,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: linhas[i].cor,
+                          SizedBox(
+                            width: 22,
+                            child: Column(
+                              children: [
+                                Container(
+                                  width: 13,
+                                  height: 13,
+                                  margin: const EdgeInsets.only(top: 3),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: i < etapaAtual
+                                        ? AppColors.primary
+                                        : i == etapaAtual
+                                            ? stage.color
+                                            : pal.surface,
+                                    border: i > etapaAtual
+                                        ? Border.all(color: pal.border, width: 2)
+                                        : null,
+                                  ),
+                                  child: i == etapaAtual
+                                      ? Icon(steps[i].icon, size: 8, color: Colors.white)
+                                      : null,
+                                ),
+                                if (i != steps.length - 1)
+                                  Expanded(
+                                    child: Container(
+                                      width: 2,
+                                      color: i < etapaAtual ? AppColors.primary : pal.border,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                          if (linhas[i].data != null)
-                            Text(
-                              _fmt(linhas[i].data),
-                              style: TextStyle(fontSize: 12, color: pal.hint),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(bottom: i == steps.length - 1 ? 0 : 13),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    steps[i].title,
+                                    style: TextStyle(
+                                      color: i == etapaAtual ? stage.color : i < etapaAtual ? pal.ink : pal.muted,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    i <= etapaAtual ? steps[i].description : 'Aguardando etapa anterior.',
+                                    style: TextStyle(color: pal.muted, fontSize: 11, height: 1.35),
+                                  ),
+                                  if (i <= etapaAtual && steps[i].date != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 3),
+                                      child: Text(
+                                        DateFormat('dd/MM · HH:mm').format(steps[i].date!),
+                                        style: TextStyle(color: pal.hint, fontSize: 10, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  if (i == 2 &&
+                                      i <= etapaAtual &&
+                                      verificadaPorNome?.trim().isNotEmpty == true)
+                                    Text(
+                                      'por ${verificadaPorNome!.trim()}',
+                                      style: TextStyle(color: pal.hint, fontSize: 10),
+                                    ),
+                                ],
+                              ),
                             ),
-                          if (linhas[i].por != null)
-                            Text(
-                              'por ${linhas[i].por}',
-                              style: TextStyle(fontSize: 12, color: pal.hint),
-                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
+            ),
+            if (stage == EstagioOficial.naoConfirmada) ...[
+              const SizedBox(height: 8),
+              const _StatusOficialBanner(
+                label: 'A autoridade não encontrou o problema no local.',
+                icon: Icons.info_outline,
+                color: _Cores.red,
+              ),
+            ],
           ],
         );
       },
     );
   }
+}
+
+class _TimelineStep {
+  final String title;
+  final String description;
+  final IconData icon;
+  final DateTime? date;
+
+  const _TimelineStep({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.date,
+  });
 }

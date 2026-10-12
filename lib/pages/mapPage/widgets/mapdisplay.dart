@@ -9,8 +9,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class MapDisplay extends StatefulWidget {
   final MapController controller;
+  final LatLng? focoInicial;
 
-  const MapDisplay({super.key, required this.controller});
+  const MapDisplay({super.key, required this.controller, this.focoInicial});
 
   @override
   State<MapDisplay> createState() => _MapDisplayState();
@@ -20,9 +21,7 @@ class _MapDisplayState extends State<MapDisplay> {
   final LocationService locationService = LocationService();
 
   GoogleMapController? _mapController;
-  // Abre já em João Pessoa: antes o mapa ficava num spinner até o GPS
-  // responder (para sempre em ambiente fechado ou sem permissão).
-  CameraPosition? cameraPosition = _cameraPadrao;
+  CameraPosition? cameraPosition;
   bool _jaEnquadrou = false;
 
   static const _cameraPadrao = CameraPosition(
@@ -33,7 +32,11 @@ class _MapDisplayState extends State<MapDisplay> {
   @override
   void initState() {
     super.initState();
-
+    final foco = widget.focoInicial;
+    cameraPosition = foco == null
+        ? _cameraPadrao
+        : CameraPosition(target: foco, zoom: 15);
+    _jaEnquadrou = foco != null;
     loadLocation();
   }
 
@@ -44,6 +47,10 @@ class _MapDisplayState extends State<MapDisplay> {
   }
 
   Future<void> loadLocation() async {
+    // Quando o mapa é aberto a partir de uma denúncia, mantém o foco naquele
+    // ponto em vez de recentrar automaticamente na posição do usuário.
+    if (widget.focoInicial != null) return;
+
     final result = await locationService.getCurrentLatLng();
 
     if (!mounted) return;

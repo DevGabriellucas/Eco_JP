@@ -66,7 +66,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   Widget _pagina(int i) {
     switch (i) {
       case 0:
-        return HomePage(scrollController: _scrollController);
+        return HomePage(
+          scrollController: _scrollController,
+          onOpenMap: () => _onTapItem(1),
+        );
       case 1:
         return const MapPage();
       case 3:
@@ -327,33 +330,39 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const height = 56.0;
-    const padding = 8.0;
+    final pal = context.pal;
+    const height = 72.0;
 
     return Padding(
-      padding:
-          const EdgeInsets.symmetric(horizontal: padding, vertical: padding),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       child: SafeArea(
         top: false,
         child: Container(
           height: height,
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(28),
+            color: pal.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: pal.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildItem(
-                    0, Icons.home_rounded, Icons.home_outlined, 'Feed', 24.0),
-                _buildItem(1, Icons.location_on_rounded,
+                _buildItem(context, 0, Icons.home_rounded, Icons.home_outlined,
+                    'Feed', 24.0),
+                _buildItem(context, 1, Icons.location_on_rounded,
                     Icons.location_on_outlined, 'Mapa', 24.0),
-                _buildBotaoCentral(24.0),
-                _buildItem(3, Icons.library_books_rounded,
+                _buildBotaoCentral(context, 24.0),
+                _buildItem(context, 3, Icons.library_books_rounded,
                     Icons.library_books_outlined, 'Dados', 24.0),
-                _buildItemPerfil(),
+                _buildItemPerfil(context),
               ],
             ),
           ),
@@ -363,6 +372,7 @@ class _BottomNav extends StatelessWidget {
   }
 
   Widget _buildItem(
+    BuildContext context,
     int i,
     IconData icon,
     IconData iconAtivo,
@@ -370,6 +380,7 @@ class _BottomNav extends StatelessWidget {
     double iconSize,
   ) {
     final ativo = currentIndex == i;
+    final pal = context.pal;
     return Expanded(
       child: Semantics(
         button: true,
@@ -379,18 +390,35 @@ class _BottomNav extends StatelessWidget {
           onTap: () => onTap(i),
           child: Center(
             child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              height: 62,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
               decoration: BoxDecoration(
-                color: ativo ? const Color(0xFF888888) : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
+                color: ativo
+                    ? pal.primary.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(15),
               ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: iconSize,
-                  color: Colors.white,
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    ativo ? icon : iconAtivo,
+                    size: iconSize,
+                    color: ativo ? pal.primary : pal.muted,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: ativo ? pal.primary : pal.muted,
+                      fontSize: 9,
+                      fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -399,8 +427,9 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _buildItemPerfil() {
+  Widget _buildItemPerfil(BuildContext context) {
     final ativo = currentIndex == 4;
+    final pal = context.pal;
     return Expanded(
       child: Semantics(
         button: true,
@@ -408,19 +437,33 @@ class _BottomNav extends StatelessWidget {
         label: 'Perfil',
         child: GestureDetector(
           onTap: () => onTap(4),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.only(
-                    left: 28, right: 48, top: 14, bottom: 14),
-                decoration: BoxDecoration(
-                  color: ativo ? const Color(0xFF888888) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: _buildAvatarPerfil(),
+          child: Center(
+            child: Container(
+              height: 62,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+              decoration: BoxDecoration(
+                color: ativo
+                    ? pal.primary.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(15),
               ),
-            ],
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildAvatarPerfil(),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Perfil',
+                    style: TextStyle(
+                      color: ativo ? pal.primary : pal.muted,
+                      fontSize: 9,
+                      fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -448,10 +491,15 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _buildBotaoCentral(double iconSize) {
+  Widget _buildBotaoCentral(BuildContext context, double iconSize) {
     // Autoridade: atalho para a fila de verificação (selo). Cidadão: "+".
     final label =
         isAutoridade ? 'Fila de verificação e moderação' : 'Nova denúncia';
+    final labelCurta = isAutoridade ? 'Fila' : 'Denunciar';
+    final pal = context.pal;
+    final iconColor = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.ink
+        : Colors.white;
 
     return Semantics(
       button: true,
@@ -460,17 +508,36 @@ class _BottomNav extends StatelessWidget {
         message: label,
         child: GestureDetector(
           onTap: () => onTap(2),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: isAutoridade ? AppColors.success : Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isAutoridade ? Icons.fact_check_outlined : Icons.add,
-              color: isAutoridade ? Colors.white : Colors.black,
-              size: 24,
+          child: SizedBox(
+            height: 62,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: pal.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isAutoridade ? Icons.fact_check_outlined : Icons.add,
+                    color: iconColor,
+                    size: iconSize,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  labelCurta,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: pal.ink,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

@@ -62,12 +62,16 @@ class OccurrenceCard extends StatelessWidget {
     final estagio = EstagioOficialInfo.calcular(o.verificada, o.statusOficial);
     final autor = _authorName;
     final pal = context.pal;
+    final bairro = o.bairro?.trim();
+    final localDoAutor = bairro != null && bairro.isNotEmpty
+        ? bairro
+        : o.localizacao;
 
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: pal.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: pal.border),
         boxShadow: [
           BoxShadow(
@@ -91,7 +95,8 @@ class OccurrenceCard extends StatelessWidget {
               _CardHeader(
                 authorName: autor,
                 authorPhoto: fotoAutor,
-                location: o.localizacao,
+                location: '$localDoAutor · $tempoStr',
+                officialStatus: estagio,
                 onMenuSelected: (action) => _handleMenuAction(context, action),
                 canManage: onManage != null,
                 canPin: onTogglePin != null,
@@ -111,50 +116,53 @@ class OccurrenceCard extends StatelessWidget {
                 ),
               _OfficialStatusStrip(estagio: estagio),
               Padding(
-                padding: const EdgeInsets.fromLTRB(6, 0, 8, 0),
-                child: Row(
-                  children: [
-                    _ActionButton(
-                      icon: Icons.favorite_border,
-                      iconFilled: Icons.favorite,
-                      count: o.likes,
-                      active: o.userLiked,
-                      activeColor: AppColors.danger,
-                      onTap: onLike,
-                      semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
-                      animateOnActivate: true,
-                    ),
-                    _CommentButton(
-                      count: commentCount ?? o.comments,
-                      onTap: onComment ?? () {},
-                    ),
-                    _ShareButton(occurrence: o),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    RichText(
-                      maxLines: 3,
+                    Text(
+                      o.titulo,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      text: TextSpan(
-                        style: TextStyle(
-                          color: pal.ink,
-                          fontSize: 13,
-                          height: 1.35,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: o.titulo,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          if (o.descricao.trim().isNotEmpty)
-                            TextSpan(text: ' ${o.descricao.trim()}'),
-                        ],
+                      style: TextStyle(
+                        color: pal.ink,
+                        fontSize: 17,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
                       ),
+                    ),
+                    if (o.descricao.trim().isNotEmpty) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        o.descricao.trim(),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: pal.muted,
+                          fontSize: 13.5,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _ActionButton(
+                          icon: Icons.favorite_border,
+                          iconFilled: Icons.favorite,
+                          count: o.likes,
+                          active: o.userLiked,
+                          activeColor: AppColors.danger,
+                          onTap: onLike,
+                          semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
+                          animateOnActivate: true,
+                        ),
+                        _CommentButton(
+                          count: commentCount ?? o.comments,
+                          onTap: onComment ?? () {},
+                        ),
+                        _ShareButton(occurrence: o),
+                      ],
                     ),
                     _CommentPreview(
                       count: commentCount,
@@ -196,15 +204,6 @@ class OccurrenceCard extends StatelessWidget {
                         if (estagio.temAcaoOficial)
                           _EstagioChip(estagio: estagio),
                       ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      tempoStr,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: pal.muted,
-                        fontWeight: FontWeight.w600,
-                      ),
                     ),
                   ],
                 ),
@@ -377,6 +376,7 @@ class _CardHeader extends StatelessWidget {
   final String authorName;
   final String? authorPhoto;
   final String location;
+  final EstagioOficial officialStatus;
   final bool canManage;
   final bool canReport;
   final bool canPin;
@@ -388,6 +388,7 @@ class _CardHeader extends StatelessWidget {
     required this.authorName,
     required this.authorPhoto,
     required this.location,
+    required this.officialStatus,
     required this.canManage,
     required this.canReport,
     required this.canPin,
@@ -400,7 +401,7 @@ class _CardHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final pal = context.pal;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
       child: Row(
         children: [
           GestureDetector(
@@ -449,6 +450,7 @@ class _CardHeader extends StatelessWidget {
               ),
             ),
           ),
+          _HeaderStatusBadge(status: officialStatus),
           PopupMenuButton<_CardMenuAction>(
             tooltip: 'Mais opções',
             icon: Icon(Icons.more_horiz, color: pal.ink, size: 24),
@@ -604,7 +606,8 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxWidth.clamp(220.0, 420.0).toDouble();
+        final height =
+            (constraints.maxWidth * 0.68).clamp(200.0, 360.0).toDouble();
 
         if (_error) {
           return SizedBox(
@@ -847,7 +850,8 @@ class _ImageSliderState extends State<_ImageSlider>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxWidth.clamp(220.0, 420.0).toDouble();
+        final height =
+            (constraints.maxWidth * 0.68).clamp(200.0, 360.0).toDouble();
         final images = _images;
         final dpr = MediaQuery.devicePixelRatioOf(context);
         final larguraImg = constraints.maxWidth;
@@ -1422,6 +1426,54 @@ class _ShareButtonState extends State<_ShareButton> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderStatusBadge extends StatelessWidget {
+  final EstagioOficial status;
+
+  const _HeaderStatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = status.color;
+    final compact = MediaQuery.sizeOf(context).width < 350;
+    return Tooltip(
+      message: status.label,
+      child: Semantics(
+        label: 'Status oficial: ${status.label}',
+        child: Container(
+          margin: const EdgeInsets.only(right: 2),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 7 : 8,
+            vertical: 6,
+          ),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(status.icon, size: 13, color: color),
+              if (!compact) ...[
+                const SizedBox(width: 4),
+                Text(
+                  status.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
