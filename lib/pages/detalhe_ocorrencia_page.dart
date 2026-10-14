@@ -23,7 +23,6 @@ import '../utils/cloudinary_image.dart';
 import '../utils/compartilhamento.dart';
 import '../utils/imagem_cacheada.dart';
 import '../utils/mensagem_erro.dart';
-import '../utils/navegacao_externa.dart';
 import '../utils/reacao_ocorrencia.dart';
 import '../utils/tempo_relativo.dart';
 import '../widgets/occurrence_comments_sheet.dart';
@@ -99,20 +98,6 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
     _verificadaEm = o.verificadaEm;
     _statusOficial = o.statusOficial;
     _fetchAuthorData();
-  }
-
-  Future<void> _comoChegar() async {
-    final o = widget.occurrence;
-    final ok = await abrirRotaNoMapa(
-      latitude: o.latitude,
-      longitude: o.longitude,
-      rotulo: o.titulo,
-    );
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível abrir o app de mapas.')),
-      );
-    }
   }
 
   Future<void> _toggleVerificacao() async {
@@ -395,14 +380,6 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                     ),
                                   ),
                                   const SizedBox(width: 4),
-                                  _DetailIconAction(
-                                    icon: _userDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
-                                    count: _dislikes,
-                                    active: _userDisliked,
-                                    color: AppColors.danger,
-                                    onTap: _handleDislike,
-                                  ),
-                                  const SizedBox(width: 4),
                                   Expanded(
                                     child: _DetailAction(
                                       icon: Icons.chat_bubble_outline,
@@ -420,6 +397,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 12),
+                              _DetailActionDivider(color: pal.border),
                               if (autoridade) ...[
                                 const SizedBox(height: 16),
                                 _PainelAutoridade(
@@ -448,7 +427,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                               const SizedBox(height: 24),
                               _DetailSectionTitle(title: 'Localização'),
                               const SizedBox(height: 10),
-                              _LocationSection(occurrence: o, onOpenDirections: _comoChegar),
+                              _LocationSection(occurrence: o, onOpenDirections: _abrirMapaDaRegiao),
                               const SizedBox(height: 24),
                               _DetailSectionTitle(title: 'Comentários', trailing: '$total', onTap: _abrirComentarios),
                               const SizedBox(height: 10),
@@ -530,7 +509,9 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
           Expanded(
             child: Text(
               'Denúncia',
-              textAlign: TextAlign.center,
+              textAlign: TextAlign.start,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: pal.ink),
             ),
           ),
@@ -1176,24 +1157,70 @@ class _DetailIconAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    final content = SizedBox(
-      width: 36,
-      height: 40,
+    final content = Material(
+      color: pal.surfaceAlt,
+      shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 17, color: active ? (color ?? AppColors.danger) : (color ?? pal.muted)),
-            if (count != null)
-              Text('$count', style: TextStyle(color: pal.hint, fontSize: 8, height: 1)),
-          ],
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(
+            icon,
+            size: 17,
+            color: active ? (color ?? AppColors.danger) : (color ?? pal.muted),
+          ),
         ),
       ),
     );
     return tooltip == null ? content : Tooltip(message: tooltip!, child: content);
   }
+}
+
+class _DetailActionDivider extends StatelessWidget {
+  final Color color;
+
+  const _DetailActionDivider({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 12,
+      width: double.infinity,
+      child: CustomPaint(painter: _DetailActionDividerPainter(color)),
+    );
+  }
+}
+
+class _DetailActionDividerPainter extends CustomPainter {
+  final Color color;
+
+  const _DetailActionDividerPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.65)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    final baselineY = size.height / 2;
+    canvas.drawLine(Offset(0, baselineY), Offset(size.width, baselineY), paint);
+
+    final motifPaint = Paint()
+      ..color = color.withValues(alpha: 0.8)
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.round;
+    var pointsUp = true;
+    for (var x = 16.0; x < size.width - 8; x += 32) {
+      final endY = baselineY + (pointsUp ? -4 : 4);
+      canvas.drawLine(Offset(x, baselineY), Offset(x + 7, endY), motifPaint);
+      pointsUp = !pointsUp;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DetailActionDividerPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _LocationSection extends StatelessWidget {
