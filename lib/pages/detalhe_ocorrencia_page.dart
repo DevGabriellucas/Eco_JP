@@ -12,6 +12,7 @@ import '../models/comentario_model.dart';
 import '../models/ocorrencia_model.dart';
 import '../models/occurrence_types.dart';
 import '../pages/mapPage/map_page.dart';
+import '../pages/mapPage/map_style.dart';
 import '../services/auth_service.dart';
 import '../services/moderacao_service.dart';
 import '../services/notificacao_service.dart';
@@ -355,7 +356,13 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: [
-                                  _DetailTag(icon: estagio.icon, label: estagio.label, color: estagio.color),
+                                  _DetailTag(
+                                    icon: estagio.icon,
+                                    label: estagio.label,
+                                    color: estagio.colorFor(
+                                      Theme.of(context).brightness,
+                                    ),
+                                  ),
                                   _DetailTag(icon: type.icon, label: type.label, color: type.color),
                                 ],
                               ),
@@ -551,6 +558,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
 
   Widget _buildCommentComposer() {
     final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(color: pal.surface, border: Border(top: BorderSide(color: pal.border))),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
@@ -571,13 +579,13 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
           ),
           const SizedBox(width: 8),
           Material(
-            color: AppColors.successStrong,
+            color: isDark ? pal.primary : AppColors.successStrong,
             shape: const CircleBorder(),
             child: IconButton(
               tooltip: 'Comentar',
               onPressed: _abrirComentarios,
               icon: const Icon(Icons.send_rounded, size: 18),
-              color: Colors.white,
+              color: isDark ? AppColors.ink : Colors.white,
             ),
           ),
         ],
@@ -1057,7 +1065,9 @@ class _AuthorDetails extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 18,
-          backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+          backgroundColor: pal.primary.withValues(
+            alpha: Theme.of(context).brightness == Brightness.dark ? 0.14 : 0.12,
+          ),
           backgroundImage: photoUrl == null ? null : imagemCacheada(photoUrl!),
           child: photoUrl == null
               ? Text(name.isEmpty ? 'U' : name.characters.first.toUpperCase(),
@@ -1118,9 +1128,13 @@ class _DetailAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    final color = active ? AppColors.successStrong : pal.muted;
+    final color = active
+        ? (Theme.of(context).brightness == Brightness.dark
+            ? pal.primary
+            : AppColors.successStrong)
+        : pal.muted;
     return Material(
-      color: active ? AppColors.successStrong.withValues(alpha: 0.1) : pal.surfaceAlt,
+      color: active ? color.withValues(alpha: 0.1) : pal.surfaceAlt,
       borderRadius: BorderRadius.circular(22),
       child: InkWell(
         onTap: onTap,
@@ -1217,6 +1231,9 @@ class _LocationSection extends StatelessWidget {
                     compassEnabled: false,
                     myLocationButtonEnabled: false,
                     myLocationEnabled: false,
+                    style: Theme.of(context).brightness == Brightness.dark
+                        ? kEstiloMapaEscuro
+                        : null,
                     scrollGesturesEnabled: false,
                     zoomGesturesEnabled: false,
                     rotateGesturesEnabled: false,
@@ -1233,7 +1250,10 @@ class _LocationSection extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(padding: EdgeInsets.only(top: 2), child: Icon(Icons.location_on_outlined, color: AppColors.primary, size: 18)),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(Icons.location_on_outlined, color: pal.primary, size: 18),
+            ),
             const SizedBox(width: 7),
             Expanded(
               child: Column(
@@ -1298,7 +1318,11 @@ class _CommentPreviews extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 14,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                    backgroundColor: pal.primary.withValues(
+                      alpha: Theme.of(context).brightness == Brightness.dark
+                          ? 0.14
+                          : 0.12,
+                    ),
                     backgroundImage: comment.userPhotoUrl == null ? null : imagemCacheada(comment.userPhotoUrl!),
                     child: comment.userPhotoUrl == null
                         ? Text(comment.userName.isEmpty ? 'U' : comment.userName.characters.first.toUpperCase(),
@@ -1692,6 +1716,10 @@ class _StatusTimeline extends StatelessWidget {
         }
 
         final stage = EstagioOficialInfo.calcular(verificada, statusOficial);
+        final stageColor = stage.colorFor(Theme.of(context).brightness);
+        final pendingColor = Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFFF2B65D)
+            : AppColors.primary;
         final etapaAtual = switch (stage) {
           EstagioOficial.pendente => 0,
           EstagioOficial.emAnalise || EstagioOficial.naoConfirmada => 1,
@@ -1760,9 +1788,9 @@ class _StatusTimeline extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: i < etapaAtual
-                                        ? AppColors.primary
+                                        ? (i == 0 ? pendingColor : pal.primary)
                                         : i == etapaAtual
-                                            ? stage.color
+                                            ? stageColor
                                             : pal.surface,
                                     border: i > etapaAtual
                                         ? Border.all(color: pal.border, width: 2)
@@ -1776,7 +1804,9 @@ class _StatusTimeline extends StatelessWidget {
                                   Expanded(
                                     child: Container(
                                       width: 2,
-                                      color: i < etapaAtual ? AppColors.primary : pal.border,
+                                      color: i < etapaAtual
+                                          ? (i == 0 ? pendingColor : pal.primary)
+                                          : pal.border,
                                     ),
                                   ),
                               ],
@@ -1792,7 +1822,11 @@ class _StatusTimeline extends StatelessWidget {
                                   Text(
                                     steps[i].title,
                                     style: TextStyle(
-                                      color: i == etapaAtual ? stage.color : i < etapaAtual ? pal.ink : pal.muted,
+                                      color: i == etapaAtual
+                                          ? stageColor
+                                          : i < etapaAtual
+                                              ? pal.ink
+                                              : pal.muted,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w700,
                                     ),

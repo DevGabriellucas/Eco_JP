@@ -420,7 +420,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: pal.primary,
-                              foregroundColor: Colors.white,
+                              foregroundColor:
+                                  Theme.of(context).brightness == Brightness.dark
+                                      ? AppColors.ink
+                                      : Colors.white,
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
@@ -988,6 +991,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     required bool isAutoridade,
     Set<String> minhasDenunciasAnonimasIds = const <String>{},
   }) {
+    final pal = context.pal;
+
     if (snapshot.connectionState == ConnectionState.waiting &&
         _cachedOccurrences.isEmpty) {
       return const FeedSkeleton(key: ValueKey('feed-skeleton'));
@@ -1118,14 +1123,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: _focoDestaque
-                          ? AppColors.success
+                          ? (Theme.of(context).brightness == Brightness.dark
+                              ? pal.primary
+                              : AppColors.success)
                           : Colors.transparent,
                       width: 2.5,
                     ),
                     boxShadow: _focoDestaque
                         ? [
                             BoxShadow(
-                              color: AppColors.success.withValues(alpha: 0.25),
+                              color: (Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? pal.primary
+                                      : AppColors.success)
+                                  .withValues(alpha: 0.25),
                               blurRadius: 12,
                               spreadRadius: 1,
                             ),
@@ -1199,6 +1210,7 @@ class _FeedSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final abertas = occurrences
         .where((o) => o.statusAtual != OccurrenceStatus.resolved)
         .length;
@@ -1271,21 +1283,25 @@ class _FeedSummary extends StatelessWidget {
                     child: _FeedMetric(
                       value: abertas,
                       label: 'abertas',
-                      color: const Color(0xFFB7791F),
+                      color: isDark
+                          ? const Color(0xFFF2B65D)
+                          : const Color(0xFFB7791F),
                     ),
                   ),
                   Expanded(
                     child: _FeedMetric(
                       value: emAnalise,
                       label: 'em análise',
-                      color: const Color(0xFF287E9C),
+                      color: isDark
+                          ? const Color(0xFF73BFD4)
+                          : const Color(0xFF287E9C),
                     ),
                   ),
                   Expanded(
                     child: _FeedMetric(
                       value: resolvidas,
                       label: 'resolvidas',
-                      color: AppColors.successStrong,
+                      color: isDark ? pal.primary : AppColors.successStrong,
                     ),
                   ),
                 ],
@@ -1503,6 +1519,7 @@ class _FilterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: active ? pal.primary : pal.surface,
       borderRadius: BorderRadius.circular(13),
@@ -1529,7 +1546,7 @@ class _FilterButton extends StatelessWidget {
           child: Icon(
             Icons.tune,
             size: 20,
-            color: active ? Colors.white : pal.hint,
+            color: active ? (isDark ? AppColors.ink : Colors.white) : pal.hint,
           ),
         ),
       ),
@@ -1609,7 +1626,7 @@ class _FeedTypeChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final pal = context.pal;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeColor = isDark ? pal.primary : const Color(0xFF17251F);
+    final activeColor = isDark ? pal.ink : const Color(0xFF17251F);
     final activeForeground = isDark ? AppColors.ink : Colors.white;
     return Padding(
       padding: const EdgeInsets.only(right: 8),

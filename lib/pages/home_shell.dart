@@ -390,9 +390,10 @@ class _BottomNav extends StatelessWidget {
           onTap: () => onTap(i),
           child: Center(
             child: Container(
-              height: 62,
+              width: double.infinity,
+              height: 58,
               margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
               decoration: BoxDecoration(
                 color: ativo
                     ? pal.primary.withValues(alpha: 0.12)
@@ -414,7 +415,7 @@ class _BottomNav extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: ativo ? pal.primary : pal.muted,
-                      fontSize: 9,
+                      fontSize: 11,
                       fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
@@ -439,9 +440,10 @@ class _BottomNav extends StatelessWidget {
           onTap: () => onTap(4),
           child: Center(
             child: Container(
-              height: 62,
+              width: double.infinity,
+              height: 58,
               margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
               decoration: BoxDecoration(
                 color: ativo
                     ? pal.primary.withValues(alpha: 0.12)
@@ -457,7 +459,7 @@ class _BottomNav extends StatelessWidget {
                     'Perfil',
                     style: TextStyle(
                       color: ativo ? pal.primary : pal.muted,
-                      fontSize: 9,
+                      fontSize: 11,
                       fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
@@ -497,47 +499,49 @@ class _BottomNav extends StatelessWidget {
         isAutoridade ? 'Fila de verificação e moderação' : 'Nova denúncia';
     final labelCurta = isAutoridade ? 'Fila' : 'Denunciar';
     final pal = context.pal;
-    final iconColor = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.ink
-        : Colors.white;
+    final ativo = currentIndex == 2;
 
-    return Semantics(
-      button: true,
-      label: label,
-      child: Tooltip(
-        message: label,
-        child: GestureDetector(
-          onTap: () => onTap(2),
-          child: SizedBox(
-            height: 62,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: pal.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: ativo,
+        label: label,
+        child: Tooltip(
+          message: label,
+          child: GestureDetector(
+            onTap: () => onTap(2),
+            child: Container(
+              width: double.infinity,
+              height: 58,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+              decoration: BoxDecoration(
+                color: ativo
+                    ? pal.primary.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
                     isAutoridade ? Icons.fact_check_outlined : Icons.add,
-                    color: iconColor,
+                    color: ativo ? pal.primary : pal.muted,
                     size: iconSize,
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  labelCurta,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: pal.ink,
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 3),
+                  Text(
+                    labelCurta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: ativo ? pal.primary : pal.muted,
+                      fontSize: 11,
+                      fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -326,6 +326,24 @@ extension EstagioOficialInfo on EstagioOficial {
     }
   }
 
+  /// Cores semânticas com contraste ajustado para componentes no tema escuro.
+  Color colorFor(Brightness brightness) {
+    if (brightness != Brightness.dark) return color;
+    switch (this) {
+      case EstagioOficial.pendente:
+        return const Color(0xFFF2B65D);
+      case EstagioOficial.emAnalise:
+        return const Color(0xFF73BFD4);
+      case EstagioOficial.naoConfirmada:
+        return const Color(0xFFFF7777);
+      case EstagioOficial.confirmada:
+      case EstagioOficial.resolvida:
+        return AppColors.primaryLight;
+      case EstagioOficial.encaminhada:
+        return const Color(0xFF7DB4FF);
+    }
+  }
+
   IconData get icon {
     switch (this) {
       case EstagioOficial.pendente:

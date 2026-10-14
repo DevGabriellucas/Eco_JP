@@ -621,11 +621,13 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
         }
 
         if (!_controller.value.isInitialized) {
+          final pal = context.pal;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
           return SizedBox(
             height: height,
             width: double.infinity,
-            child: const ColoredBox(
-              color: Color(0xFF111827),
+            child: ColoredBox(
+              color: isDark ? pal.background : const Color(0xFF111827),
               child: Center(
                 child: SizedBox(
                   width: 24,
@@ -714,7 +716,7 @@ class _OfficialStatusStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = estagio.color;
+    final color = estagio.colorFor(Theme.of(context).brightness);
     final active = estagio.temAcaoOficial;
     final pal = context.pal;
 
@@ -1032,7 +1034,7 @@ class _EstagioChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cor = estagio.color;
+    final cor = estagio.colorFor(Theme.of(context).brightness);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -1496,9 +1498,11 @@ class _AuthorAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
     final dpr = MediaQuery.devicePixelRatioOf(context);
+    final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return CircleAvatar(
       radius: radius,
-      backgroundColor: AppColors.primary.withValues(alpha: 0.14),
+      backgroundColor: pal.primary.withValues(alpha: 0.14),
       backgroundImage: hasPhoto
           ? imagemCacheada(
               cloudinaryOtimizada(
@@ -1515,7 +1519,7 @@ class _AuthorAvatar extends StatelessWidget {
           : Text(
               _initial,
               style: TextStyle(
-                color: AppColors.successStrong,
+                color: isDark ? pal.primary : AppColors.successStrong,
                 fontWeight: FontWeight.w800,
                 fontSize: radius * 0.82,
               ),
