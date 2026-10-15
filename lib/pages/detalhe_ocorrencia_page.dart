@@ -321,7 +321,6 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _ImageArea(occurrence: o, type: type),
-                    if (o.videoUrl != null) _VideoPlayerCard(url: o.videoUrl!),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                       child: StreamBuilder<List<ComentarioModel>>(
@@ -644,7 +643,10 @@ class _ImageAreaState extends State<_ImageArea> {
   @override
   Widget build(BuildContext context) {
     final images = _images;
-    if (images.isEmpty) {
+    final videoUrl = widget.occurrence.videoUrl;
+    final hasVideo = videoUrl?.trim().isNotEmpty == true;
+    final mediaCount = images.length + (hasVideo ? 1 : 0);
+    if (mediaCount == 0) {
       return _Placeholder(type: widget.type);
     }
     final pal = context.pal;
@@ -660,39 +662,47 @@ class _ImageAreaState extends State<_ImageArea> {
             children: [
               PageView.builder(
                 controller: _pageCtrl,
-                itemCount: images.length,
+                itemCount: mediaCount,
                 onPageChanged: (i) => setState(() => _current = i),
-                itemBuilder: (_, i) => Container(
-                  width: double.infinity,
-                  color: pal.surfaceAlt,
-                  alignment: Alignment.center,
-                  child: Image(
-                    image: imagemCacheada(
-                      cloudinaryOtimizada(
-                        images[i],
-                        larguraLogica: larguraImg,
-                        devicePixelRatio: dpr,
-                      ),
-                      cacheWidth: cacheLarguraPx(larguraImg, dpr),
-                    ),
-                    fit: BoxFit.contain,
-                    semanticLabel: images.length > 1
-                        ? 'Foto ${i + 1} de ${images.length} da denúncia: ${widget.type.label}'
-                        : 'Foto da denúncia: ${widget.type.label}',
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                itemBuilder: (context, i) {
+                  if (hasVideo && i == images.length) {
+                    return _VideoPlayerCard(
+                      key: ValueKey('video-${widget.occurrence.id}'),
+                      url: videoUrl!,
+                      active: _current == i,
+                    );
+                  }
+                  return Container(
+                    width: double.infinity,
+                    color: pal.surfaceAlt,
+                    alignment: Alignment.center,
+                    child: Image(
+                      image: imagemCacheada(
+                        cloudinaryOtimizada(
+                          images[i],
+                          larguraLogica: larguraImg,
+                          devicePixelRatio: dpr,
                         ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) =>
-                        _Placeholder(type: widget.type),
-                  ),
-                ),
+                        cacheWidth: cacheLarguraPx(larguraImg, dpr),
+                      ),
+                      fit: BoxFit.contain,
+                      semanticLabel:
+                          'Foto ${i + 1} da denúncia: ${widget.type.label}',
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) =>
+                          _Placeholder(type: widget.type),
+                    ),
+                  );
+                },
               ),
               Positioned.fill(
                 child: IgnorePointer(
@@ -713,7 +723,7 @@ class _ImageAreaState extends State<_ImageArea> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
-                    '${_current + 1}/${images.length}',
+                    '${_current + 1}/$mediaCount',
                     style: const TextStyle(color: Colors.white, fontSize: 11),
                   ),
                 ),
@@ -741,13 +751,13 @@ class _ImageAreaState extends State<_ImageArea> {
             ],
           ),
         ),
-        if (images.length > 1)
+        if (mediaCount > 1)
           SizedBox(
             height: 56,
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               scrollDirection: Axis.horizontal,
-              itemCount: images.length,
+              itemCount: mediaCount,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final selecionada = index == _current;
@@ -768,18 +778,20 @@ class _ImageAreaState extends State<_ImageArea> {
                       ),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: Image(
-                      image: imagemCacheada(
-                        cloudinaryOtimizada(
-                          images[index],
-                          larguraLogica: 60,
-                          devicePixelRatio: dpr,
-                        ),
-                        cacheWidth: cacheLarguraPx(60, dpr),
-                      ),
-                      fit: BoxFit.cover,
-                      semanticLabel: 'Abrir foto ${index + 1}',
-                    ),
+                    child: index == images.length && hasVideo
+                        ? _VideoThumbnail(url: videoUrl!)
+                        : Image(
+                            image: imagemCacheada(
+                              cloudinaryOtimizada(
+                                images[index],
+                                larguraLogica: 60,
+                                devicePixelRatio: dpr,
+                              ),
+                              cacheWidth: cacheLarguraPx(60, dpr),
+                            ),
+                            fit: BoxFit.cover,
+                            semanticLabel: 'Abrir foto ${index + 1}',
+                          ),
                   ),
                 );
               },
@@ -851,9 +863,49 @@ class _Placeholder extends StatelessWidget {
 //  VÍDEO DA DENÚNCIA
 // ─────────────────────────────────────────
 
+class _VideoThumbnail extends StatelessWidget {
+  final String url;
+
+  const _VideoThumbnail({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final thumbnail = cloudinaryVideoThumbnail(url);
+    return Stack(
+      fit: StackFit.expand,
+      alignment: Alignment.center,
+      children: [
+        if (thumbnail != null)
+          Image.network(
+            thumbnail,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                ColoredBox(color: pal.surfaceAlt),
+          )
+        else
+          ColoredBox(color: pal.surfaceAlt),
+        Center(
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _VideoPlayerCard extends StatefulWidget {
   final String url;
-  const _VideoPlayerCard({required this.url});
+  final bool active;
+
+  const _VideoPlayerCard({super.key, required this.url, required this.active});
 
   @override
   State<_VideoPlayerCard> createState() => _VideoPlayerCardState();
@@ -868,21 +920,30 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
   bool _erro = false;
 
   @override
+  void didUpdateWidget(covariant _VideoPlayerCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active && !widget.active) {
+      _controller?.pause();
+    }
+  }
+
+  @override
   void dispose() {
     _controller?.dispose();
     super.dispose();
   }
 
   Future<void> _iniciar() async {
-    if (_carregando) return;
+    if (_carregando || !widget.active) return;
     setState(() => _carregando = true);
     final controller = VideoPlayerController.networkUrl(
       Uri.parse(cloudinaryVideoOtimizado(widget.url)),
     );
     try {
       await controller.initialize();
-      if (!mounted) {
+      if (!mounted || !widget.active) {
         await controller.dispose();
+        if (mounted) setState(() => _carregando = false);
         return;
       }
       await controller.play();
@@ -935,7 +996,7 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
     final pal = context.pal;
     if (_erro) {
       return Container(
-        height: 120,
+        height: 240,
         width: double.infinity,
         color: pal.surfaceAlt,
         alignment: Alignment.center,
@@ -954,7 +1015,7 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
       return GestureDetector(
         onTap: _togglePlay,
         child: Container(
-          height: 200,
+          height: 240,
           width: double.infinity,
           color: pal.surfaceAlt,
           alignment: Alignment.center,
@@ -976,14 +1037,29 @@ class _VideoPlayerCardState extends State<_VideoPlayerCard> {
       );
     }
 
+    final videoSize = controller.value.size;
     return GestureDetector(
       onTap: _togglePlay,
-      child: AspectRatio(
-        aspectRatio: controller.value.aspectRatio,
+      child: SizedBox(
+        height: 240,
+        width: double.infinity,
         child: Stack(
+          fit: StackFit.expand,
           alignment: Alignment.center,
           children: [
-            VideoPlayer(controller),
+            ColoredBox(
+              color: Colors.black,
+              child: ClipRect(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: videoSize.width,
+                    height: videoSize.height,
+                    child: VideoPlayer(controller),
+                  ),
+                ),
+              ),
+            ),
             AnimatedOpacity(
               opacity: controller.value.isPlaying ? 0 : 1,
               duration: const Duration(milliseconds: 150),
