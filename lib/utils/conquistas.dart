@@ -83,15 +83,14 @@ List<Conquista> calcularConquistas({
       progresso: curtidas,
       meta: 50,
     ),
-    if (isAutoridade)
-      const Conquista(
-        titulo: 'Verificador',
-        descricao: 'Autoridade que verifica denúncias da comunidade',
-        icone: Icons.shield_outlined,
-        cor: AppColors.success,
-        progresso: 1,
-        meta: 1,
-      ),
+    Conquista(
+      titulo: 'Verificador',
+      descricao: 'Autoridade que verifica denúncias da comunidade',
+      icone: Icons.shield_outlined,
+      cor: AppColors.success,
+      progresso: isAutoridade ? 1 : 0,
+      meta: 1,
+    ),
   ];
 
   lista.sort((a, b) {
