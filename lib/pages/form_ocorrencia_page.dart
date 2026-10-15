@@ -27,7 +27,6 @@ class _Cores {
   // (texto/fundo/borda/superfície) vêm de `context.pal`.
   static const hint = AppColors.hint;
   static const error = AppColors.danger;
-  static const disabled = AppColors.hint;
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
@@ -1316,7 +1315,7 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
         onPressed: (_enviando || _enviado) ? null : _confirmarEnvio,
         style: ElevatedButton.styleFrom(
           backgroundColor: pal.ink,
-          disabledBackgroundColor: _Cores.disabled,
+          disabledBackgroundColor: _Cores.hint,
           foregroundColor: pal.surface,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
