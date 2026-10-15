@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
 import '../data/repositories/ocorrencia_repository.dart';
 import '../features/denuncias/providers/denuncia_providers.dart';
 import '../features/denuncias/providers/geocoding_provider.dart';
+import '../models/occurrence_types.dart';
 import '../models/ocorrencia_model.dart';
 import '../services/auth_service.dart';
 import '../services/cloudinary_service.dart';
@@ -14,6 +16,7 @@ import '../services/rate_limiter.dart';
 import '../services/usuario_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/cloudinary_image.dart';
+import 'mapPage/map_style.dart';
 import 'form_ocorrencia/controllers/location_controller.dart';
 import 'form_ocorrencia/controllers/media_controller.dart';
 import 'form_ocorrencia/widgets/dashed_border_painter.dart';
@@ -532,17 +535,19 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: pal.surface,
+      backgroundColor: pal.background,
       appBar: AppBar(
         backgroundColor: pal.surface,
         foregroundColor: pal.ink,
         elevation: 0,
-        centerTitle: true,
-        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        centerTitle: false,
+        systemOverlayStyle:
+            isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
         leading: IconButton(
-          tooltip: 'Voltar',
-          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Fechar',
+          icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -561,30 +566,34 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
           children: [
             _fotoSection(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             _videoSection(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             _categoriaSection(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             _tituloSection(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             _descricaoSection(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             _localizacaoSection(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _botaoLocalizacao(),
-            const SizedBox(height: 16),
+            if (_location.coordenadasConfirmadas) ...[
+              const SizedBox(height: 12),
+              _mapaMiniatura(),
+              const SizedBox(height: 8),
+              _localizacaoStatus(),
+            ],
+            const SizedBox(height: 24),
             _anonimaSection(),
             if (_enviando) ...[const SizedBox(height: 16), _envioStatus()],
-            const SizedBox(height: 24),
-            _botaoEnviar(),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
           ],
         ),
       ),
+      bottomNavigationBar: _rodapeEnvio(),
     );
   }
 
@@ -595,14 +604,131 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _mainPhotoArea(),
-        if (totalFotos > 0) ...[const SizedBox(height: 8), _thumbnailStrip()],
-        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _label('FOTOS'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '$totalFotos de 3',
+                style: TextStyle(
+                  color: context.pal.muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Row(
+          children: [for (var i = 0; i < 3; i++) _fotoSlot(i)],
+        ),
+        const SizedBox(height: 8),
         Text(
-          '$totalFotos/3 foto${totalFotos == 1 ? '' : 's'} selecionada${totalFotos == 1 ? '' : 's'}',
-          style: const TextStyle(fontSize: 11, color: _Cores.hint),
+          'Adicione pelo menos uma foto. Metadados e GPS da imagem são removidos antes do envio.',
+          style: TextStyle(fontSize: 11, height: 1.4, color: context.pal.muted),
         ),
       ],
+    );
+  }
+
+  Widget _fotoSlot(int index) {
+    final pal = context.pal;
+    final bytes = _media.imagensBytes[index];
+    final temFoto = bytes != null;
+    final selecionada = _media.fotoAtivaIdx == index && temFoto;
+    return Expanded(
+      child: Padding(
+        padding: EdgeInsets.only(right: index == 2 ? 0 : 8),
+        child: GestureDetector(
+          onTap: _enviando
+              ? null
+              : temFoto
+                  ? () {
+                      _media.selecionarFotoAtiva(index);
+                      _abrirVisualizadorFotos(index);
+                    }
+                  : () => _abrirPicker(index),
+          child: SizedBox(
+            height: 100,
+            child: temFoto
+                ? Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selecionada ? pal.primary : pal.border,
+                        width: selecionada ? 1.5 : 1,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.memory(bytes!, fit: BoxFit.cover),
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Material(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _enviando
+                                  ? null
+                                  : () => _media.removerFoto(index),
+                              child: const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: Icon(
+                                  Icons.close,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : CustomPaint(
+                    foregroundPainter: DashedBorderPainter(
+                      color: pal.border,
+                      radius: 10,
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: pal.surfaceAlt,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: index == _media.proximoSlotVazio()
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.photo_camera_outlined,
+                                  size: 20,
+                                  color: pal.primary,
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  'Adicionar foto',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: pal.primary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Icon(Icons.add, color: pal.muted, size: 22),
+                    ),
+                  ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -624,19 +750,33 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: pal.border),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Row(
                 children: [
-                  Icon(Icons.videocam_outlined, color: _Cores.hint, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'Adicionar vídeo (até 30s)',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: _Cores.hint,
-                      fontWeight: FontWeight.w500,
+                  const SizedBox(width: 14),
+                  Icon(Icons.videocam_outlined, color: pal.muted, size: 20),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Adicionar vídeo',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: pal.ink,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          'Até 30 segundos',
+                          style: TextStyle(fontSize: 11, color: pal.muted),
+                        ),
+                      ],
                     ),
                   ),
+                  Icon(Icons.chevron_right, color: pal.muted),
+                  const SizedBox(width: 8),
                 ],
               ),
             ),
@@ -744,202 +884,6 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
     );
   }
 
-  Widget _mainPhotoArea() {
-    final pal = context.pal;
-    final bytes =
-        _media.totalFotos > 0 ? _media.imagensBytes[_media.fotoAtivaIdx] : null;
-    return GestureDetector(
-      onTap: _enviando
-          ? null
-          : bytes == null
-              ? _adicionarFoto
-              : () => _abrirVisualizadorFotos(_media.fotoAtivaIdx),
-      child: SizedBox(
-        height: 190,
-        width: double.infinity,
-        child: bytes == null
-            ? CustomPaint(
-                foregroundPainter: DashedBorderPainter(
-                  color: pal.border,
-                  radius: 8,
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: pal.surfaceAlt,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.camera_alt_outlined,
-                          size: 40, color: _Cores.hint),
-                      SizedBox(height: 8),
-                      Text(
-                        'Tirar Foto',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: _Cores.hint,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Toque para adicionar uma imagem',
-                        style: TextStyle(fontSize: 12, color: _Cores.hint),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: double.infinity,
-                      height: double.infinity,
-                      color: pal.surfaceAlt,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 250),
-                        switchInCurve: Curves.easeOut,
-                        child: Image.memory(
-                          bytes,
-                          key: ValueKey<int>(_media.fotoAtivaIdx),
-                          width: double.infinity,
-                          height: double.infinity,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 8,
-                    bottom: 8,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.fullscreen, size: 14, color: Colors.white),
-                          SizedBox(width: 4),
-                          Text(
-                            'Ampliar',
-                            style: TextStyle(color: Colors.white, fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Row(
-                      children: [
-                        _fotoAcaoBtn(
-                          icon: Icons.swap_horiz,
-                          label: 'Trocar foto',
-                          onTap: _enviando
-                              ? null
-                              : () => _abrirPicker(_media.fotoAtivaIdx),
-                        ),
-                        const SizedBox(width: 8),
-                        _fotoAcaoBtn(
-                          icon: Icons.close,
-                          label: 'Remover foto',
-                          onTap: _enviando
-                              ? null
-                              : () => _media.removerFoto(_media.fotoAtivaIdx),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-
-  Widget _thumbnailStrip() {
-    final pal = context.pal;
-    return Row(
-      children: [
-        for (int i = 0; i < 3; i++)
-          if (_media.imagens[i] != null)
-            GestureDetector(
-              onTap: () => _media.selecionarFotoAtiva(i),
-              child: Container(
-                width: 52,
-                height: 52,
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color:
-                        _media.fotoAtivaIdx == i ? pal.ink : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Image.memory(
-                    _media.imagensBytes[i]!,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ),
-        if (_media.totalFotos < 3)
-          Semantics(
-            button: true,
-            label: 'Adicionar foto',
-            child: GestureDetector(
-              onTap: _enviando ? null : _adicionarFoto,
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: pal.surfaceAlt,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: pal.border),
-                ),
-                child: const Icon(Icons.add, color: _Cores.hint, size: 22),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  // Botão circular sobre a foto (trocar / remover).
-  Widget _fotoAcaoBtn({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onTap,
-  }) {
-    return Semantics(
-      button: true,
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-          ),
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: AppColors.ink),
-        ),
-      ),
-    );
-  }
-
   // Abre o visualizador em tela cheia com todas as fotos anexadas, começando
   // na foto tocada. Permite dar zoom (InteractiveViewer) e navegar entre elas.
   void _abrirVisualizadorFotos(int slotInicial) {
@@ -964,25 +908,80 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _label('CATEGORIA'),
-        DropdownButtonFormField<String>(
-          initialValue: _categoria,
-          decoration: _dec(''),
-          dropdownColor: pal.surface,
-          style: TextStyle(color: pal.ink, fontSize: 14),
-          icon: Icon(Icons.add, color: pal.ink, size: 20),
-          hint: Text(
-            'Selecione categoria',
-            style: TextStyle(color: pal.hint, fontSize: 14),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _categorias.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 0.96,
           ),
-          items: _categorias
-              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-              .toList(),
-          onChanged: _enviando ? null : (v) => setState(() => _categoria = v),
-          validator: (v) => v == null ? 'Selecione uma categoria' : null,
+          itemBuilder: (context, index) {
+            final categoria = _categorias[index];
+            final selecionada = _categoria == categoria;
+            return Semantics(
+              button: true,
+              selected: selecionada,
+              label: categoria,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _enviando
+                      ? null
+                      : () => setState(() => _categoria = categoria),
+                  borderRadius: BorderRadius.circular(10),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    decoration: BoxDecoration(
+                      color: selecionada
+                          ? pal.primary.withValues(alpha: 0.1)
+                          : pal.surfaceAlt,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selecionada ? pal.primary : pal.border,
+                        width: selecionada ? 1.5 : 1,
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          OccurrenceTypeParser.fromString(categoria).icon,
+                          color: selecionada ? pal.primary : pal.muted,
+                          size: 18,
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          _nomeCategoria(categoria),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: selecionada ? pal.primary : pal.ink,
+                            fontSize: 10.5,
+                            height: 1.1,
+                            fontWeight: selecionada
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
   }
+
+  String _nomeCategoria(String categoria) =>
+      categoria == 'Falta iluminação' ? 'Iluminação' : categoria;
 
   // ── Seção título ──────────────────────────────────────────────────────────
 
@@ -990,11 +989,22 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label('TÍTULO'),
+        _labelRow(
+          'TÍTULO',
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _tituloCtrl,
+            builder: (context, value, _) => Text(
+              '${value.text.length}/80',
+              style: TextStyle(fontSize: 11, color: context.pal.muted),
+            ),
+          ),
+        ),
         TextFormField(
           controller: _tituloCtrl,
           enabled: !_enviando,
           maxLength: 80,
+          minLines: 1,
+          maxLines: 2,
           textInputAction: TextInputAction.next,
           style: TextStyle(color: context.pal.ink, fontSize: 14),
           decoration: _dec('Digite o título').copyWith(counterText: ''),
@@ -1032,6 +1042,32 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
             return null;
           },
         ),
+        const SizedBox(height: 8),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _descricaoCtrl,
+          builder: (context, value, _) {
+            final valido = value.text.trim().length >= 10;
+            return Row(
+              children: [
+                Icon(
+                  valido ? Icons.check : Icons.info_outline,
+                  size: 14,
+                  color: valido ? context.pal.primary : context.pal.hint,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  valido
+                      ? 'Mínimo de 10 caracteres atingido'
+                      : 'Mínimo de 10 caracteres',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: valido ? context.pal.muted : context.pal.hint,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ],
     );
   }
@@ -1061,9 +1097,9 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
               prefixIcon: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Icon(
-                  Icons.location_on_outlined,
-                  color: pal.ink,
-                  size: 20,
+                Icons.search,
+                color: pal.muted,
+                size: 20,
                 ),
               ),
               prefixIconConstraints: const BoxConstraints(
@@ -1087,7 +1123,7 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                   : ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _location.enderecoCtrl,
                       builder: (context, valor, _) => valor.text.isEmpty
-                          ? Icon(Icons.search, color: pal.ink, size: 20)
+                          ? const SizedBox.shrink()
                           : IconButton(
                               tooltip: 'Limpar localização',
                               icon: Icon(Icons.close, color: pal.ink, size: 20),
@@ -1101,7 +1137,6 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
           ),
           if (_location.mostrarSug && _location.sugestoes.isNotEmpty)
             _sugestoesDropdown(),
-          _localizacaoStatus(),
         ],
       ),
     );
@@ -1200,16 +1235,16 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
 
   Widget _botaoLocalizacao() {
     final pal = context.pal;
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
         onPressed:
             (_location.loadingLoc || _enviando) ? null : _usarLocalizacaoAtual,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: pal.ink,
-          side: BorderSide(color: pal.ink),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          padding: const EdgeInsets.symmetric(vertical: 14),
+        style: TextButton.styleFrom(
+          foregroundColor: pal.primary,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          minimumSize: const Size(0, 40),
+          alignment: Alignment.centerLeft,
         ),
         icon: _location.loadingLoc
             ? SizedBox(
@@ -1217,15 +1252,58 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                 height: 16,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: pal.ink,
+                  color: pal.primary,
                 ),
               )
-            : const Icon(Icons.my_location, size: 18),
+            : const Icon(Icons.my_location_outlined, size: 18),
         label: Text(
           _location.loadingLoc
               ? 'Obtendo localização...'
               : 'Usar localização atual',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  Widget _mapaMiniatura() {
+    final pal = context.pal;
+    final lat = _location.latitude;
+    final lon = _location.longitude;
+    if (lat == null || lon == null) return const SizedBox.shrink();
+    final tipo = OccurrenceTypeParser.fromString(_categoria ?? '');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final position = LatLng(lat, lon);
+
+    return Container(
+      height: 140,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: pal.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: pal.border),
+      ),
+      child: IgnorePointer(
+        child: GoogleMap(
+          key: ValueKey('localizacao-$lat-$lon'),
+          initialCameraPosition: CameraPosition(target: position, zoom: 15),
+          markers: {
+            Marker(
+              markerId: const MarkerId('nova-denuncia'),
+              position: position,
+              icon: BitmapDescriptor.defaultMarkerWithHue(tipo.markerHue),
+            ),
+          },
+          style: isDark ? kEstiloMapaEscuro : null,
+          compassEnabled: false,
+          mapToolbarEnabled: false,
+          zoomControlsEnabled: false,
+          myLocationButtonEnabled: false,
+          myLocationEnabled: false,
+          rotateGesturesEnabled: false,
+          scrollGesturesEnabled: false,
+          tiltGesturesEnabled: false,
+          zoomGesturesEnabled: false,
         ),
       ),
     );
@@ -1285,24 +1363,93 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
   Widget _anonimaSection() {
     final pal = context.pal;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: pal.surfaceAlt,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: pal.border),
       ),
-      child: SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        value: _anonima,
-        onChanged: _enviando ? null : (v) => setState(() => _anonima = v),
-        activeThumbColor: pal.ink,
-        title: const Text(
-          'Denunciar anonimamente',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
-        subtitle: const Text(
-          'Seu nome e foto não aparecem para ninguém, nem para o órgão responsável.',
-          style: TextStyle(fontSize: 12, color: _Cores.hint),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: pal.background,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.visibility_off_outlined,
+              color: pal.muted,
+              size: 19,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Denunciar anonimamente',
+                  style: TextStyle(
+                    color: pal.ink,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Seu nome e sua foto não aparecem na publicação.',
+                  style: TextStyle(
+                    color: pal.muted,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch.adaptive(
+            value: _anonima,
+            onChanged: _enviando ? null : (v) => setState(() => _anonima = v),
+            activeColor: pal.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _rodapeEnvio() {
+    final pal = context.pal;
+    return Container(
+      color: pal.surface,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: pal.border)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 16,
+                width: double.infinity,
+                child: CustomPaint(
+                  painter: _ProgressDotsPainter(color: pal.primary),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _botaoEnviar(),
+              const SizedBox(height: 8),
+              Text(
+                'Você revisa tudo antes de publicar.',
+                style: TextStyle(fontSize: 11, color: pal.muted),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1315,12 +1462,14 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
       child: ElevatedButton.icon(
         onPressed: (_enviando || _enviado) ? null : _confirmarEnvio,
         style: ElevatedButton.styleFrom(
-          backgroundColor: pal.ink,
-          disabledBackgroundColor: _Cores.disabled,
-          foregroundColor: pal.surface,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          backgroundColor: pal.primary,
+          disabledBackgroundColor: pal.muted,
+          foregroundColor: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF0E1311)
+              : Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
+            borderRadius: BorderRadius.circular(10),
           ),
           elevation: 0,
         ),
@@ -1330,7 +1479,9 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: pal.surface,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF0E1311)
+                      : Colors.white,
                 ),
               )
             : const Icon(Icons.send_outlined, size: 20),
@@ -1349,25 +1500,45 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
         child: Text(
           text,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.2,
-            color: context.pal.ink,
+            color: context.pal.muted,
           ),
+        ),
+      );
+
+  Widget _labelRow(String label, Widget trailing) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2,
+                color: context.pal.muted,
+              ),
+            ),
+            trailing,
+          ],
         ),
       );
 
   InputDecoration _dec(String hint) => InputDecoration(
         hintText: hint.isNotEmpty ? hint : null,
-        hintStyle: const TextStyle(color: _Cores.hint, fontSize: 14),
-        filled: false,
+        hintStyle: TextStyle(color: context.pal.muted, fontSize: 14),
+        filled: true,
+        fillColor: context.pal.surfaceAlt,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: context.pal.ink),
+          borderSide: BorderSide(color: context.pal.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: context.pal.ink, width: 1.5),
+          borderSide: BorderSide(color: context.pal.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -1424,4 +1595,40 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
 
   String _truncate(String s, int max) =>
       s.length > max ? '${s.substring(0, max)}...' : s;
+}
+
+class _ProgressDotsPainter extends CustomPainter {
+  const _ProgressDotsPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centerY = size.height / 2;
+    final dottedPaint = Paint()
+      ..color = color.withValues(alpha: 0.65)
+      ..style = PaintingStyle.fill;
+    for (double x = 3; x <= size.width - 3; x += 5) {
+      canvas.drawCircle(Offset(x, centerY), 1, dottedPaint);
+    }
+
+    final milestones = <double>[3, size.width / 2, size.width - 3];
+    final completedPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(milestones.first, centerY), 3, completedPaint);
+    canvas.drawCircle(Offset(milestones.last, centerY), 3, completedPaint);
+    canvas.drawCircle(
+      Offset(milestones[1], centerY),
+      4,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ProgressDotsPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
