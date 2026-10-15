@@ -43,14 +43,6 @@ class PerfilPublicoPage extends ConsumerWidget {
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
-        flexibleSpace: CustomPaint(
-          painter: _PublicProfileContourPainter(
-            color: pal.border.withValues(
-              alpha:
-                  Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.75,
-            ),
-          ),
-        ),
         title: const Text(
           'Perfil',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
