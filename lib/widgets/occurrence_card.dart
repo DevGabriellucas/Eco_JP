@@ -62,9 +62,8 @@ class OccurrenceCard extends StatelessWidget {
     final autor = _authorName;
     final pal = context.pal;
     final bairro = o.bairro?.trim();
-    final localDoAutor = bairro != null && bairro.isNotEmpty
-        ? bairro
-        : o.localizacao;
+    final localDoAutor =
+        bairro != null && bairro.isNotEmpty ? bairro : o.localizacao;
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -617,7 +616,7 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
             width: double.infinity,
             child: ColoredBox(
               color: isDark ? pal.background : const Color(0xFF111827),
-              child: Center(
+              child: const Center(
                 child: SizedBox(
                   width: 24,
                   height: 24,
@@ -785,7 +784,8 @@ class _FeedProgressPainter extends CustomPainter {
       if (i < activeIndex) {
         canvas.drawCircle(center, 2.7, Paint()..color = activeColor);
       } else if (i == activeIndex) {
-        canvas.drawCircle(center, 6, Paint()..color = activeColor.withValues(alpha: 0.28));
+        canvas.drawCircle(
+            center, 6, Paint()..color = activeColor.withValues(alpha: 0.28));
         canvas.drawCircle(center, 3.7, Paint()..color = activeColor);
       } else {
         canvas.drawCircle(center, 3.2, Paint()..color = surfaceColor);

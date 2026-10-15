@@ -33,9 +33,8 @@ class _MapDisplayState extends State<MapDisplay> {
   void initState() {
     super.initState();
     final foco = widget.focoInicial;
-    cameraPosition = foco == null
-        ? _cameraPadrao
-        : CameraPosition(target: foco, zoom: 15);
+    cameraPosition =
+        foco == null ? _cameraPadrao : CameraPosition(target: foco, zoom: 15);
     _jaEnquadrou = foco != null;
     loadLocation();
   }

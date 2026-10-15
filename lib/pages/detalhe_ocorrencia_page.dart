@@ -72,9 +72,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
       ref.read(comentarioRepositoryProvider);
 
   late int _likes;
-  late int _dislikes;
   late bool _userLiked;
-  late bool _userDisliked;
   String? _authorName;
   String? _authorPhoto;
 
@@ -90,9 +88,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
     super.initState();
     final o = widget.occurrence;
     _likes = o.likes;
-    _dislikes = o.dislikes;
     _userLiked = o.userLiked;
-    _userDisliked = o.userDisliked;
     _verificada = o.verificada;
     _verificadaPorNome = o.verificadaPorNome;
     _verificadaEm = o.verificadaEm;
@@ -245,9 +241,7 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
   void _sincronizarComOcorrencia() {
     final o = widget.occurrence;
     _likes = o.likes;
-    _dislikes = o.dislikes;
     _userLiked = o.userLiked;
-    _userDisliked = o.userDisliked;
   }
 
   Future<void> _handleLike() async {
@@ -257,19 +251,6 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
       ocorrencia: widget.occurrence,
       uid: _uid,
       isLike: true,
-      ocorrenciaRepository: _service,
-      notificacaoService: _notificacaoService,
-      onMudou: () => setState(_sincronizarComOcorrencia),
-    );
-  }
-
-  Future<void> _handleDislike() async {
-    if (_uid.isEmpty) return;
-    await reagirOcorrencia(
-      context: context,
-      ocorrencia: widget.occurrence,
-      uid: _uid,
-      isLike: false,
       ocorrenciaRepository: _service,
       notificacaoService: _notificacaoService,
       onMudou: () => setState(_sincronizarComOcorrencia),
@@ -292,7 +273,6 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -347,32 +327,53 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                       Theme.of(context).brightness,
                                     ),
                                   ),
-                                  _DetailTag(icon: type.icon, label: type.label, color: type.color),
+                                  _DetailTag(
+                                      icon: type.icon,
+                                      label: type.label,
+                                      color: type.color),
                                 ],
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                o.titulo.trim().isEmpty ? 'Sem título' : o.titulo.trim(),
-                                style: TextStyle(color: pal.ink, fontSize: 20, height: 1.25, fontWeight: FontWeight.w700),
+                                o.titulo.trim().isEmpty
+                                    ? 'Sem título'
+                                    : o.titulo.trim(),
+                                style: TextStyle(
+                                    color: pal.ink,
+                                    fontSize: 20,
+                                    height: 1.25,
+                                    fontWeight: FontWeight.w700),
                               ),
                               const SizedBox(height: 10),
                               _AuthorDetails(
-                                name: _authorName ?? (o.anonima ? 'Denunciante anônimo' : 'Usuário'),
+                                name: _authorName ??
+                                    (o.anonima
+                                        ? 'Denunciante anônimo'
+                                        : 'Usuário'),
                                 photoUrl: _authorPhoto,
                                 publishedAt: o.dataCriacao,
-                                location: o.bairro?.trim().isNotEmpty == true ? o.bairro!.trim() : 'João Pessoa, PB',
+                                location: o.bairro?.trim().isNotEmpty == true
+                                    ? o.bairro!.trim()
+                                    : 'João Pessoa, PB',
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                o.descricao.trim().isEmpty ? 'Sem descrição.' : o.descricao.trim(),
-                                style: TextStyle(color: pal.muted, fontSize: 14, height: 1.5),
+                                o.descricao.trim().isEmpty
+                                    ? 'Sem descrição.'
+                                    : o.descricao.trim(),
+                                style: TextStyle(
+                                    color: pal.muted,
+                                    fontSize: 14,
+                                    height: 1.5),
                               ),
                               const SizedBox(height: 14),
                               Row(
                                 children: [
                                   Expanded(
                                     child: _DetailAction(
-                                      icon: _userLiked ? Icons.favorite : Icons.favorite_border,
+                                      icon: _userLiked
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
                                       label: 'Curtir · $_likes',
                                       active: _userLiked,
                                       onTap: _handleLike,
@@ -391,7 +392,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                     builder: (anchor) => _DetailIconAction(
                                       icon: Icons.share_outlined,
                                       tooltip: 'Compartilhar denúncia',
-                                      onTap: () => compartilharOcorrencia(o, origem: origemDoWidget(anchor)),
+                                      onTap: () => compartilharOcorrencia(o,
+                                          origem: origemDoWidget(anchor)),
                                     ),
                                   ),
                                 ],
@@ -405,15 +407,21 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                   statusOficial: _statusOficial,
                                   processando: _processandoVerif,
                                   onConfirmar: _toggleVerificacao,
-                                  onEmAnalise: () => _handleStatusOficial(StatusOficial.emAnalise),
-                                  onNaoConfirmada: () => _handleStatusOficial(StatusOficial.naoConfirmada),
-                                  onEncaminhar: () => _handleStatusOficial(StatusOficial.encaminhada),
-                                  onResolver: () => _handleStatusOficial(StatusOficial.resolvida),
+                                  onEmAnalise: () => _handleStatusOficial(
+                                      StatusOficial.emAnalise),
+                                  onNaoConfirmada: () => _handleStatusOficial(
+                                      StatusOficial.naoConfirmada),
+                                  onEncaminhar: () => _handleStatusOficial(
+                                      StatusOficial.encaminhada),
+                                  onResolver: () => _handleStatusOficial(
+                                      StatusOficial.resolvida),
                                   onReverter: _reverterStatusOficial,
                                 ),
                               ],
                               const SizedBox(height: 24),
-                              _DetailSectionTitle(title: 'Andamento', trailing: 'ETAPA $etapa DE 5'),
+                              _DetailSectionTitle(
+                                  title: 'Andamento',
+                                  trailing: 'ETAPA $etapa DE 5'),
                               const SizedBox(height: 10),
                               _StatusTimeline(
                                 occurrence: o,
@@ -424,13 +432,20 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                 historico: _historicoStream,
                               ),
                               const SizedBox(height: 24),
-                              _DetailSectionTitle(title: 'Localização'),
+                              const _DetailSectionTitle(title: 'Localização'),
                               const SizedBox(height: 10),
-                              _LocationSection(occurrence: o, onOpenDirections: _abrirMapaDaRegiao),
+                              _LocationSection(
+                                  occurrence: o,
+                                  onOpenDirections: _abrirMapaDaRegiao),
                               const SizedBox(height: 24),
-                              _DetailSectionTitle(title: 'Comentários', trailing: '$total', onTap: _abrirComentarios),
+                              _DetailSectionTitle(
+                                  title: 'Comentários',
+                                  trailing: '$total',
+                                  onTap: _abrirComentarios),
                               const SizedBox(height: 10),
-                              _CommentPreviews(comments: comentarios, onOpen: _abrirComentarios),
+                              _CommentPreviews(
+                                  comments: comentarios,
+                                  onOpen: _abrirComentarios),
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: TextButton(
@@ -445,7 +460,9 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              _DetailSectionTitle(title: 'Ações relacionadas'),
+                              const _DetailSectionTitle(
+                                title: 'Ações relacionadas',
+                              ),
                               const SizedBox(height: 10),
                               Container(
                                 decoration: BoxDecoration(
@@ -459,7 +476,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                       builder: (anchor) => _RelatedActionTile(
                                         icon: Icons.share_outlined,
                                         title: 'Compartilhar denúncia',
-                                        subtitle: 'Enviar link para vizinhos e grupos',
+                                        subtitle:
+                                            'Enviar link para vizinhos e grupos',
                                         onTap: () => compartilharOcorrencia(
                                           o,
                                           origem: origemDoWidget(anchor),
@@ -469,7 +487,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                                     _RelatedActionTile(
                                       icon: Icons.map_outlined,
                                       title: 'Ver denúncias próximas',
-                                      subtitle: 'Explore os registros desta região',
+                                      subtitle:
+                                          'Explore os registros desta região',
                                       onTap: _abrirMapaDaRegiao,
                                     ),
                                     _RelatedActionTile(
@@ -504,21 +523,26 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
       color: pal.surface,
       child: Row(
         children: [
-          IconButton(tooltip: 'Voltar', icon: Icon(Icons.arrow_back, color: pal.ink), onPressed: () => Navigator.pop(context)),
+          IconButton(
+              tooltip: 'Voltar',
+              icon: Icon(Icons.arrow_back, color: pal.ink),
+              onPressed: () => Navigator.pop(context)),
           Expanded(
             child: Text(
               'Denúncia',
               textAlign: TextAlign.start,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: pal.ink),
+              style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w700, color: pal.ink),
             ),
           ),
           Builder(
             builder: (anchor) => IconButton(
               tooltip: 'Compartilhar',
               icon: Icon(Icons.share_outlined, color: pal.ink),
-              onPressed: () => compartilharOcorrencia(widget.occurrence, origem: origemDoWidget(anchor)),
+              onPressed: () => compartilharOcorrencia(widget.occurrence,
+                  origem: origemDoWidget(anchor)),
             ),
           ),
           PopupMenuButton<String>(
@@ -540,7 +564,9 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
     final pal = context.pal;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      decoration: BoxDecoration(color: pal.surface, border: Border(top: BorderSide(color: pal.border))),
+      decoration: BoxDecoration(
+          color: pal.surface,
+          border: Border(top: BorderSide(color: pal.border))),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
       child: Row(
         children: [
@@ -552,8 +578,11 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
                 height: 42,
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(color: pal.surfaceAlt, borderRadius: BorderRadius.circular(24)),
-                child: Text('Escreva um comentário…', style: TextStyle(color: pal.hint, fontSize: 13)),
+                decoration: BoxDecoration(
+                    color: pal.surfaceAlt,
+                    borderRadius: BorderRadius.circular(24)),
+                child: Text('Escreva um comentário…',
+                    style: TextStyle(color: pal.hint, fontSize: 13)),
               ),
             ),
           ),
@@ -576,7 +605,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
   Future<void> _denunciarOcorrencia() async {
     final uid = _authService.currentUser?.uid;
     if (uid == null) return;
-    final result = await showReportContentSheet(context, title: 'Denunciar publicação');
+    final result =
+        await showReportContentSheet(context, title: 'Denunciar publicação');
     if (result == null || !mounted) return;
     try {
       await ModeracaoService.instance.denunciarOcorrencia(
@@ -586,7 +616,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
         detalhe: result.detalhe,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Denúncia enviada para moderação.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Denúncia enviada para moderação.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -598,7 +629,8 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
   void _abrirMapaDaRegiao() {
     final o = widget.occurrence;
     if (!_coordenadasValidas(o.latitude, o.longitude)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Esta denúncia não tem coordenadas válidas.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Esta denúncia não tem coordenadas válidas.')));
       return;
     }
     Navigator.of(context).push(
@@ -717,7 +749,8 @@ class _ImageAreaState extends State<_ImageArea> {
                 top: 12,
                 right: 12,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.55),
                     borderRadius: BorderRadius.circular(14),
@@ -1077,7 +1110,8 @@ class _DetailTag extends StatelessWidget {
   final String label;
   final Color color;
 
-  const _DetailTag({required this.icon, required this.label, required this.color});
+  const _DetailTag(
+      {required this.icon, required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -1092,7 +1126,9 @@ class _DetailTag extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 5),
-          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+          Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -1123,12 +1159,16 @@ class _AuthorDetails extends StatelessWidget {
         CircleAvatar(
           radius: 18,
           backgroundColor: pal.primary.withValues(
-            alpha: Theme.of(context).brightness == Brightness.dark ? 0.14 : 0.12,
+            alpha:
+                Theme.of(context).brightness == Brightness.dark ? 0.14 : 0.12,
           ),
           backgroundImage: photoUrl == null ? null : imagemCacheada(photoUrl!),
           child: photoUrl == null
               ? Text(name.isEmpty ? 'U' : name.characters.first.toUpperCase(),
-                  style: TextStyle(color: pal.primary, fontWeight: FontWeight.w700, fontSize: 12))
+                  style: TextStyle(
+                      color: pal.primary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12))
               : null,
         ),
         const SizedBox(width: 10),
@@ -1136,10 +1176,17 @@ class _AuthorDetails extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: pal.ink, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: pal.ink,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
-              Text('$published · $location', maxLines: 1, overflow: TextOverflow.ellipsis,
+              Text('$published · $location',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: pal.hint, fontSize: 11)),
             ],
           ),
@@ -1161,9 +1208,16 @@ class _DetailSectionTitle extends StatelessWidget {
     final pal = context.pal;
     final row = Row(
       children: [
-        Expanded(child: Text(title, style: TextStyle(color: pal.ink, fontSize: 16, fontWeight: FontWeight.w700))),
+        Expanded(
+            child: Text(title,
+                style: TextStyle(
+                    color: pal.ink,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700))),
         if (trailing != null)
-          Text(trailing!, style: TextStyle(color: pal.muted, fontSize: 10, fontWeight: FontWeight.w700)),
+          Text(trailing!,
+              style: TextStyle(
+                  color: pal.muted, fontSize: 10, fontWeight: FontWeight.w700)),
         if (onTap != null) ...[
           const SizedBox(width: 4),
           Icon(Icons.chevron_right, color: pal.hint, size: 19),
@@ -1180,7 +1234,11 @@ class _DetailAction extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
 
-  const _DetailAction({required this.icon, required this.label, required this.onTap, this.active = false});
+  const _DetailAction(
+      {required this.icon,
+      required this.label,
+      required this.onTap,
+      this.active = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1203,8 +1261,14 @@ class _DetailAction extends StatelessWidget {
             children: [
               Icon(icon, size: 16, color: color),
               const SizedBox(width: 5),
-              Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: active ? color : pal.ink, fontSize: 11, fontWeight: FontWeight.w600))),
+              Flexible(
+                  child: Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: active ? color : pal.ink,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600))),
             ],
           ),
         ),
@@ -1215,18 +1279,12 @@ class _DetailAction extends StatelessWidget {
 
 class _DetailIconAction extends StatelessWidget {
   final IconData icon;
-  final int? count;
-  final bool active;
-  final Color? color;
   final String? tooltip;
   final VoidCallback onTap;
 
   const _DetailIconAction({
     required this.icon,
     required this.onTap,
-    this.count,
-    this.active = false,
-    this.color,
     this.tooltip,
   });
 
@@ -1245,12 +1303,14 @@ class _DetailIconAction extends StatelessWidget {
           child: Icon(
             icon,
             size: 17,
-            color: active ? (color ?? AppColors.danger) : (color ?? pal.muted),
+            color: pal.muted,
           ),
         ),
       ),
     );
-    return tooltip == null ? content : Tooltip(message: tooltip!, child: content);
+    return tooltip == null
+        ? content
+        : Tooltip(message: tooltip!, child: content);
   }
 }
 
@@ -1296,14 +1356,16 @@ class _DetailActionDividerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DetailActionDividerPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(covariant _DetailActionDividerPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _LocationSection extends StatelessWidget {
   final OcorrenciaModel occurrence;
   final VoidCallback onOpenDirections;
 
-  const _LocationSection({required this.occurrence, required this.onOpenDirections});
+  const _LocationSection(
+      {required this.occurrence, required this.onOpenDirections});
 
   @override
   Widget build(BuildContext context) {
@@ -1311,7 +1373,8 @@ class _LocationSection extends StatelessWidget {
     final o = occurrence;
     final valid = _coordenadasValidas(o.latitude, o.longitude);
     final bairro = o.bairro?.trim() ?? '';
-    final cidade = bairro.isEmpty ? 'João Pessoa, PB' : '$bairro · João Pessoa, PB';
+    final cidade =
+        bairro.isEmpty ? 'João Pessoa, PB' : '$bairro · João Pessoa, PB';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1321,12 +1384,14 @@ class _LocationSection extends StatelessWidget {
             height: 138,
             child: valid
                 ? GoogleMap(
-                    initialCameraPosition: CameraPosition(target: LatLng(o.latitude, o.longitude), zoom: 15),
+                    initialCameraPosition: CameraPosition(
+                        target: LatLng(o.latitude, o.longitude), zoom: 15),
                     markers: {
                       Marker(
                         markerId: MarkerId('detalhe-${o.id}'),
                         position: LatLng(o.latitude, o.longitude),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+                        icon: BitmapDescriptor.defaultMarkerWithHue(
+                            BitmapDescriptor.hueAzure),
                       ),
                     },
                     zoomControlsEnabled: false,
@@ -1355,21 +1420,32 @@ class _LocationSection extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Icon(Icons.location_on_outlined, color: pal.primary, size: 18),
+              child: Icon(Icons.location_on_outlined,
+                  color: pal.primary, size: 18),
             ),
             const SizedBox(width: 7),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(o.localizacao.trim().isEmpty ? 'Endereço não informado' : o.localizacao.trim(),
-                      style: TextStyle(color: pal.ink, fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(
+                      o.localizacao.trim().isEmpty
+                          ? 'Endereço não informado'
+                          : o.localizacao.trim(),
+                      style: TextStyle(
+                          color: pal.ink,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
                   const SizedBox(height: 3),
-                  Text(cidade, style: TextStyle(color: pal.muted, fontSize: 11)),
+                  Text(cidade,
+                      style: TextStyle(color: pal.muted, fontSize: 11)),
                   if (valid) ...[
                     const SizedBox(height: 3),
                     Text(_coordenadasFormatadas(o.latitude, o.longitude),
-                        style: TextStyle(color: pal.hint, fontSize: 10, fontFamily: 'monospace')),
+                        style: TextStyle(
+                            color: pal.hint,
+                            fontSize: 10,
+                            fontFamily: 'monospace')),
                   ],
                 ],
               ),
@@ -1385,7 +1461,8 @@ class _LocationSection extends StatelessWidget {
             foregroundColor: pal.primary,
             side: BorderSide(color: pal.primary),
             minimumSize: const Size.fromHeight(40),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
           ),
         ),
       ],
@@ -1405,7 +1482,8 @@ class _CommentPreviews extends StatelessWidget {
     final raiz = comments.where((comment) => comment.parentId == null).toList();
     final recentes = raiz.reversed.take(2).toList();
     if (recentes.isEmpty) {
-      return Text('Ainda não há comentários. Seja a primeira pessoa a comentar.',
+      return Text(
+          'Ainda não há comentários. Seja a primeira pessoa a comentar.',
           style: TextStyle(color: pal.muted, fontSize: 13));
     }
     return Column(
@@ -1426,10 +1504,19 @@ class _CommentPreviews extends StatelessWidget {
                           ? 0.14
                           : 0.12,
                     ),
-                    backgroundImage: comment.userPhotoUrl == null ? null : imagemCacheada(comment.userPhotoUrl!),
+                    backgroundImage: comment.userPhotoUrl == null
+                        ? null
+                        : imagemCacheada(comment.userPhotoUrl!),
                     child: comment.userPhotoUrl == null
-                        ? Text(comment.userName.isEmpty ? 'U' : comment.userName.characters.first.toUpperCase(),
-                            style: TextStyle(color: pal.primary, fontSize: 10, fontWeight: FontWeight.w700))
+                        ? Text(
+                            comment.userName.isEmpty
+                                ? 'U'
+                                : comment.userName.characters.first
+                                    .toUpperCase(),
+                            style: TextStyle(
+                                color: pal.primary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700))
                         : null,
                   ),
                   const SizedBox(width: 9),
@@ -1439,23 +1526,41 @@ class _CommentPreviews extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Flexible(child: Text(comment.userName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: pal.ink, fontSize: 12, fontWeight: FontWeight.w600))),
+                            Flexible(
+                                child: Text(comment.userName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        color: pal.ink,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600))),
                             const SizedBox(width: 6),
-                            Text(tempoRelativo(comment.dataCriacao), style: TextStyle(color: pal.hint, fontSize: 10)),
+                            Text(tempoRelativo(comment.dataCriacao),
+                                style:
+                                    TextStyle(color: pal.hint, fontSize: 10)),
                           ],
                         ),
                         const SizedBox(height: 3),
-                        Text(comment.texto, maxLines: 2, overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: pal.muted, fontSize: 12, height: 1.35)),
+                        Text(comment.texto,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: pal.muted, fontSize: 12, height: 1.35)),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(Icons.favorite_border, size: 12, color: pal.hint),
+                            Icon(Icons.favorite_border,
+                                size: 12, color: pal.hint),
                             const SizedBox(width: 4),
-                            Text('${comment.likes}', style: TextStyle(color: pal.hint, fontSize: 10)),
+                            Text('${comment.likes}',
+                                style:
+                                    TextStyle(color: pal.hint, fontSize: 10)),
                             const SizedBox(width: 12),
-                            Text('Responder', style: TextStyle(color: pal.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+                            Text('Responder',
+                                style: TextStyle(
+                                    color: pal.muted,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ],
@@ -1492,7 +1597,10 @@ class _RelatedActionTile extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-        decoration: BoxDecoration(border: showBottomBorder ? Border(bottom: BorderSide(color: pal.border)) : null),
+        decoration: BoxDecoration(
+            border: showBottomBorder
+                ? Border(bottom: BorderSide(color: pal.border))
+                : null),
         child: Row(
           children: [
             Icon(icon, color: pal.muted, size: 19),
@@ -1501,9 +1609,14 @@ class _RelatedActionTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(color: pal.ink, fontSize: 12, fontWeight: FontWeight.w600)),
+                  Text(title,
+                      style: TextStyle(
+                          color: pal.ink,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(color: pal.hint, fontSize: 10)),
+                  Text(subtitle,
+                      style: TextStyle(color: pal.hint, fontSize: 10)),
                 ],
               ),
             ),
@@ -1516,10 +1629,14 @@ class _RelatedActionTile extends StatelessWidget {
 }
 
 bool _coordenadasValidas(double latitude, double longitude) =>
-    latitude.isFinite && longitude.isFinite &&
-    latitude >= -90 && latitude <= 90 &&
-    longitude >= -180 && longitude <= 180 &&
-    latitude != 0 && longitude != 0;
+    latitude.isFinite &&
+    longitude.isFinite &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180 &&
+    latitude != 0 &&
+    longitude != 0;
 
 String _coordenadasFormatadas(double latitude, double longitude) =>
     '${_coordenadaDms(latitude, latitude: true)}  ·  ${_coordenadaDms(longitude, latitude: false)}';
@@ -1530,9 +1647,8 @@ String _coordenadaDms(double value, {required bool latitude}) {
   final minutesCompletos = (absolute - degrees) * 60;
   final minutes = minutesCompletos.floor();
   final seconds = ((minutesCompletos - minutes) * 60).round();
-  final hemisphere = latitude
-      ? (value >= 0 ? 'N' : 'S')
-      : (value >= 0 ? 'L' : 'O');
+  final hemisphere =
+      latitude ? (value >= 0 ? 'N' : 'S') : (value >= 0 ? 'L' : 'O');
   return '$degrees°${minutes.toString().padLeft(2, '0')}′${seconds.toString().padLeft(2, '0')}″$hemisphere';
 }
 
@@ -1810,7 +1926,8 @@ class _StatusTimeline extends StatelessWidget {
     return StreamBuilder<List<({String status, String? por, DateTime? data})>>(
       stream: historico,
       builder: (context, snap) {
-        final eventos = snap.data ?? const <({String status, String? por, DateTime? data})>[];
+        final eventos = snap.data ??
+            const <({String status, String? por, DateTime? data})>[];
         DateTime? dataEvento(String status) {
           for (final evento in eventos.reversed) {
             if (evento.status == status) return evento.data;
@@ -1847,7 +1964,9 @@ class _StatusTimeline extends StatelessWidget {
             title: 'Verificada',
             description: 'Confirmação do problema no local.',
             icon: Icons.verified_outlined,
-            date: verificadaEm ?? occurrence.verificadaEm ?? dataEvento('verificada'),
+            date: verificadaEm ??
+                occurrence.verificadaEm ??
+                dataEvento('verificada'),
           ),
           _TimelineStep(
             title: 'Encaminhada',
@@ -1896,11 +2015,13 @@ class _StatusTimeline extends StatelessWidget {
                                             ? stageColor
                                             : pal.surface,
                                     border: i > etapaAtual
-                                        ? Border.all(color: pal.border, width: 2)
+                                        ? Border.all(
+                                            color: pal.border, width: 2)
                                         : null,
                                   ),
                                   child: i == etapaAtual
-                                      ? Icon(steps[i].icon, size: 8, color: Colors.white)
+                                      ? Icon(steps[i].icon,
+                                          size: 8, color: Colors.white)
                                       : null,
                                 ),
                                 if (i != steps.length - 1)
@@ -1908,7 +2029,9 @@ class _StatusTimeline extends StatelessWidget {
                                     child: Container(
                                       width: 2,
                                       color: i < etapaAtual
-                                          ? (i == 0 ? pendingColor : pal.primary)
+                                          ? (i == 0
+                                              ? pendingColor
+                                              : pal.primary)
                                           : pal.border,
                                     ),
                                   ),
@@ -1918,7 +2041,8 @@ class _StatusTimeline extends StatelessWidget {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Padding(
-                              padding: EdgeInsets.only(bottom: i == steps.length - 1 ? 0 : 13),
+                              padding: EdgeInsets.only(
+                                  bottom: i == steps.length - 1 ? 0 : 13),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -1936,23 +2060,34 @@ class _StatusTimeline extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    i <= etapaAtual ? steps[i].description : 'Aguardando etapa anterior.',
-                                    style: TextStyle(color: pal.muted, fontSize: 11, height: 1.35),
+                                    i <= etapaAtual
+                                        ? steps[i].description
+                                        : 'Aguardando etapa anterior.',
+                                    style: TextStyle(
+                                        color: pal.muted,
+                                        fontSize: 11,
+                                        height: 1.35),
                                   ),
                                   if (i <= etapaAtual && steps[i].date != null)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 3),
                                       child: Text(
-                                        DateFormat('dd/MM · HH:mm').format(steps[i].date!),
-                                        style: TextStyle(color: pal.hint, fontSize: 10, fontWeight: FontWeight.w600),
+                                        DateFormat('dd/MM · HH:mm')
+                                            .format(steps[i].date!),
+                                        style: TextStyle(
+                                            color: pal.hint,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600),
                                       ),
                                     ),
                                   if (i == 2 &&
                                       i <= etapaAtual &&
-                                      verificadaPorNome?.trim().isNotEmpty == true)
+                                      verificadaPorNome?.trim().isNotEmpty ==
+                                          true)
                                     Text(
                                       'por ${verificadaPorNome!.trim()}',
-                                      style: TextStyle(color: pal.hint, fontSize: 10),
+                                      style: TextStyle(
+                                          color: pal.hint, fontSize: 10),
                                     ),
                                 ],
                               ),

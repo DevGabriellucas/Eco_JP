@@ -420,10 +420,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: pal.primary,
-                              foregroundColor:
-                                  Theme.of(context).brightness == Brightness.dark
-                                      ? AppColors.ink
-                                      : Colors.white,
+                              foregroundColor: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? AppColors.ink
+                                  : Colors.white,
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
@@ -918,8 +918,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                       icon: type.icon,
                       selected: _selectedType == type,
                       onTap: () => setState(
-                        () => _selectedType =
-                            _selectedType == type ? null : type,
+                        () =>
+                            _selectedType = _selectedType == type ? null : type,
                       ),
                     );
                   }),
