@@ -944,7 +944,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                         width: selecionada ? 1.5 : 1,
                       ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -963,9 +964,8 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                             color: selecionada ? pal.primary : pal.ink,
                             fontSize: 10.5,
                             height: 1.1,
-                            fontWeight: selecionada
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+                            fontWeight:
+                                selecionada ? FontWeight.w700 : FontWeight.w500,
                           ),
                         ),
                       ],
@@ -1097,9 +1097,9 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
               prefixIcon: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Icon(
-                Icons.search,
-                color: pal.muted,
-                size: 20,
+                  Icons.search,
+                  color: pal.muted,
+                  size: 20,
                 ),
               ),
               prefixIconConstraints: const BoxConstraints(
