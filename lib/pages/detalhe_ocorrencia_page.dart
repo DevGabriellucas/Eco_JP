@@ -290,223 +290,229 @@ class _DetalheOcorrenciaPageState extends ConsumerState<DetalheOcorrenciaPage> {
     };
 
     return Scaffold(
-      backgroundColor: pal.background,
+      // As áreas seguras de status e navegação ficam no mesmo tom dos painéis
+      // fixos do cabeçalho e do compositor de comentários.
+      backgroundColor: pal.surface,
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _ImageArea(occurrence: o, type: type),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                      child: StreamBuilder<List<ComentarioModel>>(
-                        stream: _comentariosStream,
-                        builder: (context, snapshot) {
-                          final comentarios = (snapshot.data ?? const [])
-                              .where((comentario) => !comentario.oculto)
-                              .toList();
-                          final total = snapshot.hasData
-                              ? comentarios.length
-                              : o.comments;
+              child: ColoredBox(
+                color: pal.background,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _ImageArea(occurrence: o, type: type),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        child: StreamBuilder<List<ComentarioModel>>(
+                          stream: _comentariosStream,
+                          builder: (context, snapshot) {
+                            final comentarios = (snapshot.data ?? const [])
+                                .where((comentario) => !comentario.oculto)
+                                .toList();
+                            final total = snapshot.hasData
+                                ? comentarios.length
+                                : o.comments;
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  _DetailTag(
-                                    icon: estagio.icon,
-                                    label: estagio.label,
-                                    color: estagio.colorFor(
-                                      Theme.of(context).brightness,
-                                    ),
-                                  ),
-                                  _DetailTag(
-                                      icon: type.icon,
-                                      label: type.label,
-                                      color: type.color),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                o.titulo.trim().isEmpty
-                                    ? 'Sem título'
-                                    : o.titulo.trim(),
-                                style: TextStyle(
-                                    color: pal.ink,
-                                    fontSize: 20,
-                                    height: 1.25,
-                                    fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 10),
-                              _AuthorDetails(
-                                name: _authorName ??
-                                    (o.anonima
-                                        ? 'Denunciante anônimo'
-                                        : 'Usuário'),
-                                photoUrl: _authorPhoto,
-                                publishedAt: o.dataCriacao,
-                                location: o.bairro?.trim().isNotEmpty == true
-                                    ? o.bairro!.trim()
-                                    : 'João Pessoa, PB',
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                o.descricao.trim().isEmpty
-                                    ? 'Sem descrição.'
-                                    : o.descricao.trim(),
-                                style: TextStyle(
-                                    color: pal.muted,
-                                    fontSize: 14,
-                                    height: 1.5),
-                              ),
-                              const SizedBox(height: 14),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _DetailAction(
-                                      icon: _userLiked
-                                          ? Icons.favorite
-                                          : Icons.favorite_border,
-                                      label: 'Curtir · $_likes',
-                                      active: _userLiked,
-                                      onTap: _handleLike,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: _DetailAction(
-                                      icon: Icons.chat_bubble_outline,
-                                      label: 'Comentar · $total',
-                                      onTap: _abrirComentarios,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Builder(
-                                    builder: (anchor) => _DetailIconAction(
-                                      icon: Icons.share_outlined,
-                                      tooltip: 'Compartilhar denúncia',
-                                      onTap: () => compartilharOcorrencia(o,
-                                          origem: origemDoWidget(anchor)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              _DetailActionDivider(color: pal.border),
-                              if (autoridade) ...[
-                                const SizedBox(height: 16),
-                                _PainelAutoridade(
-                                  verificada: _verificada,
-                                  statusOficial: _statusOficial,
-                                  processando: _processandoVerif,
-                                  onConfirmar: _toggleVerificacao,
-                                  onEmAnalise: () => _handleStatusOficial(
-                                      StatusOficial.emAnalise),
-                                  onNaoConfirmada: () => _handleStatusOficial(
-                                      StatusOficial.naoConfirmada),
-                                  onEncaminhar: () => _handleStatusOficial(
-                                      StatusOficial.encaminhada),
-                                  onResolver: () => _handleStatusOficial(
-                                      StatusOficial.resolvida),
-                                  onReverter: _reverterStatusOficial,
-                                ),
-                              ],
-                              const SizedBox(height: 24),
-                              _DetailSectionTitle(
-                                  title: 'Andamento',
-                                  trailing: 'ETAPA $etapa DE 5'),
-                              const SizedBox(height: 10),
-                              _StatusTimeline(
-                                occurrence: o,
-                                verificada: _verificada,
-                                verificadaPorNome: _verificadaPorNome,
-                                verificadaEm: _verificadaEm,
-                                statusOficial: _statusOficial,
-                                historico: _historicoStream,
-                              ),
-                              const SizedBox(height: 24),
-                              const _DetailSectionTitle(title: 'Localização'),
-                              const SizedBox(height: 10),
-                              _LocationSection(
-                                  occurrence: o,
-                                  onOpenDirections: _abrirMapaDaRegiao),
-                              const SizedBox(height: 24),
-                              _DetailSectionTitle(
-                                  title: 'Comentários',
-                                  trailing: '$total',
-                                  onTap: _abrirComentarios),
-                              const SizedBox(height: 10),
-                              _CommentPreviews(
-                                  comments: comentarios,
-                                  onOpen: _abrirComentarios),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: TextButton(
-                                  onPressed: _abrirComentarios,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text('Ver todos os $total comentários'),
-                                      const Icon(Icons.chevron_right, size: 18),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              const _DetailSectionTitle(
-                                title: 'Ações relacionadas',
-                              ),
-                              const SizedBox(height: 10),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: pal.surface,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: pal.border),
-                                ),
-                                child: Column(
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
                                   children: [
-                                    Builder(
-                                      builder: (anchor) => _RelatedActionTile(
-                                        icon: Icons.share_outlined,
-                                        title: 'Compartilhar denúncia',
-                                        subtitle:
-                                            'Enviar link para vizinhos e grupos',
-                                        onTap: () => compartilharOcorrencia(
-                                          o,
-                                          origem: origemDoWidget(anchor),
-                                        ),
+                                    _DetailTag(
+                                      icon: estagio.icon,
+                                      label: estagio.label,
+                                      color: estagio.colorFor(
+                                        Theme.of(context).brightness,
                                       ),
                                     ),
-                                    _RelatedActionTile(
-                                      icon: Icons.map_outlined,
-                                      title: 'Ver denúncias próximas',
-                                      subtitle:
-                                          'Explore os registros desta região',
-                                      onTap: _abrirMapaDaRegiao,
+                                    _DetailTag(
+                                        icon: type.icon,
+                                        label: type.label,
+                                        color: type.color),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  o.titulo.trim().isEmpty
+                                      ? 'Sem título'
+                                      : o.titulo.trim(),
+                                  style: TextStyle(
+                                      color: pal.ink,
+                                      fontSize: 20,
+                                      height: 1.25,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 10),
+                                _AuthorDetails(
+                                  name: _authorName ??
+                                      (o.anonima
+                                          ? 'Denunciante anônimo'
+                                          : 'Usuário'),
+                                  photoUrl: _authorPhoto,
+                                  publishedAt: o.dataCriacao,
+                                  location: o.bairro?.trim().isNotEmpty == true
+                                      ? o.bairro!.trim()
+                                      : 'João Pessoa, PB',
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  o.descricao.trim().isEmpty
+                                      ? 'Sem descrição.'
+                                      : o.descricao.trim(),
+                                  style: TextStyle(
+                                      color: pal.muted,
+                                      fontSize: 14,
+                                      height: 1.5),
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _DetailAction(
+                                        icon: _userLiked
+                                            ? Icons.favorite
+                                            : Icons.favorite_border,
+                                        label: 'Curtir · $_likes',
+                                        active: _userLiked,
+                                        onTap: _handleLike,
+                                      ),
                                     ),
-                                    _RelatedActionTile(
-                                      icon: Icons.visibility_off_outlined,
-                                      title: 'Denunciar conteúdo',
-                                      subtitle: 'Informar uso indevido',
-                                      showBottomBorder: false,
-                                      onTap: _denunciarOcorrencia,
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: _DetailAction(
+                                        icon: Icons.chat_bubble_outline,
+                                        label: 'Comentar · $total',
+                                        onTap: _abrirComentarios,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Builder(
+                                      builder: (anchor) => _DetailIconAction(
+                                        icon: Icons.share_outlined,
+                                        tooltip: 'Compartilhar denúncia',
+                                        onTap: () => compartilharOcorrencia(o,
+                                            origem: origemDoWidget(anchor)),
+                                      ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          );
-                        },
+                                const SizedBox(height: 12),
+                                _DetailActionDivider(color: pal.border),
+                                if (autoridade) ...[
+                                  const SizedBox(height: 16),
+                                  _PainelAutoridade(
+                                    verificada: _verificada,
+                                    statusOficial: _statusOficial,
+                                    processando: _processandoVerif,
+                                    onConfirmar: _toggleVerificacao,
+                                    onEmAnalise: () => _handleStatusOficial(
+                                        StatusOficial.emAnalise),
+                                    onNaoConfirmada: () => _handleStatusOficial(
+                                        StatusOficial.naoConfirmada),
+                                    onEncaminhar: () => _handleStatusOficial(
+                                        StatusOficial.encaminhada),
+                                    onResolver: () => _handleStatusOficial(
+                                        StatusOficial.resolvida),
+                                    onReverter: _reverterStatusOficial,
+                                  ),
+                                ],
+                                const SizedBox(height: 24),
+                                _DetailSectionTitle(
+                                    title: 'Andamento',
+                                    trailing: 'ETAPA $etapa DE 5'),
+                                const SizedBox(height: 10),
+                                _StatusTimeline(
+                                  occurrence: o,
+                                  verificada: _verificada,
+                                  verificadaPorNome: _verificadaPorNome,
+                                  verificadaEm: _verificadaEm,
+                                  statusOficial: _statusOficial,
+                                  historico: _historicoStream,
+                                ),
+                                const SizedBox(height: 24),
+                                const _DetailSectionTitle(title: 'Localização'),
+                                const SizedBox(height: 10),
+                                _LocationSection(
+                                    occurrence: o,
+                                    onOpenDirections: _abrirMapaDaRegiao),
+                                const SizedBox(height: 24),
+                                _DetailSectionTitle(
+                                    title: 'Comentários',
+                                    trailing: '$total',
+                                    onTap: _abrirComentarios),
+                                const SizedBox(height: 10),
+                                _CommentPreviews(
+                                    comments: comentarios,
+                                    onOpen: _abrirComentarios),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: TextButton(
+                                    onPressed: _abrirComentarios,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text('Ver todos os $total comentários'),
+                                        const Icon(Icons.chevron_right,
+                                            size: 18),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const _DetailSectionTitle(
+                                  title: 'Ações relacionadas',
+                                ),
+                                const SizedBox(height: 10),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: pal.surface,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: pal.border),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Builder(
+                                        builder: (anchor) => _RelatedActionTile(
+                                          icon: Icons.share_outlined,
+                                          title: 'Compartilhar denúncia',
+                                          subtitle:
+                                              'Enviar link para vizinhos e grupos',
+                                          onTap: () => compartilharOcorrencia(
+                                            o,
+                                            origem: origemDoWidget(anchor),
+                                          ),
+                                        ),
+                                      ),
+                                      _RelatedActionTile(
+                                        icon: Icons.map_outlined,
+                                        title: 'Ver denúncias próximas',
+                                        subtitle:
+                                            'Explore os registros desta região',
+                                        onTap: _abrirMapaDaRegiao,
+                                      ),
+                                      _RelatedActionTile(
+                                        icon: Icons.visibility_off_outlined,
+                                        title: 'Denunciar conteúdo',
+                                        subtitle: 'Informar uso indevido',
+                                        showBottomBorder: false,
+                                        onTap: _denunciarOcorrencia,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
