@@ -8,18 +8,23 @@ import 'package:eco_jp/pages/mapPage/widgets/mapdisplay.dart';
 import 'package:eco_jp/pages/mapPage/widgets/ocorrencia_map_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class MapPage extends StatelessWidget {
-  const MapPage({super.key});
+  final LatLng? focoInicial;
+
+  const MapPage({super.key, this.focoInicial});
 
   @override
   Widget build(BuildContext context) {
-    return const MapPageConteudo();
+    return MapPageConteudo(focoInicial: focoInicial);
   }
 }
 
 class MapPageConteudo extends ConsumerStatefulWidget {
-  const MapPageConteudo({super.key});
+  final LatLng? focoInicial;
+
+  const MapPageConteudo({super.key, this.focoInicial});
 
   @override
   ConsumerState<MapPageConteudo> createState() => _MapPageConteudoState();
@@ -78,11 +83,17 @@ class _MapPageConteudoState extends ConsumerState<MapPageConteudo> {
         } else {
           // Mapa full-bleed: os filtros de categoria ficam no menu lateral
           // (endDrawer, ícone de hambúrguer), então o mapa ocupa toda a área.
-          body = MapDisplay(controller: controller);
+          body = MapDisplay(
+            controller: controller,
+            focoInicial: widget.focoInicial,
+          );
         }
 
         return Scaffold(
-          appBar: barraOcorrencias(context),
+          appBar: barraOcorrencias(
+            context,
+            mostrarVoltar: widget.focoInicial != null,
+          ),
           endDrawer: CategoryDrawer(controller: controller),
           body: body,
         );

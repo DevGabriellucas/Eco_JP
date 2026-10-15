@@ -57,17 +57,19 @@ class OccurrenceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = occurrence;
     final tempoStr = tempoRelativo(o.dataCriacao);
-    final statusEnum = o.statusAtual;
     final typeEnum = OccurrenceTypeParser.fromString(o.tipoLixo);
     final estagio = EstagioOficialInfo.calcular(o.verificada, o.statusOficial);
     final autor = _authorName;
     final pal = context.pal;
+    final bairro = o.bairro?.trim();
+    final localDoAutor =
+        bairro != null && bairro.isNotEmpty ? bairro : o.localizacao;
 
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: pal.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: pal.border),
         boxShadow: [
           BoxShadow(
@@ -91,7 +93,8 @@ class OccurrenceCard extends StatelessWidget {
               _CardHeader(
                 authorName: autor,
                 authorPhoto: fotoAutor,
-                location: o.localizacao,
+                location: '$localDoAutor · $tempoStr',
+                officialStatus: estagio,
                 onMenuSelected: (action) => _handleMenuAction(context, action),
                 canManage: onManage != null,
                 canPin: onTogglePin != null,
@@ -109,52 +112,55 @@ class OccurrenceCard extends StatelessWidget {
                   onDoubleTapLike: onLike,
                   alreadyLiked: o.userLiked,
                 ),
-              _OfficialStatusStrip(estagio: estagio),
+              _FeedProgressRow(type: typeEnum, estagio: estagio),
               Padding(
-                padding: const EdgeInsets.fromLTRB(6, 0, 8, 0),
-                child: Row(
-                  children: [
-                    _ActionButton(
-                      icon: Icons.favorite_border,
-                      iconFilled: Icons.favorite,
-                      count: o.likes,
-                      active: o.userLiked,
-                      activeColor: AppColors.danger,
-                      onTap: onLike,
-                      semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
-                      animateOnActivate: true,
-                    ),
-                    _CommentButton(
-                      count: commentCount ?? o.comments,
-                      onTap: onComment ?? () {},
-                    ),
-                    _ShareButton(occurrence: o),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    RichText(
-                      maxLines: 3,
+                    Text(
+                      o.titulo,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      text: TextSpan(
-                        style: TextStyle(
-                          color: pal.ink,
-                          fontSize: 13,
-                          height: 1.35,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: o.titulo,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          if (o.descricao.trim().isNotEmpty)
-                            TextSpan(text: ' ${o.descricao.trim()}'),
-                        ],
+                      style: TextStyle(
+                        color: pal.ink,
+                        fontSize: 17,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
                       ),
+                    ),
+                    if (o.descricao.trim().isNotEmpty) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        o.descricao.trim(),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: pal.muted,
+                          fontSize: 13.5,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _ActionButton(
+                          icon: Icons.favorite_border,
+                          iconFilled: Icons.favorite,
+                          count: o.likes,
+                          active: o.userLiked,
+                          activeColor: AppColors.danger,
+                          onTap: onLike,
+                          semanticLabel: o.userLiked ? 'Descurtir' : 'Curtir',
+                          animateOnActivate: true,
+                        ),
+                        _CommentButton(
+                          count: commentCount ?? o.comments,
+                          onTap: onComment ?? () {},
+                        ),
+                        _ShareButton(occurrence: o),
+                      ],
                     ),
                     _CommentPreview(
                       count: commentCount,
@@ -187,25 +193,6 @@ class OccurrenceCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _TypeChip(type: typeEnum),
-                        _StatusBadge(status: statusEnum),
-                        if (estagio.temAcaoOficial)
-                          _EstagioChip(estagio: estagio),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      tempoStr,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: pal.muted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -377,6 +364,7 @@ class _CardHeader extends StatelessWidget {
   final String authorName;
   final String? authorPhoto;
   final String location;
+  final EstagioOficial officialStatus;
   final bool canManage;
   final bool canReport;
   final bool canPin;
@@ -388,6 +376,7 @@ class _CardHeader extends StatelessWidget {
     required this.authorName,
     required this.authorPhoto,
     required this.location,
+    required this.officialStatus,
     required this.canManage,
     required this.canReport,
     required this.canPin,
@@ -400,7 +389,7 @@ class _CardHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final pal = context.pal;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
       child: Row(
         children: [
           GestureDetector(
@@ -449,6 +438,7 @@ class _CardHeader extends StatelessWidget {
               ),
             ),
           ),
+          _HeaderStatusBadge(status: officialStatus),
           PopupMenuButton<_CardMenuAction>(
             tooltip: 'Mais opções',
             icon: Icon(Icons.more_horiz, color: pal.ink, size: 24),
@@ -604,7 +594,8 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxWidth.clamp(220.0, 420.0).toDouble();
+        final height =
+            (constraints.maxWidth * 0.68).clamp(200.0, 360.0).toDouble();
 
         if (_error) {
           return SizedBox(
@@ -618,12 +609,14 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
         }
 
         if (!_controller.value.isInitialized) {
+          final pal = context.pal;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
           return SizedBox(
             height: height,
             width: double.infinity,
-            child: const ColoredBox(
-              color: Color(0xFF111827),
-              child: Center(
+            child: ColoredBox(
+              color: isDark ? pal.background : const Color(0xFF111827),
+              child: const Center(
                 child: SizedBox(
                   width: 24,
                   height: 24,
@@ -704,85 +697,116 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   }
 }
 
-class _OfficialStatusStrip extends StatelessWidget {
+class _FeedProgressRow extends StatelessWidget {
+  final OccurrenceType type;
   final EstagioOficial estagio;
 
-  const _OfficialStatusStrip({required this.estagio});
+  const _FeedProgressRow({required this.type, required this.estagio});
 
   @override
   Widget build(BuildContext context) {
-    final color = estagio.color;
-    final active = estagio.temAcaoOficial;
     final pal = context.pal;
+    final brightness = Theme.of(context).brightness;
+    final color = estagio.colorFor(brightness);
+    final activeIndex = switch (estagio) {
+      EstagioOficial.pendente => 0,
+      EstagioOficial.emAnalise || EstagioOficial.naoConfirmada => 1,
+      EstagioOficial.confirmada => 2,
+      EstagioOficial.encaminhada => 3,
+      EstagioOficial.resolvida => 4,
+    };
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
-      decoration: BoxDecoration(
-        color: active ? color.withValues(alpha: 0.09) : pal.surfaceAlt,
-        border: Border(bottom: BorderSide(color: pal.border)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
       child: Row(
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: active ? 0.16 : 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(estagio.icon, size: 16, color: color),
-          ),
-          const SizedBox(width: 10),
+          _TypeLabel(type: type),
+          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Status oficial: ${estagio.label}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: active ? color : pal.muted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
+            child: SizedBox(
+              height: 22,
+              child: CustomPaint(
+                painter: _FeedProgressPainter(
+                  activeIndex: activeIndex,
+                  activeColor: color,
+                  inactiveColor: pal.border,
+                  surfaceColor: pal.surface,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  _description,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: pal.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  String get _description {
-    switch (estagio) {
-      case EstagioOficial.pendente:
-        return 'Aguardando análise do órgão responsável.';
-      case EstagioOficial.emAnalise:
-        return 'O órgão responsável está avaliando esta denúncia.';
-      case EstagioOficial.naoConfirmada:
-        return 'Problema não confirmado no local.';
-      case EstagioOficial.confirmada:
-        return 'Denúncia verificada pela autoridade.';
-      case EstagioOficial.encaminhada:
-        return 'Encaminhada ao órgão responsável.';
-      case EstagioOficial.resolvida:
-        return 'Tratada e marcada como resolvida.';
+class _FeedProgressPainter extends CustomPainter {
+  final int activeIndex;
+  final Color activeColor;
+  final Color inactiveColor;
+  final Color surfaceColor;
+
+  const _FeedProgressPainter({
+    required this.activeIndex,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.surfaceColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stages = 5;
+    const sideInset = 5.0;
+    final y = size.height / 2;
+    final step = (size.width - sideInset * 2) / (stages - 1);
+    final activeX = sideInset + step * activeIndex;
+
+    final inactiveLine = Paint()
+      ..color = inactiveColor
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final activeLine = Paint()
+      ..color = activeColor
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(sideInset, y),
+      Offset(size.width - sideInset, y),
+      inactiveLine,
+    );
+    if (activeIndex > 0) {
+      canvas.drawLine(Offset(sideInset, y), Offset(activeX, y), activeLine);
+    }
+
+    for (var i = 0; i < stages; i++) {
+      final center = Offset(sideInset + step * i, y);
+      if (i < activeIndex) {
+        canvas.drawCircle(center, 2.7, Paint()..color = activeColor);
+      } else if (i == activeIndex) {
+        canvas.drawCircle(
+            center, 6, Paint()..color = activeColor.withValues(alpha: 0.28));
+        canvas.drawCircle(center, 3.7, Paint()..color = activeColor);
+      } else {
+        canvas.drawCircle(center, 3.2, Paint()..color = surfaceColor);
+        canvas.drawCircle(
+          center,
+          3.2,
+          Paint()
+            ..color = inactiveColor
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.3,
+        );
+      }
     }
   }
+
+  @override
+  bool shouldRepaint(covariant _FeedProgressPainter oldDelegate) =>
+      oldDelegate.activeIndex != activeIndex ||
+      oldDelegate.activeColor != activeColor ||
+      oldDelegate.inactiveColor != inactiveColor ||
+      oldDelegate.surfaceColor != surfaceColor;
 }
 
 class _ImageSlider extends StatefulWidget {
@@ -847,7 +871,8 @@ class _ImageSliderState extends State<_ImageSlider>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxWidth.clamp(220.0, 420.0).toDouble();
+        final height =
+            (constraints.maxWidth * 0.68).clamp(200.0, 360.0).toDouble();
         final images = _images;
         final dpr = MediaQuery.devicePixelRatioOf(context);
         final larguraImg = constraints.maxWidth;
@@ -1021,99 +1046,31 @@ class _HeartBurst extends StatelessWidget {
   }
 }
 
-class _EstagioChip extends StatelessWidget {
-  final EstagioOficial estagio;
-
-  const _EstagioChip({required this.estagio});
-
-  @override
-  Widget build(BuildContext context) {
-    final cor = estagio.color;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: cor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: cor.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(estagio.icon, size: 12, color: cor),
-          const SizedBox(width: 4),
-          Text(
-            estagio.label,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: cor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final OccurrenceStatus status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: status.color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: status.color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(status.icon, color: status.color, size: 12),
-          const SizedBox(width: 4),
-          Text(
-            status.label,
-            style: TextStyle(
-              color: status.color,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TypeChip extends StatelessWidget {
+class _TypeLabel extends StatelessWidget {
   final OccurrenceType type;
 
-  const _TypeChip({required this.type});
+  const _TypeLabel({required this.type});
 
   @override
   Widget build(BuildContext context) {
-    final badgeColor = type.color;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
-      ),
+    final pal = context.pal;
+    return Flexible(
+      fit: FlexFit.loose,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(type.icon, size: 12, color: badgeColor),
-          const SizedBox(width: 4),
-          Text(
-            type.label,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: badgeColor,
+          Icon(type.icon, size: 14, color: type.color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              type.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: pal.muted,
+              ),
             ),
           ),
         ],
@@ -1429,6 +1386,54 @@ class _ShareButtonState extends State<_ShareButton> {
   }
 }
 
+class _HeaderStatusBadge extends StatelessWidget {
+  final EstagioOficial status;
+
+  const _HeaderStatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = status.color;
+    final compact = MediaQuery.sizeOf(context).width < 350;
+    return Tooltip(
+      message: status.label,
+      child: Semantics(
+        label: 'Status oficial: ${status.label}',
+        child: Container(
+          margin: const EdgeInsets.only(right: 2),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 7 : 8,
+            vertical: 6,
+          ),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(status.icon, size: 13, color: color),
+              if (!compact) ...[
+                const SizedBox(width: 4),
+                Text(
+                  status.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AuthorAvatar extends StatelessWidget {
   final String name;
   final String? photoUrl;
@@ -1444,9 +1449,11 @@ class _AuthorAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
     final dpr = MediaQuery.devicePixelRatioOf(context);
+    final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return CircleAvatar(
       radius: radius,
-      backgroundColor: AppColors.primary.withValues(alpha: 0.14),
+      backgroundColor: pal.primary.withValues(alpha: 0.14),
       backgroundImage: hasPhoto
           ? imagemCacheada(
               cloudinaryOtimizada(
@@ -1463,7 +1470,7 @@ class _AuthorAvatar extends StatelessWidget {
           : Text(
               _initial,
               style: TextStyle(
-                color: AppColors.successStrong,
+                color: isDark ? pal.primary : AppColors.successStrong,
                 fontWeight: FontWeight.w800,
                 fontSize: radius * 0.82,
               ),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/router/routes.dart';
@@ -16,6 +17,7 @@ import '../services/auth_service.dart';
 import '../services/notificacao_service.dart';
 import '../services/usuario_service.dart';
 import '../services/moderacao_service.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../utils/autor_ocorrencia.dart';
 import '../widgets/feed_states.dart';
@@ -53,8 +55,9 @@ enum _FeedPeriodo {
 
 class HomePage extends ConsumerStatefulWidget {
   final ScrollController? scrollController;
+  final VoidCallback? onOpenMap;
 
-  const HomePage({super.key, this.scrollController});
+  const HomePage({super.key, this.scrollController, this.onOpenMap});
 
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
@@ -222,10 +225,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       _searchQuery.isNotEmpty ||
       _periodo != _FeedPeriodo.tudo;
 
-  /// Filtros avançados ativos (mostrados atrás do botão de filtro): período
-  /// ou ordenação diferente do padrão.
+  /// Filtros avançados ativos: status, período ou ordenação fora do padrão.
   bool get _temFiltrosAvancados =>
-      _periodo != _FeedPeriodo.tudo || _sortBy != _FeedSort.recentes;
+      _periodo != _FeedPeriodo.tudo ||
+      _sortBy != _FeedSort.recentes ||
+      _selectedStatus != null;
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
@@ -292,6 +296,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     // Estado temporário do sheet: só aplica ao feed quando o usuário confirma.
     var sortLocal = _sortBy;
     var periodoLocal = _periodo;
+    var statusLocal = _selectedStatus;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -330,6 +335,31 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                     ),
                     const SizedBox(height: 18),
+                    _sheetLabel('STATUS', pal),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _FiltroChoice(
+                          label: 'Todos',
+                          selected: statusLocal == null,
+                          onTap: () => setSheet(() => statusLocal = null),
+                        ),
+                        ...OccurrenceStatus.values.map((status) {
+                          return _FiltroChoice(
+                            label: status.label,
+                            icon: status.icon,
+                            selected: statusLocal == status,
+                            onTap: () => setSheet(
+                              () => statusLocal =
+                                  statusLocal == status ? null : status,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
                     _sheetLabel('ORDENAR POR', pal),
                     const SizedBox(height: 8),
                     Wrap(
@@ -366,6 +396,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               setSheet(() {
                                 sortLocal = _FeedSort.recentes;
                                 periodoLocal = _FeedPeriodo.tudo;
+                                statusLocal = null;
                               });
                             },
                             style: TextButton.styleFrom(
@@ -383,12 +414,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                               setState(() {
                                 _sortBy = sortLocal;
                                 _periodo = periodoLocal;
+                                _selectedStatus = statusLocal;
                               });
                               Navigator.pop(ctx);
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: pal.primary,
-                              foregroundColor: Colors.white,
+                              foregroundColor: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? AppColors.ink
+                                  : Colors.white,
                               elevation: 0,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
@@ -725,18 +760,72 @@ class _HomePageState extends ConsumerState<HomePage> {
       backgroundColor: pal.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        titleSpacing: 20,
-        title: Row(
-          children: [
-            Text(
-              'EcoJP',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: pal.ink,
-              ),
-            ),
-          ],
+        centerTitle: false,
+        titleSpacing: 16,
+        title: Builder(
+          builder: (context) {
+            final screenWidth = MediaQuery.sizeOf(context).width;
+            final logoWidth = screenWidth < 300
+                ? 70.0
+                : screenWidth < 350
+                    ? 84.0
+                    : 120.0;
+            final cityWidth = screenWidth < 300
+                ? 50.0
+                : screenWidth < 350
+                    ? 68.0
+                    : 96.0;
+            final logo = Theme.of(context).brightness == Brightness.dark
+                ? AppLogos.ecohub
+                : AppLogos.ecohubOnLight;
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                SvgPicture.asset(logo, width: logoWidth, height: 26),
+                Semantics(
+                  button: true,
+                  label: 'Abrir mapa de João Pessoa',
+                  child: InkWell(
+                    onTap: widget.onOpenMap,
+                    borderRadius: BorderRadius.circular(18),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.location_on_outlined,
+                              size: 17, color: pal.primary),
+                          const SizedBox(width: 3),
+                          SizedBox(
+                            width: cityWidth,
+                            child: Text(
+                              'João Pessoa',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: pal.ink,
+                                fontSize: screenWidth < 300
+                                    ? 10
+                                    : screenWidth < 350
+                                        ? 11
+                                        : 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Icon(Icons.keyboard_arrow_down,
+                              size: 17, color: pal.muted),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         actions: [
           if (uid != null)
@@ -811,41 +900,33 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ],
               ),
             ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _TypeDropdown(
-                selected: _selectedType,
-                onChanged: (v) => setState(() => _selectedType = v),
-              ),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             SizedBox(
-              height: 36,
+              height: 38,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
-                  _StatusChip(
-                    label: 'Todos',
-                    selected: _selectedStatus == null,
-                    color: AppColors.muted,
-                    onTap: () => setState(() => _selectedStatus = null),
+                  _FeedTypeChip(
+                    label: 'Todas',
+                    selected: _selectedType == null,
+                    onTap: () => setState(() => _selectedType = null),
                   ),
-                  ...OccurrenceStatus.values.map(
-                    (s) => _StatusChip(
-                      label: s.label,
-                      selected: _selectedStatus == s,
-                      color: s.color,
+                  ...OccurrenceType.values.map((type) {
+                    return _FeedTypeChip(
+                      label: type.label,
+                      icon: type.icon,
+                      selected: _selectedType == type,
                       onTap: () => setState(
-                        () => _selectedStatus = _selectedStatus == s ? null : s,
+                        () =>
+                            _selectedType = _selectedType == type ? null : type,
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Expanded(child: _buildFeed(uid)),
           ],
         ),
@@ -910,6 +991,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     required bool isAutoridade,
     Set<String> minhasDenunciasAnonimasIds = const <String>{},
   }) {
+    final pal = context.pal;
+
     if (snapshot.connectionState == ConnectionState.waiting &&
         _cachedOccurrences.isEmpty) {
       return const FeedSkeleton(key: ValueKey('feed-skeleton'));
@@ -976,6 +1059,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           : _OccurrenceList(
               controller: _scrollController,
               occurrences: exibidas,
+              summaryOccurrences: all,
               hasPotentialMore: _hasPotentialMore,
               loadingMore: _loadingMore,
               onLoadMore: _loadMore,
@@ -1039,14 +1123,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: _focoDestaque
-                          ? AppColors.success
+                          ? (Theme.of(context).brightness == Brightness.dark
+                              ? pal.primary
+                              : AppColors.success)
                           : Colors.transparent,
                       width: 2.5,
                     ),
                     boxShadow: _focoDestaque
                         ? [
                             BoxShadow(
-                              color: AppColors.success.withValues(alpha: 0.25),
+                              color: (Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? pal.primary
+                                      : AppColors.success)
+                                  .withValues(alpha: 0.25),
                               blurRadius: 12,
                               spreadRadius: 1,
                             ),
@@ -1064,6 +1154,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 class _OccurrenceList extends StatelessWidget {
   final ScrollController controller;
   final List<OcorrenciaModel> occurrences;
+  final List<OcorrenciaModel> summaryOccurrences;
   final bool hasPotentialMore;
   final bool loadingMore;
   final VoidCallback onLoadMore;
@@ -1072,6 +1163,7 @@ class _OccurrenceList extends StatelessWidget {
   const _OccurrenceList({
     required this.controller,
     required this.occurrences,
+    required this.summaryOccurrences,
     required this.hasPotentialMore,
     required this.loadingMore,
     required this.onLoadMore,
@@ -1084,25 +1176,193 @@ class _OccurrenceList extends StatelessWidget {
       controller: controller,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      itemCount: occurrences.length + 1,
-      separatorBuilder: (_, index) => index >= occurrences.length - 1
+      itemCount: occurrences.length + 2,
+      separatorBuilder: (_, index) => index >= occurrences.length
           ? const SizedBox.shrink()
           : const SizedBox(height: 12),
       itemBuilder: (_, i) {
-        if (i == occurrences.length) {
+        if (i == 0) {
+          return _FeedSummary(occurrences: summaryOccurrences);
+        }
+        if (i == occurrences.length + 1) {
           return _PaginationFooter(
             hasPotentialMore: hasPotentialMore,
             loadingMore: loadingMore,
             onLoadMore: onLoadMore,
           );
         }
-        final o = occurrences[i];
+        final o = occurrences[i - 1];
         // RepaintBoundary isola o raster de cada card: a animação do carrossel
         // (PageView + indicador) e o rebuild de um like/comentário não forçam
         // os cards vizinhos a repintar. A ValueKey preserva o elemento quando
         // as fixadas reordenam a lista.
         return RepaintBoundary(key: ValueKey(o.id), child: itemBuilder(o));
       },
+    );
+  }
+}
+
+class _FeedSummary extends StatelessWidget {
+  final List<OcorrenciaModel> occurrences;
+
+  const _FeedSummary({required this.occurrences});
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final abertas = occurrences
+        .where((o) => o.statusAtual != OccurrenceStatus.resolved)
+        .length;
+    final emAnalise = occurrences
+        .where((o) => o.statusOficial == StatusOficial.emAnalise)
+        .length;
+    final resolvidas = occurrences
+        .where((o) => o.statusAtual == OccurrenceStatus.resolved)
+        .length;
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.fromLTRB(16, 13, 16, 14),
+      decoration: BoxDecoration(
+        color: pal.surface,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: pal.border),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -34,
+            top: -35,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: Theme.of(context).brightness == Brightness.dark
+                    ? 0.04
+                    : 0.2,
+                child: SvgPicture.asset(
+                  AppIllustrations.contourLinesLight,
+                  width: 230,
+                  height: 130,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.public_outlined, size: 15, color: pal.primary),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'VISÃO DA COMUNIDADE',
+                      style: TextStyle(
+                        color: pal.ink,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${occurrences.length} carregadas',
+                    style: TextStyle(
+                      color: pal.muted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _FeedMetric(
+                      value: abertas,
+                      label: 'abertas',
+                      color: isDark
+                          ? const Color(0xFFF2B65D)
+                          : const Color(0xFFB7791F),
+                    ),
+                  ),
+                  Expanded(
+                    child: _FeedMetric(
+                      value: emAnalise,
+                      label: 'em análise',
+                      color: isDark
+                          ? const Color(0xFF73BFD4)
+                          : const Color(0xFF287E9C),
+                    ),
+                  ),
+                  Expanded(
+                    child: _FeedMetric(
+                      value: resolvidas,
+                      label: 'resolvidas',
+                      color: isDark ? pal.primary : AppColors.successStrong,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeedMetric extends StatelessWidget {
+  final int value;
+  final String label;
+  final Color color;
+
+  const _FeedMetric({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$value',
+                style: TextStyle(
+                  color: context.pal.ink,
+                  fontSize: 19,
+                  height: 1.05,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.pal.muted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1218,26 +1478,22 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
+    final hint = MediaQuery.sizeOf(context).width < 350
+        ? 'Buscar denúncias ou locais'
+        : 'Buscar denúncias, locais ou temas';
     return Container(
-      height: 48,
+      height: 44,
       decoration: BoxDecoration(
-        color: pal.surface,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: pal.surfaceAlt,
+        borderRadius: BorderRadius.circular(13),
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        style: TextStyle(fontSize: 14, color: pal.ink),
+        style: TextStyle(fontSize: 13, color: pal.ink),
         decoration: InputDecoration(
-          hintText: 'Buscar título, descrição ou local',
-          hintStyle: TextStyle(color: pal.hint, fontSize: 14),
+          hintText: hint,
+          hintStyle: TextStyle(color: pal.hint, fontSize: 12.5),
           prefixIcon: Icon(Icons.search, color: pal.hint, size: 20),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -1263,19 +1519,20 @@ class _FilterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: active ? pal.primary : pal.surface,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(13),
       elevation: 0,
       shadowColor: Colors.black.withValues(alpha: 0.05),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(13),
         child: Container(
-          width: 48,
-          height: 48,
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(13),
             boxShadow: active
                 ? null
                 : [
@@ -1289,7 +1546,7 @@ class _FilterButton extends StatelessWidget {
           child: Icon(
             Icons.tune,
             size: 20,
-            color: active ? Colors.white : pal.hint,
+            color: active ? (isDark ? AppColors.ink : Colors.white) : pal.hint,
           ),
         ),
       ),
@@ -1352,107 +1609,62 @@ class _FiltroChoice extends StatelessWidget {
   }
 }
 
-class _TypeDropdown extends StatelessWidget {
-  final OccurrenceType? selected;
-  final ValueChanged<OccurrenceType?> onChanged;
-
-  const _TypeDropdown({required this.selected, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = context.pal;
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: pal.surface,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<OccurrenceType?>(
-          value: selected,
-          isExpanded: true,
-          dropdownColor: pal.surface,
-          icon: Icon(Icons.menu, color: pal.hint, size: 20),
-          hint: Text(
-            'Tipo de ocorrência',
-            style: TextStyle(color: pal.hint, fontSize: 14),
-          ),
-          style: TextStyle(fontSize: 14, color: pal.ink),
-          items: [
-            const DropdownMenuItem<OccurrenceType?>(
-              value: null,
-              child: Text('Filtrar por tipo'),
-            ),
-            ...OccurrenceType.values.map(
-              (t) => DropdownMenuItem(
-                value: t,
-                child: Row(
-                  children: [
-                    Icon(t.icon, size: 16, color: t.color),
-                    const SizedBox(width: 8),
-                    Text(t.label, style: TextStyle(color: t.color)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
+class _FeedTypeChip extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final bool selected;
-  final Color color;
   final VoidCallback onTap;
 
-  const _StatusChip({
+  const _FeedTypeChip({
     required this.label,
+    this.icon,
     required this.selected,
-    required this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? color : pal.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? color : pal.border),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark ? pal.ink : const Color(0xFF17251F);
+    final activeForeground = isDark ? AppColors.ink : Colors.white;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: selected ? activeColor : pal.surface,
+        borderRadius: BorderRadius.circular(22),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: selected ? activeColor : pal.border,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(
+                    icon,
+                    size: 15,
+                    color: selected ? activeForeground : pal.muted,
                   ),
-                ]
-              : [],
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : pal.muted,
+                  const SizedBox(width: 5),
+                ],
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? activeForeground : pal.ink,
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

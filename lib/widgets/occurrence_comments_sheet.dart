@@ -63,6 +63,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
   final ModeracaoService _moderacaoService = ModeracaoService();
 
   UsuarioModel? _perfilAtual;
+  late int _commentsCount;
   ComentarioModel? _replyTo;
   String? _replyParentId;
   bool _sending = false;
@@ -85,6 +86,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
   @override
   void initState() {
     super.initState();
+    _commentsCount = widget.occurrence.comments;
     _carregarPerfilAtual();
     _carregarPapel();
     if (widget.occurrence.anonima) {
@@ -137,14 +139,13 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     }
   }
 
-  /// Coloca o emoji no ponto do cursor em vez de enviá-lo: antes cada toque
-  /// na barra publicava um comentário só com o emoji.
+  /// Insere o emoji no cursor para que ele possa ser combinado com o texto.
   void _inserirEmoji(String emoji) {
     final valor = _controller.value;
     final texto = valor.text;
-    final sel = valor.selection;
-    final inicio = sel.isValid ? sel.start : texto.length;
-    final fim = sel.isValid ? sel.end : texto.length;
+    final selecao = valor.selection;
+    final inicio = selecao.isValid ? selecao.start : texto.length;
+    final fim = selecao.isValid ? selecao.end : texto.length;
     _controller.value = TextEditingValue(
       text: texto.replaceRange(inicio, fim, emoji),
       selection: TextSelection.collapsed(offset: inicio + emoji.length),
@@ -471,11 +472,11 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: FractionallySizedBox(
-        heightFactor: viewInsets > 0 ? 0.94 : 0.86,
+        heightFactor: viewInsets > 0 ? 0.94 : 0.8,
         child: Container(
           decoration: BoxDecoration(
             color: pal.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           // Material transparente sobre a cor do painel: sem ele o efeito de
           // toque (ripple) era desenhado no Material de trás e ficava escondido.
@@ -493,18 +494,35 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          'Comentários',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: pal.ink,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _commentsCount > 0
+                                  ? 'Comentários · $_commentsCount'
+                                  : 'Comentários',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 17,
+                                color: pal.ink,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.occurrence.titulo.trim().isEmpty
+                                  ? 'Denúncia'
+                                  : widget.occurrence.titulo.trim(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 12, color: pal.muted),
+                            ),
+                          ],
                         ),
                       ),
                       IconButton(
@@ -515,7 +533,10 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                     ],
                   ),
                 ),
-                Divider(height: 1, color: pal.border),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _CommentsDivider(color: pal.primary),
+                ),
                 Expanded(
                   child: StreamBuilder<List<ComentarioModel>>(
                     stream: _comentariosStream,
@@ -532,6 +553,14 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                       final comentarios = (snapshot.data ?? const [])
                           .where((c) => !c.oculto)
                           .toList();
+                      if (snapshot.hasData &&
+                          _commentsCount != comentarios.length) {
+                        final novoTotal = comentarios.length;
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted || _commentsCount == novoTotal) return;
+                          setState(() => _commentsCount = novoTotal);
+                        });
+                      }
                       if (comentarios.isEmpty) {
                         return const _EmptyComments();
                       }
@@ -630,6 +659,7 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
                   sending: _sending,
                   userName: currentName,
                   userPhotoUrl: currentPhoto,
+                  isEmpty: _commentsCount == 0,
                   onSend: _send,
                 ),
               ],
@@ -639,6 +669,143 @@ class _OccurrenceCommentsSheetState extends State<OccurrenceCommentsSheet> {
       ),
     );
   }
+}
+
+class _CommentsDivider extends StatelessWidget {
+  final Color color;
+
+  const _CommentsDivider({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 12,
+      width: double.infinity,
+      child: CustomPaint(painter: _CommentsDividerPainter(color)),
+    );
+  }
+}
+
+class _CommentsDividerPainter extends CustomPainter {
+  final Color color;
+
+  const _CommentsDividerPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final linePaint = Paint()
+      ..color = color.withValues(alpha: 0.35)
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
+
+    final markPaint = Paint()
+      ..color = color.withValues(alpha: 0.45)
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.round;
+    var up = true;
+    for (var x = 16.0; x < size.width - 8; x += 32) {
+      canvas.drawLine(
+        Offset(x, y),
+        Offset(x + 7, y + (up ? -4 : 4)),
+        markPaint,
+      );
+      up = !up;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CommentsDividerPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+class _EmptyCommentsPainter extends CustomPainter {
+  final Color lineColor;
+  final Color surfaceColor;
+  final Color mutedColor;
+
+  const _EmptyCommentsPainter({
+    required this.lineColor,
+    required this.surfaceColor,
+    required this.mutedColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = lineColor.withValues(alpha: 0.9)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final network = Path()
+      ..moveTo(8, size.height - 18)
+      ..lineTo(48, 78)
+      ..lineTo(88, 61)
+      ..lineTo(122, 44)
+      ..lineTo(size.width - 9, 14);
+    canvas.drawPath(network, line);
+    canvas.drawLine(const Offset(48, 78), const Offset(48, 48), line);
+    canvas.drawLine(const Offset(88, 61), const Offset(88, 104), line);
+    canvas.drawLine(const Offset(122, 44), const Offset(122, 18), line);
+    canvas.drawLine(const Offset(122, 44), const Offset(157, 59), line);
+
+    final dashedLine = Paint()
+      ..color = lineColor.withValues(alpha: 0.4)
+      ..strokeWidth = 0.8;
+    for (var i = 0; i < 8; i++) {
+      final t = i / 8;
+      final x = 10 + (size.width - 30) * t;
+      final y = size.height - 20 - 84 * t;
+      canvas.drawLine(Offset(x, y + 2), Offset(x + 2, y), dashedLine);
+    }
+
+    final dotPaint = Paint()..color = lineColor;
+    for (final point in const [
+      Offset(48, 48),
+      Offset(48, 78),
+      Offset(88, 104),
+      Offset(122, 18),
+      Offset(157, 59),
+    ]) {
+      canvas.drawCircle(point, 2.2, dotPaint);
+      canvas.drawCircle(
+        point,
+        3.2,
+        Paint()
+          ..color = surfaceColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
+
+    final center = Offset(size.width / 2, size.height / 2 + 1);
+    canvas.drawCircle(center, 23, Paint()..color = surfaceColor);
+    canvas.drawCircle(
+      center,
+      23,
+      Paint()
+        ..color = mutedColor.withValues(alpha: 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    final bubble = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: 16, height: 11),
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(bubble, line);
+    final tail = Path()
+      ..moveTo(center.dx - 3, center.dy + 5.5)
+      ..lineTo(center.dx - 5, center.dy + 9)
+      ..lineTo(center.dx + 1, center.dy + 5.5);
+    canvas.drawPath(tail, line);
+  }
+
+  @override
+  bool shouldRepaint(covariant _EmptyCommentsPainter oldDelegate) =>
+      oldDelegate.lineColor != lineColor ||
+      oldDelegate.surfaceColor != surfaceColor ||
+      oldDelegate.mutedColor != mutedColor;
 }
 
 class _CommentTile extends StatelessWidget {
@@ -1069,6 +1236,7 @@ class _CommentComposer extends StatelessWidget {
   final bool sending;
   final String userName;
   final String? userPhotoUrl;
+  final bool isEmpty;
   final VoidCallback onSend;
 
   const _CommentComposer({
@@ -1077,6 +1245,7 @@ class _CommentComposer extends StatelessWidget {
     required this.sending,
     required this.userName,
     required this.userPhotoUrl,
+    required this.isEmpty,
     required this.onSend,
   });
 
@@ -1094,10 +1263,10 @@ class _CommentComposer extends StatelessWidget {
             child: _UserAvatar(
               name: userName,
               photoUrl: userPhotoUrl,
-              radius: 18,
+              radius: 16,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Container(
               constraints: const BoxConstraints(minHeight: 42, maxHeight: 110),
@@ -1105,7 +1274,10 @@ class _CommentComposer extends StatelessWidget {
               decoration: BoxDecoration(
                 color: pal.surfaceAlt,
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: pal.border),
+                border: Border.all(
+                  color: isEmpty ? pal.primary : Colors.transparent,
+                  width: isEmpty ? 1.2 : 1,
+                ),
               ),
               child: TextField(
                 controller: controller,
@@ -1115,7 +1287,9 @@ class _CommentComposer extends StatelessWidget {
                 textCapitalization: TextCapitalization.sentences,
                 style: TextStyle(color: pal.ink, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Comentar como $userName',
+                  hintText: isEmpty
+                      ? 'Seja o primeiro a comentar...'
+                      : 'Escreva um comentário...',
                   hintStyle: TextStyle(color: pal.hint, fontSize: 13),
                   border: InputBorder.none,
                 ),
@@ -1123,17 +1297,29 @@ class _CommentComposer extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          IconButton(
-            tooltip: 'Enviar comentário',
-            icon: sending
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send,
-                    color: AppColors.successStrong, size: 22),
-            onPressed: sending ? null : onSend,
+          Material(
+            color: pal.primary,
+            shape: const CircleBorder(),
+            child: InkWell(
+              onTap: sending ? null : onSend,
+              customBorder: const CircleBorder(),
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Center(
+                  child: sending
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: pal.background,
+                          ),
+                        )
+                      : Icon(Icons.send, color: pal.background, size: 18),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1153,22 +1339,30 @@ class _EmptyComments extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.mode_comment_outlined, size: 52, color: pal.hint),
-            const SizedBox(height: 12),
+            CustomPaint(
+              size: const Size(190, 128),
+              painter: _EmptyCommentsPainter(
+                lineColor: pal.primary,
+                surfaceColor: pal.surface,
+                mutedColor: pal.muted,
+              ),
+            ),
+            const SizedBox(height: 8),
             Text(
               'Nenhum comentário ainda',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 17,
                 color: pal.ink,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
             Text(
-              'Seja a primeira pessoa a comentar esta denúncia.',
+              'Conte o que você viu no local.\n'
+              'Comentários ajudam o órgão responsável a confirmar o problema.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: pal.hint, height: 1.35),
+              style: TextStyle(fontSize: 14, color: pal.muted, height: 1.45),
             ),
           ],
         ),

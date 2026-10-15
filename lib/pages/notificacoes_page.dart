@@ -5,6 +5,7 @@ import '../features/denuncias/providers/denuncia_providers.dart';
 import '../models/notificacao_model.dart';
 import '../services/auth_service.dart';
 import '../services/notificacao_service.dart';
+import '../theme/brand_fonts.dart';
 import '../utils/tempo_relativo.dart';
 import 'detalhe_ocorrencia_page.dart';
 import '../theme/app_theme.dart';
@@ -84,7 +85,8 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
     final itens = <Object>[];
     String? grupoAtual;
     for (final n in notificacoes) {
-      final grupo = grupoPorData(n.dataCriacao);
+      final grupo =
+          grupoPorData(n.dataCriacao) == 'Hoje' ? 'Hoje' : 'Anteriores';
       if (grupo != grupoAtual) {
         grupoAtual = grupo;
         itens.add(grupo); // cabeçalho (String)
@@ -104,6 +106,7 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
       appBar: AppBar(
         backgroundColor: pal.surface,
         foregroundColor: pal.ink,
+        centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
@@ -113,10 +116,6 @@ class _NotificacoesPageState extends ConsumerState<NotificacoesPage> {
             fontWeight: FontWeight.w600,
             color: pal.ink,
           ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Divider(height: 1, color: pal.border),
         ),
       ),
       body: uid == null
@@ -158,15 +157,15 @@ class _CabecalhoGrupo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+    final pal = context.pal;
+    return Container(
+      color: pal.background,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Text(
         titulo.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-          color: AppColors.hint,
+        style: BrandFonts.caption.copyWith(
+          color: pal.muted,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
@@ -185,7 +184,7 @@ class _CabecalhoGrupo extends StatelessWidget {
       );
     case 'curtida':
       return (
-        icone: Icons.thumb_up_alt,
+        icone: Icons.favorite,
         cor: const Color(0xFF4CAF50),
         frase: 'curtiu a sua denúncia',
       );
@@ -242,69 +241,217 @@ class _NotificacaoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final info = _infoNotificacao(n.tipo);
-    final icone = info.icone;
-    final cor = info.cor;
-    final frase = info.frase;
+    final conquista = n.tipo == 'conquista';
+    final corAcao = switch (n.tipo) {
+      'comentario' => const Color(0xFF2F8DA6),
+      'curtida' => const Color(0xFFD45E5E),
+      _ => info.cor,
+    };
+    final tituloConquista = n.conquistaTitulo ?? 'Conquista desbloqueada';
+    final descricaoConquista = _descricaoConquista(tituloConquista);
+    final fundo = n.lida
+        ? pal.background
+        : pal.primary.withValues(alpha: isDark ? 0.08 : 0.09);
 
     return Container(
-      color: n.lida
-          ? pal.surface
-          : const Color(0xFF3B82F6).withValues(alpha: 0.10),
-      child: ListTile(
+      color: fundo,
+      child: InkWell(
         onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: cor.withValues(alpha: 0.15),
-          child: Icon(icone, size: 18, color: cor),
-        ),
-        title: n.tipo == 'conquista'
-            ? Text(
-                n.conquistaTitulo ?? 'Conquista desbloqueada',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: pal.ink,
-                  fontWeight: FontWeight.w700,
-                ),
-              )
-            : RichText(
-                text: TextSpan(
-                  style: TextStyle(fontSize: 14, color: pal.ink),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 11, 16, 11),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _AvatarNotificacao(
+                conquista: conquista,
+                nome: n.deUsuarioNome,
+                iconeAcao: info.icone,
+                corAcao: corAcao,
+                isDark: isDark,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextSpan(
-                      text: n.deUsuarioNome,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    if (conquista)
+                      Text.rich(
+                        TextSpan(
+                          style: TextStyle(color: pal.ink, fontSize: 14),
+                          children: [
+                            const TextSpan(
+                              text: 'Conquista desbloqueada: ',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            TextSpan(
+                              text: tituloConquista,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Text.rich(
+                        TextSpan(
+                          style: TextStyle(color: pal.ink, fontSize: 14),
+                          children: [
+                            TextSpan(
+                              text: n.deUsuarioNome,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            TextSpan(text: ' ${info.frase}'),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 3),
+                    Text(
+                      conquista ? descricaoConquista : n.ocorrenciaTitulo,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: pal.muted,
+                      ),
                     ),
-                    TextSpan(text: ' $frase '),
-                    TextSpan(
-                      text: '"${n.ocorrenciaTitulo}"',
-                      style: const TextStyle(fontStyle: FontStyle.italic),
-                    ),
+                    if (n.dataCriacao != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        tempoRelativo(n.dataCriacao),
+                        style: BrandFonts.caption.copyWith(
+                          fontSize: 10,
+                          color: pal.muted,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-        subtitle: n.dataCriacao != null
-            ? Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  tempoRelativo(n.dataCriacao),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.hint,
+              if (!n.lida) ...[
+                const SizedBox(width: 10),
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: pal.primary,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
-              )
-            : null,
-        // Conquistas não abrem nada; a seta sugeria um destino que não existe.
-        trailing: n.tipo == 'conquista'
-            ? null
-            : Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: pal.hint,
-              ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+class _AvatarNotificacao extends StatelessWidget {
+  const _AvatarNotificacao({
+    required this.conquista,
+    required this.nome,
+    required this.iconeAcao,
+    required this.corAcao,
+    required this.isDark,
+  });
+
+  final bool conquista;
+  final String nome;
+  final IconData iconeAcao;
+  final Color corAcao;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    if (conquista) {
+      return CircleAvatar(
+        radius: 20,
+        backgroundColor: pal.primary,
+        child: Icon(
+          Icons.shield_outlined,
+          size: 21,
+          color: isDark ? pal.background : Colors.white,
+        ),
+      );
+    }
+
+    final iniciais = _iniciais(nome);
+    return SizedBox(
+      width: 40,
+      height: 40,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: isDark
+                ? pal.primary.withValues(alpha: 0.13)
+                : const Color(0xFFDDF4EA),
+            child: Text(
+              iniciais,
+              style: TextStyle(
+                color: isDark ? pal.primary : const Color(0xFF08785B),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Positioned(
+            right: -1,
+            bottom: -1,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: corAcao,
+                shape: BoxShape.circle,
+                border: Border.all(color: pal.background, width: 1.5),
+              ),
+              child: Icon(
+                iconeAcao,
+                size: 10,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _iniciais(String nome) {
+  final palavras = nome.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty);
+  if (palavras.isEmpty) return '??';
+  final lista = palavras.toList();
+  final primeiro = lista.first;
+  if (primeiro == primeiro.toUpperCase() && primeiro.length > 1) {
+    return primeiro.substring(0, 2);
+  }
+  return lista.length == 1
+      ? primeiro.substring(0, 1).toUpperCase()
+      : '${primeiro[0]}${lista.last[0]}'.toUpperCase();
+}
+
+String _descricaoConquista(String titulo) {
+  return switch (titulo) {
+    'Voz da comunidade' => '50 curtidas recebidas',
+    'Primeira voz' => 'Primeira denúncia registrada',
+    'Guardião ativo' => '5 denúncias registradas',
+    'Vigilante' => '25 denúncias registradas',
+    'Impacto real' => 'Denúncia resolvida pela autoridade',
+    'Transformador' => '5 denúncias resolvidas',
+    'Verificador' => 'Verificação de denúncias da comunidade',
+    _ => '',
+  };
 }
 
 class _Vazio extends StatelessWidget {
@@ -313,24 +460,108 @@ class _Vazio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.notifications_none, size: 64, color: pal.hint),
-          const SizedBox(height: 12),
-          Text(
-            'Você ainda não tem notificações',
-            style: TextStyle(fontSize: 15, color: pal.hint),
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: SingleChildScrollView(
+          child: SizedBox(
+            width: constraints.maxWidth,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 220,
+                  height: 132,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CustomPaint(
+                        size: const Size(220, 132),
+                        painter: _NotificacaoContourPainter(
+                          color: pal.border.withValues(
+                            alpha:
+                                Theme.of(context).brightness == Brightness.dark
+                                    ? 0.55
+                                    : 0.9,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: pal.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: pal.border),
+                        ),
+                        child: Icon(
+                          Icons.notifications_none,
+                          size: 25,
+                          color: pal.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    'Você ainda não tem notificações',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: pal.ink,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'Avisaremos quando alguém interagir\ncom as suas denúncias.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: pal.muted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Avisaremos quando alguém interagir\ncom as suas denúncias.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: pal.hint),
-          ),
-        ],
+        ),
       ),
     );
   }
+}
+
+class _NotificacaoContourPainter extends CustomPainter {
+  const _NotificacaoContourPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    for (var i = 0; i < 7; i++) {
+      final offset = i * 11.0;
+      final path = Path()
+        ..moveTo(-8, 24 + offset)
+        ..cubicTo(34, 8 + offset, 26, 62 + offset, 67, 45 + offset)
+        ..cubicTo(107, 27 + offset, 127, 21 + offset, 139, 0 + offset)
+        ..cubicTo(159, 22 + offset, 138, 71 + offset, 179, 71 + offset)
+        ..cubicTo(198, 71 + offset, 202, 56 + offset, 228, 68 + offset);
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _NotificacaoContourPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
