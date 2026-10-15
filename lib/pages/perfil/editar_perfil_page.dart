@@ -12,12 +12,11 @@ import '../../utils/cloudinary_image.dart';
 import '../../utils/imagem_cacheada.dart';
 import '../../utils/imagem_privacidade.dart';
 import '../../utils/texto.dart';
+import '../../theme/brand_fonts.dart';
 import '../../theme/app_theme.dart';
 
 class _Cores {
-  // Cinza do avatar e vermelho de erro — iguais nos dois temas. Os neutros
-  // (fundo/texto/borda/dica) vêm de `context.pal`.
-  static const avatarBg = Color(0xFF9E9E9E);
+  // Vermelho de erro — os neutros vêm de `context.pal`.
   static const error = Color(0xFFB00020);
 }
 
@@ -126,47 +125,6 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
     );
   }
 
-  Future<void> _confirmarSalvar() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final pal = context.pal;
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: pal.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Salvar alterações',
-          style: TextStyle(fontWeight: FontWeight.w700, color: pal.ink),
-        ),
-        content: Text(
-          'Tem certeza que deseja alterar o seu perfil?',
-          style: TextStyle(color: pal.ink),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancelar', style: TextStyle(color: pal.hint)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: pal.ink,
-              foregroundColor: pal.surface,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar == true) await _salvar();
-  }
-
   Future<void> _salvar() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -259,95 +217,130 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: pal.surface,
+      backgroundColor: pal.background,
       appBar: AppBar(
         backgroundColor: pal.surface,
         foregroundColor: pal.ink,
+        centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
-        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        systemOverlayStyle:
+            isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
         title: Text(
           'Editar perfil',
           style: TextStyle(
             fontSize: 18,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             color: pal.ink,
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _salvando ? null : _salvar,
+            child: Text(
+              _salvando ? 'Salvando...' : 'Salvar',
+              style: TextStyle(
+                color: _salvando ? pal.hint : pal.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          children: [
-            Center(child: _avatarEditavel()),
-            const SizedBox(height: 6),
-            Center(
-              child: TextButton(
-                onPressed: _salvando ? null : _opcoesFoto,
-                child: const Text('Alterar foto'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _label('Nome'),
-            const SizedBox(height: 8),
-            _input(
-              controller: _nomeCtrl,
-              hint: 'Seu nome',
-              maxLength: 40,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(caractereDeNome),
-              ],
-              validator: (v) =>
-                  (v?.trim() ?? '').isEmpty ? 'Informe seu nome' : null,
-            ),
-            const SizedBox(height: 16),
-            _label('Biografia'),
-            const SizedBox(height: 8),
-            _input(
-              controller: _bioCtrl,
-              hint: 'Fale um pouco sobre você',
-              maxLines: 3,
-              maxLength: 150,
-            ),
-            const SizedBox(height: 16),
-            _label('Bairro'),
-            const SizedBox(height: 8),
-            _input(controller: _bairroCtrl, hint: 'Seu bairro', maxLength: 40),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _salvando ? null : _confirmarSalvar,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: pal.ink,
-                  foregroundColor: pal.surface,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: _salvando
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: pal.surface,
-                        ),
-                      )
-                    : const Text(
-                        'Salvar',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+      body: SafeArea(
+        top: false,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                  children: [
+                    Center(child: _avatarEditavel()),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton(
+                        onPressed: _salvando ? null : _opcoesFoto,
+                        child: const Text('Alterar foto'),
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    _label('Nome'),
+                    const SizedBox(height: 8),
+                    _input(
+                      controller: _nomeCtrl,
+                      hint: 'Seu nome',
+                      icon: Icons.person_outline,
+                      maxLength: 40,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(caractereDeNome),
+                      ],
+                      validator: (v) =>
+                          (v?.trim() ?? '').isEmpty ? 'Informe seu nome' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    _label('Bairro'),
+                    const SizedBox(height: 8),
+                    _input(
+                      controller: _bairroCtrl,
+                      hint: 'Seu bairro',
+                      icon: Icons.location_on_outlined,
+                      maxLength: 40,
+                    ),
+                    const SizedBox(height: 20),
+                    _label('Biografia'),
+                    const SizedBox(height: 8),
+                    _input(
+                      controller: _bioCtrl,
+                      hint: 'Fale um pouco sobre você',
+                      maxLines: 3,
+                      maxLength: 150,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _salvando ? null : _salvar,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: pal.primary,
+                      foregroundColor: isDark ? pal.background : Colors.white,
+                      disabledBackgroundColor: pal.primary.withValues(
+                        alpha: 0.55,
+                      ),
+                      disabledForegroundColor:
+                          isDark ? pal.background : Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _salvando
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Salvar alterações',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -355,6 +348,8 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
 
   Widget _avatarEditavel() {
     final pal = context.pal;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const corIniciaisClara = Color(0xFF075B46);
     final temFotoNova = _novaFotoBytes != null;
     final temFotoAtual = widget.perfilAtual.fotoUrl != null &&
         widget.perfilAtual.fotoUrl!.isNotEmpty;
@@ -364,23 +359,23 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
       child: Stack(
         children: [
           CircleAvatar(
-            radius: 52,
-            backgroundColor: _Cores.avatarBg,
+            radius: 48,
+            backgroundColor: isDark ? pal.surfaceAlt : const Color(0xFFDEF5EB),
             backgroundImage: temFotoNova
                 ? MemoryImage(_novaFotoBytes!)
                 : temFotoAtual
                     ? imagemCacheada(
                         cloudinaryAvatar(widget.perfilAtual.fotoUrl!,
-                            radius: 52),
+                            radius: 48),
                       )
                     : null,
             child: (!temFotoNova && !temFotoAtual)
                 ? Text(
                     widget.perfilAtual.iniciais,
-                    style: const TextStyle(
-                      fontSize: 34,
+                    style: TextStyle(
+                      fontSize: 30,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF4A4A4A),
+                      color: isDark ? pal.primary : corIniciaisClara,
                     ),
                   )
                 : null,
@@ -390,8 +385,16 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
             right: 0,
             child: Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: pal.ink, shape: BoxShape.circle),
-              child: Icon(Icons.camera_alt, size: 16, color: pal.surface),
+              decoration: BoxDecoration(
+                color: pal.primary,
+                shape: BoxShape.circle,
+                border: Border.all(color: pal.background, width: 2),
+              ),
+              child: const Icon(
+                Icons.camera_alt_outlined,
+                size: 16,
+                color: Colors.white,
+              ),
             ),
           ),
         ],
@@ -401,16 +404,13 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
 
   Widget _label(String text) => Text(
         text,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: context.pal.ink,
-        ),
+        style: BrandFonts.caption.copyWith(color: context.pal.muted),
       );
 
   Widget _input({
     required TextEditingController controller,
     required String hint,
+    IconData? icon,
     int maxLines = 1,
     int? maxLength,
     String? Function(String?)? validator,
@@ -428,10 +428,14 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: pal.hint, fontSize: 14),
+        prefixIcon:
+            icon == null ? null : Icon(icon, size: 20, color: pal.muted),
         counterText: '',
-        contentPadding: const EdgeInsets.symmetric(
+        filled: true,
+        fillColor: pal.surface,
+        contentPadding: EdgeInsets.symmetric(
           horizontal: 14,
-          vertical: 14,
+          vertical: maxLines > 1 ? 14 : 0,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -439,7 +443,7 @@ class _EditarPerfilPageState extends ConsumerState<EditarPerfilPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: pal.ink, width: 1.5),
+          borderSide: BorderSide(color: pal.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
