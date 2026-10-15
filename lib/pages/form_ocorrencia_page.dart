@@ -30,7 +30,6 @@ class _Cores {
   // (texto/fundo/borda/superfície) vêm de `context.pal`.
   static const hint = AppColors.hint;
   static const error = AppColors.danger;
-  static const disabled = AppColors.hint;
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
@@ -120,11 +119,6 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
   Future<void> _selecionarImagem(int slot, ImageSource source) async {
     final err = await _media.selecionarImagem(slot, source);
     if (err != null) _snack(err, error: true);
-  }
-
-  void _adicionarFoto() {
-    final slot = _media.proximoSlotVazio();
-    if (slot != null) _abrirPicker(slot);
   }
 
   void _abrirPicker(int slot) {
@@ -665,7 +659,7 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.memory(bytes!, fit: BoxFit.cover),
+                        Image.memory(bytes, fit: BoxFit.cover),
                         Positioned(
                           top: 6,
                           right: 6,
@@ -1413,7 +1407,7 @@ class _FormOcorrenciaPageState extends ConsumerState<FormOcorrenciaPage> {
           Switch.adaptive(
             value: _anonima,
             onChanged: _enviando ? null : (v) => setState(() => _anonima = v),
-            activeColor: pal.primary,
+            activeThumbColor: pal.primary,
           ),
         ],
       ),
