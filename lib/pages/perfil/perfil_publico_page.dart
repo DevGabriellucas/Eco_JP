@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../features/denuncias/providers/denuncia_providers.dart';
 import '../../models/occurrence_types.dart';
 import '../../models/ocorrencia_model.dart';
 import '../../models/usuario_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/notificacao_service.dart';
 import '../../services/usuario_service.dart';
 import '../../utils/cloudinary_image.dart';
 import '../../utils/imagem_cacheada.dart';
+import '../../utils/reacao_ocorrencia.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/occurrence_card.dart';
 import '../detalhe_ocorrencia_page.dart';
 
 class PerfilPublicoPage extends ConsumerWidget {
@@ -36,16 +40,34 @@ class PerfilPublicoPage extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: pal.surface,
         foregroundColor: pal.ink,
+        centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
+        flexibleSpace: CustomPaint(
+          painter: _PublicProfileContourPainter(
+            color: pal.border.withValues(
+              alpha:
+                  Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.75,
+            ),
+          ),
+        ),
         title: const Text(
           'Perfil',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Divider(height: 1, color: pal.border),
-        ),
+        actions: [
+          IconButton(
+            tooltip: 'Compartilhar perfil',
+            onPressed: () => SharePlus.instance.share(
+              ShareParams(
+                text: 'Confira o perfil de $fallbackName no EcoJP.',
+                subject: 'Perfil no EcoJP',
+              ),
+            ),
+            icon: const Icon(Icons.share_outlined),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: StreamBuilder<UsuarioModel?>(
         stream: _usuarioService.observarPerfil(userId),
@@ -73,43 +95,85 @@ class PerfilPublicoPage extends ConsumerWidget {
                 });
 
               return ListView(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                padding: EdgeInsets.zero,
                 children: [
-                  _ProfileHeader(perfil: perfil),
-                  const SizedBox(height: 16),
-                  _SocialBar(
-                    usuarioService: _usuarioService,
-                    currentUid: _authService.currentUser?.uid,
-                    profileUid: userId,
-                  ),
-                  const SizedBox(height: 16),
-                  _StatsRow(ocorrencias: ocorrencias),
-                  const SizedBox(height: 22),
-                  _ContribuicaoCard(ocorrencias: ocorrencias),
-                  const SizedBox(height: 22),
-                  Text(
-                    'Denúncias públicas',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: pal.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (ocorrencias.isEmpty)
-                    const _EmptyPublicPosts()
-                  else
-                    for (final ocorrencia in ocorrencias)
-                      _PublicOccurrenceTile(
-                        occurrence: ocorrencia,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                DetalheOcorrenciaPage(occurrence: ocorrencia),
+                  Container(
+                    color: pal.surface,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _PublicProfileContourPainter(
+                              color: pal.border.withValues(
+                                alpha: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? 0.3
+                                    : 0.75,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                          child: Column(
+                            children: [
+                              _ProfileHeader(perfil: perfil),
+                              const SizedBox(height: 16),
+                              _SocialBar(
+                                usuarioService: _usuarioService,
+                                currentUid: _authService.currentUser?.uid,
+                                profileUid: userId,
+                                publicCount: ocorrencias.length,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _ImpactoCard(ocorrencias: ocorrencias),
+                        const SizedBox(height: 16),
+                        _ContribuicaoCard(ocorrencias: ocorrencias),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Denúncias públicas',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: pal.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (ocorrencias.isEmpty)
+                          const _EmptyPublicPosts()
+                        else
+                          for (final ocorrencia in ocorrencias)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _PublicOccurrenceTile(
+                                occurrence: ocorrencia,
+                                nomeAutor: perfil.nome.trim().isNotEmpty
+                                    ? perfil.nome
+                                    : fallbackName,
+                                fotoAutor: perfil.fotoUrl ?? fallbackPhotoUrl,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => DetalheOcorrenciaPage(
+                                      occurrence: ocorrencia,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ),
                 ],
               );
             },
@@ -128,69 +192,65 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPhoto = perfil.fotoUrl != null && perfil.fotoUrl!.isNotEmpty;
-    return Column(
+    final pal = context.pal;
+    return Row(
       children: [
         CircleAvatar(
-          radius: 46,
-          backgroundColor: AppColors.primary.withValues(alpha: 0.14),
+          radius: 29,
+          backgroundColor: pal.primary.withValues(alpha: 0.14),
           backgroundImage: hasPhoto
-              ? imagemCacheada(cloudinaryAvatar(perfil.fotoUrl!, radius: 46))
+              ? imagemCacheada(cloudinaryAvatar(perfil.fotoUrl!, radius: 29))
               : null,
           child: hasPhoto
               ? null
               : Text(
                   perfil.iniciais,
-                  style: const TextStyle(
-                    color: AppColors.successStrong,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
+                  style: TextStyle(
+                    color: pal.primary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          perfil.nome.trim().isEmpty ? 'Usuário' : perfil.nome.trim(),
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: context.pal.ink,
-            fontSize: 21,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        if (perfil.bairro.trim().isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.location_on_outlined,
-                size: 15,
-                color: context.pal.muted,
-              ),
-              const SizedBox(width: 4),
               Text(
-                perfil.bairro.trim(),
+                perfil.nome.trim().isEmpty ? 'Usuário' : perfil.nome.trim(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: context.pal.muted,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  color: pal.ink,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w700,
                 ),
+              ),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 14,
+                    color: pal.primary,
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      perfil.bairro.trim().isEmpty
+                          ? 'João Pessoa'
+                          : '${perfil.bairro.trim()}, João Pessoa',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: pal.muted, fontSize: 12),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-        if (perfil.bio.trim().isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Text(
-            perfil.bio.trim(),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: context.pal.muted,
-              fontSize: 13,
-              height: 1.35,
-            ),
-          ),
-        ],
+        ),
       ],
     );
   }
@@ -200,11 +260,13 @@ class _SocialBar extends StatefulWidget {
   final UsuarioService usuarioService;
   final String? currentUid;
   final String profileUid;
+  final int publicCount;
 
   const _SocialBar({
     required this.usuarioService,
     required this.currentUid,
     required this.profileUid,
+    required this.publicCount,
   });
 
   @override
@@ -246,67 +308,79 @@ class _SocialBarState extends State<_SocialBar> {
           stream: widget.usuarioService.contarSeguindo(widget.profileUid),
           initialData: 0,
           builder: (context, seguindoSnap) {
-            final stats = Row(
-              children: [
-                Expanded(
-                  child: _SocialCount(
-                    label: 'Seguidores',
-                    value: seguidoresSnap.data ?? 0,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _SocialCount(
-                    label: 'Seguindo',
-                    value: seguindoSnap.data ?? 0,
-                  ),
-                ),
-              ],
-            );
-
-            if (_isOwnProfile || widget.currentUid == null) return stats;
-
-            return Column(
-              children: [
-                stats,
-                const SizedBox(height: 12),
-                StreamBuilder<bool>(
-                  stream: widget.usuarioService.observarSeguindo(
-                    widget.currentUid!,
-                    widget.profileUid,
-                  ),
-                  initialData: false,
-                  builder: (context, seguindoUsuarioSnap) {
-                    final seguindo = seguindoUsuarioSnap.data == true;
-                    return SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed:
-                            _saving ? null : () => _toggleFollow(seguindo),
-                        icon: Icon(
-                          seguindo
-                              ? Icons.person_remove_outlined
-                              : Icons.person_add_alt_1_outlined,
-                          size: 18,
-                        ),
-                        label: Text(seguindo ? 'Seguindo' : 'Seguir'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: seguindo
-                              ? context.pal.surfaceAlt
-                              : AppColors.successStrong,
-                          foregroundColor:
-                              seguindo ? context.pal.ink : Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+            Widget metricas({required bool seguir}) => Row(
+                  children: [
+                    Expanded(
+                      child: _SocialCount(
+                        label: 'Denúncias',
+                        value: widget.publicCount,
+                      ),
+                    ),
+                    Expanded(
+                      child: _SocialCount(
+                        label: 'Seguidores',
+                        value: seguidoresSnap.data ?? 0,
+                      ),
+                    ),
+                    Expanded(
+                      child: _SocialCount(
+                        label: 'Seguindo',
+                        value: seguindoSnap.data ?? 0,
+                      ),
+                    ),
+                    if (seguir) ...[
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 96,
+                        height: 40,
+                        child: StreamBuilder<bool>(
+                          stream: widget.usuarioService.observarSeguindo(
+                            widget.currentUid!,
+                            widget.profileUid,
                           ),
+                          initialData: false,
+                          builder: (context, seguindoUsuarioSnap) {
+                            final seguindo = seguindoUsuarioSnap.data == true;
+                            final isDark =
+                                Theme.of(context).brightness == Brightness.dark;
+                            return ElevatedButton.icon(
+                              onPressed: _saving
+                                  ? null
+                                  : () => _toggleFollow(seguindo),
+                              icon: Icon(
+                                seguindo ? Icons.check : Icons.add,
+                                size: 17,
+                              ),
+                              label: Text(seguindo ? 'Seguindo' : 'Seguir'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: seguindo
+                                    ? context.pal.surfaceAlt
+                                    : context.pal.primary,
+                                foregroundColor: seguindo
+                                    ? context.pal.ink
+                                    : isDark
+                                        ? context.pal.background
+                                        : Colors.white,
+                                elevation: 0,
+                                padding: EdgeInsets.zero,
+                                textStyle: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
-                    );
-                  },
-                ),
-              ],
+                    ],
+                  ],
+                );
+
+            return metricas(
+              seguir: !_isOwnProfile && widget.currentUid != null,
             );
           },
         );
@@ -324,102 +398,94 @@ class _SocialCount extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: pal.surfaceAlt,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: pal.border),
-      ),
-      child: Column(
-        children: [
-          Text(
-            '$value',
-            style: TextStyle(
-              color: pal.ink,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              color: pal.muted,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatsRow extends StatelessWidget {
-  final List<OcorrenciaModel> ocorrencias;
-
-  const _StatsRow({required this.ocorrencias});
-
-  @override
-  Widget build(BuildContext context) {
-    final resolvidas = ocorrencias
-        .where(
-            (o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
-        .length;
-    final verificadas = ocorrencias.where((o) => o.verificada).length;
-
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: _StatBox(label: 'Denúncias', value: ocorrencias.length),
+        Text(
+          '$value',
+          style: TextStyle(
+            color: pal.ink,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _StatBox(label: 'Verificadas', value: verificadas),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _StatBox(label: 'Resolvidas', value: resolvidas),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: pal.muted, fontSize: 11),
         ),
       ],
     );
   }
 }
 
-class _StatBox extends StatelessWidget {
-  final String label;
-  final int value;
+class _ImpactoCard extends StatelessWidget {
+  final List<OcorrenciaModel> ocorrencias;
 
-  const _StatBox({required this.label, required this.value});
+  const _ImpactoCard({required this.ocorrencias});
 
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
+    final resolvidas = ocorrencias
+        .where(
+            (o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
+        .length;
+    final verificadas = ocorrencias.where((o) => o.verificada).length;
+    final taxa = ocorrencias.isEmpty
+        ? 0
+        : (resolvidas * 100 / ocorrencias.length).round();
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: pal.surfaceAlt,
-        borderRadius: BorderRadius.circular(10),
+        color: pal.surface,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: pal.border),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$value',
+            'Impacto & Contribuição',
             style: TextStyle(
               color: pal.ink,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: pal.muted,
-              fontSize: 11,
+              fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                  child: _ImpactBox(
+                      value: ocorrencias.length, label: 'Denúncias')),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ImpactBox(
+                  value: verificadas,
+                  label: 'Verificadas',
+                  showDot: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ImpactBox(
+                  value: resolvidas,
+                  label: 'Resolvidas',
+                  showDot: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ImpactBox(value: '$taxa%', label: 'Taxa de Resolução'),
+              ),
+            ],
           ),
         ],
       ),
@@ -427,127 +493,121 @@ class _StatBox extends StatelessWidget {
   }
 }
 
-class _PublicOccurrenceTile extends StatelessWidget {
-  final OcorrenciaModel occurrence;
-  final VoidCallback onTap;
+class _ImpactBox extends StatelessWidget {
+  const _ImpactBox({
+    required this.value,
+    required this.label,
+    this.showDot = false,
+  });
 
-  const _PublicOccurrenceTile({required this.occurrence, required this.onTap});
+  final Object value;
+  final String label;
+  final bool showDot;
 
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    final type = OccurrenceTypeParser.fromString(occurrence.tipoLixo);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: pal.surfaceAlt,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: pal.border),
-            ),
-            child: Row(
-              children: [
-                _Thumb(occurrence: occurrence, type: type),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        occurrence.titulo,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: pal.ink,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        occurrence.localizacao,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: pal.muted, fontSize: 12),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(type.icon, size: 13, color: type.color),
-                          const SizedBox(width: 4),
-                          Text(
-                            type.label,
-                            style: TextStyle(
-                              color: type.color,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: pal.hint, size: 20),
-              ],
+    return Container(
+      constraints: const BoxConstraints(minHeight: 68),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: pal.background,
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '$value',
+            style: TextStyle(
+              color: pal.ink,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              height: 1.05,
             ),
           ),
-        ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              if (showDot) ...[
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: pal.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: pal.muted, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _Thumb extends StatelessWidget {
+class _PublicOccurrenceTile extends ConsumerStatefulWidget {
   final OcorrenciaModel occurrence;
-  final OccurrenceType type;
+  final String nomeAutor;
+  final String? fotoAutor;
+  final VoidCallback onTap;
 
-  const _Thumb({required this.occurrence, required this.type});
+  const _PublicOccurrenceTile({
+    required this.occurrence,
+    required this.nomeAutor,
+    required this.fotoAutor,
+    required this.onTap,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final url = occurrence.imagensUrls.isNotEmpty
-        ? occurrence.imagensUrls.first
-        : occurrence.imagemUrl;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: url != null && url.isNotEmpty
-          ? Image(
-              image: imagemCacheada(
-                cloudinaryOtimizada(
-                  url,
-                  larguraLogica: 58,
-                  alturaLogica: 58,
-                  devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-                  crop: 'fill',
-                ),
-                cacheWidth: cacheLarguraPx(
-                  58,
-                  MediaQuery.devicePixelRatioOf(context),
-                ),
-              ),
-              width: 58,
-              height: 58,
-              fit: BoxFit.cover,
-              semanticLabel: 'Foto da denúncia: ${occurrence.titulo}',
-              errorBuilder: (context, error, stackTrace) => _placeholder(),
-            )
-          : _placeholder(),
+  ConsumerState<_PublicOccurrenceTile> createState() =>
+      _PublicOccurrenceTileState();
+}
+
+class _PublicOccurrenceTileState extends ConsumerState<_PublicOccurrenceTile> {
+  final _authService = AuthService();
+  final _notificacaoService = NotificacaoService();
+
+  Future<void> _reagir({required bool like}) async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Faça login para reagir à denúncia.')),
+      );
+      return;
+    }
+    await reagirOcorrencia(
+      context: context,
+      ocorrencia: widget.occurrence,
+      uid: uid,
+      isLike: like,
+      ocorrenciaRepository: ref.read(ocorrenciaRepositoryProvider),
+      notificacaoService: _notificacaoService,
+      onMudou: () => setState(() {}),
     );
   }
 
-  Widget _placeholder() {
-    return Container(
-      width: 58,
-      height: 58,
-      color: type.color.withValues(alpha: 0.12),
-      child: Icon(type.icon, color: type.color, size: 24),
+  @override
+  Widget build(BuildContext context) {
+    return OccurrenceCard(
+      occurrence: widget.occurrence,
+      nomeAutor: widget.nomeAutor,
+      fotoAutor: widget.fotoAutor,
+      onLike: () => _reagir(like: true),
+      onDislike: () => _reagir(like: false),
+      onComment: widget.onTap,
+      onOpen: widget.onTap,
     );
   }
 }
@@ -575,7 +635,7 @@ class _EmptyPublicPosts extends StatelessWidget {
   }
 }
 
-/// Card de Contribuição: taxa de resolução + heatmap de categorias.
+/// Distribuição das denúncias públicas por categoria.
 class _ContribuicaoCard extends StatelessWidget {
   final List<OcorrenciaModel> ocorrencias;
 
@@ -584,213 +644,142 @@ class _ContribuicaoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-
-    if (ocorrencias.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final resolvidas = ocorrencias
-        .where(
-            (o) => o.verificada && o.statusOficial == StatusOficial.resolvida)
-        .length;
-    final taxaResolucao = ocorrencias.isEmpty
-        ? 0
-        : (resolvidas * 100 / ocorrencias.length).toInt();
-
-    // Conta denúncias por categoria
     final porCategoria = <OccurrenceType, int>{};
     for (final o in ocorrencias) {
       final tipo = OccurrenceTypeParser.fromString(o.tipoLixo);
       porCategoria[tipo] = (porCategoria[tipo] ?? 0) + 1;
     }
+    final categorias = porCategoria.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final maiorValor = categorias.isEmpty ? 0 : categorias.first.value;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final corBarraSecundaria =
+        isDark ? const Color(0xFF77B9CC) : const Color(0xFF287D96);
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       decoration: BoxDecoration(
-        color: pal.surfaceAlt,
+        color: pal.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: pal.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.trending_up_outlined, size: 18, color: pal.ink),
-              const SizedBox(width: 8),
-              Text(
-                'Impacto & Contribuição',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: pal.ink,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Taxa de Resolução
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Taxa de Resolução',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: pal.muted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '$taxaResolucao%',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 120,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 60,
-                      height: 60,
-                      child: CircularProgressIndicator(
-                        value: taxaResolucao / 100,
-                        strokeWidth: 4,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppColors.primary,
-                        ),
-                        backgroundColor: pal.border,
-                      ),
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '$resolvidas',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: pal.ink,
-                          ),
-                        ),
-                        Text(
-                          'resolvidas',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: pal.muted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-
-          // Heatmap de Categorias
           Text(
             'Denúncias por tipo',
             style: TextStyle(
-              fontSize: 12,
-              color: pal.muted,
-              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: pal.ink,
             ),
           ),
-          const SizedBox(height: 10),
-          for (final tipo in porCategoria.keys) ...[
-            _CategoriaBar(
-              label: tipo.label,
-              valor: porCategoria[tipo] ?? 0,
-              total: ocorrencias.length,
-              cor: tipo.color,
-            ),
-            const SizedBox(height: 8),
-          ],
+          const SizedBox(height: 12),
+          if (categorias.isEmpty)
+            Text(
+              'Ainda não há denúncias para categorizar.',
+              style: TextStyle(fontSize: 12, color: pal.muted),
+            )
+          else
+            for (var i = 0; i < categorias.length; i++) ...[
+              _CategoriaBar(
+                tipo: categorias[i].key,
+                valor: categorias[i].value,
+                maiorValor: maiorValor,
+                cor: i == 0 ? pal.primary : corBarraSecundaria,
+              ),
+              if (i != categorias.length - 1) const SizedBox(height: 10),
+            ],
         ],
       ),
     );
   }
 }
 
-/// Barra de uma categoria mostrando quantidade e progresso visual.
+/// Barra horizontal e contagem para cada categoria registrada.
 class _CategoriaBar extends StatelessWidget {
-  final String label;
-  final int valor;
-  final int total;
-  final Color cor;
-
   const _CategoriaBar({
-    required this.label,
+    required this.tipo,
     required this.valor,
-    required this.total,
+    required this.maiorValor,
     required this.cor,
   });
+
+  final OccurrenceType tipo;
+  final int valor;
+  final int maiorValor;
+  final Color cor;
 
   @override
   Widget build(BuildContext context) {
     final pal = context.pal;
-    final percentual = total == 0 ? 0.0 : valor / total;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: pal.ink,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Text(
-              '$valor',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: cor,
-              ),
-            ),
-          ],
+        SizedBox(
+          width: 18,
+          child: Icon(tipo.icon, size: 14, color: pal.muted),
         ),
-        const SizedBox(height: 5),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            minHeight: 6,
-            value: percentual,
-            backgroundColor: pal.border,
-            valueColor: AlwaysStoppedAnimation<Color>(cor),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 98,
+          child: Text(
+            tipo.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: pal.ink),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              minHeight: 7,
+              value: maiorValor == 0 ? 0 : valor / maiorValor,
+              backgroundColor: pal.surfaceAlt,
+              valueColor: AlwaysStoppedAnimation<Color>(cor),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 34,
+          child: Text(
+            '$valor',
+            textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 10, color: pal.muted),
           ),
         ),
       ],
     );
   }
+}
+
+class _PublicProfileContourPainter extends CustomPainter {
+  const _PublicProfileContourPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    for (var i = 0; i < 8; i++) {
+      final y = -42.0 + i * 22;
+      final path = Path()
+        ..moveTo(-20, y)
+        ..cubicTo(size.width * 0.16, y + 54, size.width * 0.27, y - 38,
+            size.width * 0.48, y + 1)
+        ..cubicTo(size.width * 0.69, y + 50, size.width * 0.81, y - 50,
+            size.width + 20, y + 7);
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PublicProfileContourPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
